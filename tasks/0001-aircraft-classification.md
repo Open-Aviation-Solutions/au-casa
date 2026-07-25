@@ -68,6 +68,35 @@ of `icao-shared-kernel-rs`/`-py`):
   value object, and treated per-airframe data as a rare exception rather than
   routine (`design_features` especially).
 
+### Design features: flat enum, validity checked at the resolver boundary
+
+Reg 61.755's category → features table (see Verification below) is
+many-to-many, not a tree: 7 of the 10 features are single-category
+(`tailwheel undercarriage`, `manual propeller pitch control`,
+`multi-engine centre-line thrust`, `floatplane`, `floating hull`,
+`ski landing gear` — aeroplane only; `float alighting gear` — helicopter
+only), but 3 span multiple categories (`retractable undercarriage`:
+aeroplane/helicopter/powered-lift/gyroplane; `pressurisation system`:
+aeroplane/powered-lift/gyroplane/airship; `gas turbine engine`: all 5).
+
+That ruled out per-category enums (`AeroplaneDesignFeature`,
+`HelicopterDesignFeature`, ...) — they'd duplicate `GasTurbineEngine` five
+times and fight the M:N shape rather than model it. **Decided: one flat
+`DesignFeature` enum (10 variants)**, plus a lookup — `AircraftCategory::
+design_features() -> &[DesignFeature]` and/or the inverse
+`DesignFeature::applicable_categories() -> &[AircraftCategory]` — for
+category-membership checks. Also useful downstream: a consumer's admin UI
+can list valid choices once it knows an aircraft's resolved category.
+
+Validity is enforced at the **function boundary, not the type boundary**:
+`resolve_classification` is the only public way to get a
+`CasaAircraftClassification`, and it never emits an invalid
+category/feature combination. An override supplying a feature that doesn't
+belong to the resolved category is a validation error there (consistent
+with `icao-shared-kernel-rs`'s "parse, don't validate" discipline, applied
+at the one real construction path rather than baked into the enum's type
+structure).
+
 ### Data sourcing
 
 Unchanged from `0012`'s resolved decision: **do not vendor ICAO Doc 8643**
@@ -126,10 +155,6 @@ summary), not just carried over from the old `aviation_core` names.
 
 ## Open questions (why this is `proposal`, not `ready`)
 
-- How `design_features` should be modelled given the category-scoping above
-  — one Rust enum with a "valid for these categories" association, or a
-  category-specific enum per aircraft category? Needs to fit
-  `CasaAircraftClassification` cleanly.
 - Shape of the `confidence`/`source` metadata on `CasaAircraftClassification`
   — per-field, or per-classification?
 - Whether `au-casa-py` (PyO3 bindings) starts alongside this module or after
