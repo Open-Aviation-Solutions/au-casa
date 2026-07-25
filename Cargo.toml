@@ -1,0 +1,12 @@
+[package]
+name = "au-casa"
+version = "0.1.0"
+edition = "2021"
+description = "CASA (Australia) national aviation regulatory package: derives Part 61 aircraft classification from ICAO Doc 8643 type designators."
+publish = false
+
+[lib]
+name = "au_casa"
+path = "src/lib.rs"
+
+[dependencies]
