@@ -1,6 +1,6 @@
 # CASA aircraft classification (category, class, design features)
 
-**Status:** proposal
+**Status:** ready
 
 ## Purpose
 
@@ -111,6 +111,17 @@ demand (YAGNI) rather than trying to cover all of Doc 8643 upfront. Return an
 explicit "unknown" for uncatalogued designators rather than guessing —
 callers fall back to their own override.
 
+**`confidence`/`source` placement — one pair per `CasaAircraftClassification`,
+not per field.** The uncertainty originates entirely in Layer A (is this
+designator's compiled ADC row accurate); Layer B (`ADC -> category/class`) is
+deterministic given a correct ADC, per the verified Part 61 rules below, so
+`category` and `class` share the one confidence/source from their shared ADC
+lookup rather than each carrying a copy. `design_features` doesn't get a
+`confidence` at all — it's not a "probably correct, verify the source" fact
+the way `category`/`class` are; it's known-variable per airframe (see above),
+so the derived list is always just a default pending the consumer's own
+override, independent of how confident the ADC lookup was.
+
 ## Verification against CASA Part 61 (2026-07-25)
 
 Checked against the actual regulation text (Federal Register of Legislation,
@@ -153,13 +164,38 @@ summary), not just carried over from the old `aviation_core` names.
   `category`/`class_rating`, so this can be designed properly rather than
   rushed.
 
-## Open questions (why this is `proposal`, not `ready`)
+## Sequencing
 
-- Shape of the `confidence`/`source` metadata on `CasaAircraftClassification`
-  — per-field, or per-classification?
-- Whether `au-casa-py` (PyO3 bindings) starts alongside this module or after
-  it lands, mirroring how `icao-shared-kernel-py` followed
-  `icao-shared-kernel-rs`.
+`au-casa-py` (PyO3 bindings) is **deferred, not started alongside this
+module** — decided, not still open. Land the Rust domain logic first, same
+order as `icao-shared-kernel-rs` before `icao-shared-kernel-py`.
+
+## Acceptance criteria
+
+- [ ] `AircraftCategory` (6 values: the reg 61.015 five, plus
+      `RegisteredSailplane` documented as a reg 61.007(2) applicability
+      extension, not a 61.015 category), `AircraftClassRating` (6 values,
+      reg 61.020), `DesignFeature` (10 values, reg 61.755) — each variant's
+      doc comment cites its regulation.
+- [ ] `AircraftCategory::design_features()` (or the inverse
+      `DesignFeature::applicable_categories()`) matches the reg 61.755 table
+      in this doc exactly, covered by a test per category.
+- [ ] `CasaAircraftClassification` struct: `category`, `class`,
+      `design_features: Vec<DesignFeature>`, plus one `confidence` + one
+      `source` field for the whole value (not per-field), per the placement
+      decision above.
+- [ ] `resolve_classification(designator, override) -> Result<CasaAircraftClassification, ValidationError>`:
+      pure function, no I/O; rejects an override whose `design_features`
+      don't belong to the resolved (or overridden) `category`; returns a
+      clear "unknown" outcome for an uncatalogued designator with no
+      override.
+- [ ] ADC-facts table seeded for the designators `pilot-logbook` currently
+      uses (YAGNI — grow on demand, not full Doc 8643 coverage), each row
+      carrying `confidence` + a `source` citation.
+- [ ] Tests: one derivation per aircraft category, the override-rejection
+      path, and the uncatalogued-designator fallback.
+- [ ] No repository protocol, no persistence, no `aircraft_id` anywhere in
+      the crate.
 
 ## Related
 
