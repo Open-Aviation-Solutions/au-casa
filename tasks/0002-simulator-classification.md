@@ -33,6 +33,18 @@ case for some ICAO-agnostic "flown device" concept) modelling decision, not
 something this package can resolve on its own. Needs its own discussion
 before any resolver design here makes sense.
 
+## Verification note (2026-07-25, found while checking task 0001)
+
+Reg 61.010's definition of "flight simulation training device" has 5
+sub-types: (a) qualified flight simulator, (b) qualified flight training
+device, (c) synthetic trainer approved under CAO 45.0, (d) a device meeting
+qualification standards prescribed under reg 61.045, (e) a device qualified
+by a recognised foreign State's national aviation authority. The old
+`SimType` enum only covers (a)-(c) plus a non-regulatory `NON_APPROVED`
+sentinel — (d) and (e) have no representation. Not investigated further here;
+flagging so it's not lost once this task's modelling question is resolved
+and the enum itself gets designed.
+
 ## Related
 
 - `icao-shared-kernel` task `0011` — origin of the undecided simulator home.
