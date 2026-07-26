@@ -1,6 +1,8 @@
 # CASA aircraft classification (category, class, design features)
 
-**Status:** ready
+**Status:** in progress — implemented in the working tree, uncommitted.
+Every seeded designator row is `Provisional` and needs TCDS verification
+before being marked `Confirmed` (see Data sourcing).
 
 ## Purpose
 
@@ -172,30 +174,64 @@ order as `icao-shared-kernel-rs` before `icao-shared-kernel-py`.
 
 ## Acceptance criteria
 
-- [ ] `AircraftCategory` (6 values: the reg 61.015 five, plus
+- [x] `AircraftCategory` (6 values: the reg 61.015 five, plus
       `RegisteredSailplane` documented as a reg 61.007(2) applicability
       extension, not a 61.015 category), `AircraftClassRating` (6 values,
       reg 61.020), `DesignFeature` (10 values, reg 61.755) — each variant's
       doc comment cites its regulation.
-- [ ] `AircraftCategory::design_features()` (or the inverse
+- [x] `AircraftCategory::design_features()` (or the inverse
       `DesignFeature::applicable_categories()`) matches the reg 61.755 table
       in this doc exactly, covered by a test per category.
-- [ ] `CasaAircraftClassification` struct: `category`, `class`,
+- [x] `CasaAircraftClassification` struct: `category`, `class`,
       `design_features: Vec<DesignFeature>`, plus one `confidence` + one
       `source` field for the whole value (not per-field), per the placement
       decision above.
-- [ ] `resolve_classification(designator, override) -> Result<CasaAircraftClassification, ValidationError>`:
+- [x] `resolve_classification(designator, override) -> Result<CasaAircraftClassification, ValidationError>`:
       pure function, no I/O; rejects an override whose `design_features`
       don't belong to the resolved (or overridden) `category`; returns a
       clear "unknown" outcome for an uncatalogued designator with no
       override.
-- [ ] ADC-facts table seeded for the designators `pilot-logbook` currently
+- [x] ADC-facts table seeded for the designators `pilot-logbook` currently
       uses (YAGNI — grow on demand, not full Doc 8643 coverage), each row
       carrying `confidence` + a `source` citation.
-- [ ] Tests: one derivation per aircraft category, the override-rejection
+- [x] Tests: one derivation per aircraft category, the override-rejection
       path, and the uncatalogued-designator fallback.
-- [ ] No repository protocol, no persistence, no `aircraft_id` anywhere in
+- [x] No repository protocol, no persistence, no `aircraft_id` anywhere in
       the crate.
+- [ ] Verify each seeded designator row against an FAA/EASA type certificate
+      data sheet and promote it from `Provisional` to `Confirmed`.
+
+## Implementation notes (2026-07-26)
+
+- **Wake turbulence category is not carried.** The Design section above lists
+  it as part of the ADC, but no Part 61 classification rule depends on it and
+  the acceptance criteria only call for four facts. `AircraftDescription`
+  holds airframe kind, engine count and engine type; add WTC when something
+  needs it.
+- **`AirframeKind` has two non-ADC values.** `Glider` and `Airship` are not
+  Doc 8643 ADC first-character values, but Part 61 needs to reach the airship
+  category (reg 61.015(e)) and registered sailplanes (reg 61.007(2)), and
+  there is nowhere else to express them. Documented as such on the enum.
+- **`class` is optional**, beyond the registered-sailplane case the original
+  design noted: reg 61.020 lists only *single-engine* helicopter and gyroplane
+  classes, so a multi-engine one has no class rating (it is type-rated). This
+  is covered by a test.
+- **A category override clears the derived class** and filters the derived
+  features to those valid for the new category. Otherwise an override could
+  produce a helicopter carrying an aeroplane class rating.
+- **`Confidence` gained an `Overridden` variant** beyond the confirmed/
+  provisional pair the design implied, for a classification that came wholly
+  from an override with no table row behind it. Its `source` is `None`.
+- **Layer B is public** as `classify(description)`, so every category's
+  derivation is testable without inventing designator facts for airships,
+  tiltrotors and gliders that nothing yet needs.
+- **All seeded rows are `Provisional`.** `C172`, `PA25`, `PA34`, `PA44`,
+  `C208` and `R44` are compiled from manufacturer model information, not
+  checked against a type certificate data sheet in this session. The `source`
+  string says exactly that rather than citing a document that was not opened.
+- **`Citabria` is not seeded.** `pilot-logbook`'s importer uses it as a type
+  string, but it is a model name, not a Doc 8643 designator. Mapping it needs
+  a decision at import time, not a guessed table row.
 
 ## Related
 
