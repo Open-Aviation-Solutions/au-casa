@@ -18,8 +18,10 @@ question:
 
 - `aircraft` (in progress, task `0001`): CASA category/class/design-feature
   classification, derived from an ICAO Doc 8643 type designator.
-- Simulator classification (`SimType`, `is_regulatory_sim`): a separate,
-  not-yet-started concern — see task `0002`.
+- Simulator classification (ready, task `0002`): recognition of a flight
+  simulation training device under reg 61.010, and whether a session counts
+  for Part 61 currency. Builds on the `FlightSimulationTrainingDevice` /
+  `FstdSession` aggregates in `icao-shared-kernel-rs`.
 
 ## Conventions
 
