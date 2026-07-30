@@ -163,7 +163,7 @@ fn catalogued_designator_resolves() {
         Some(AircraftClassRating::SingleEngineAeroplane)
     );
     assert!(result.design_features.is_empty());
-    assert_eq!(result.confidence, Confidence::Provisional);
+    assert_eq!(result.confidence, Confidence::Confirmed);
     assert!(result.source.is_some());
 }
 
@@ -261,4 +261,63 @@ fn category_override_clears_the_derived_class() {
         result.design_features,
         vec![DesignFeature::GasTurbineEngine]
     );
+}
+
+/// The Citabria is split across two Doc 8643 designators, and CH7A is also
+/// shared with the Aeronca 7AC Champion. Neither ambiguity can change the
+/// Part 61 answer, because every model under both is a single piston
+/// landplane — assert that, so a future edit cannot quietly diverge them.
+#[test]
+fn both_citabria_designators_classify_identically() {
+    let aurora = resolve_classification("CH7A", None).unwrap();
+    let adventure = resolve_classification("CH7B", None).unwrap();
+
+    for result in [&aurora, &adventure] {
+        assert_eq!(result.category, AircraftCategory::Aeroplane);
+        assert_eq!(
+            result.class,
+            Some(AircraftClassRating::SingleEngineAeroplane)
+        );
+        // Piston, so no gas turbine feature; undercarriage is per-airframe.
+        assert!(result.design_features.is_empty());
+    }
+    assert_eq!(aurora.category, adventure.category);
+    assert_eq!(aurora.class, adventure.class);
+}
+
+/// Rows checked against a type certificate data sheet say so, and cite the
+/// sheet by number and revision. The flag is only worth carrying if it is
+/// applied honestly, so the rows nobody has checked must still say so.
+#[test]
+fn confidence_reflects_whether_a_tcds_was_actually_read() {
+    for (designator, sheet) in [
+        ("CH7A", "A-759"),
+        ("CH7B", "A-759"),
+        ("C172", "3A12"),
+        ("PA34", "A7SO"),
+        ("PA44", "IM.A.232"),
+        ("C208", "A37CE"),
+    ] {
+        let result = resolve_classification(designator, None).unwrap();
+        assert_eq!(
+            result.confidence,
+            Confidence::Confirmed,
+            "{designator} should be confirmed"
+        );
+        assert!(
+            result.source.unwrap().contains(sheet),
+            "{designator} should cite {sheet}"
+        );
+    }
+
+    // PA25's sheet could not be obtained and R44's is behind a login, so
+    // neither has been read by anyone. They stay Provisional.
+    for designator in ["PA25", "R44"] {
+        let result = resolve_classification(designator, None).unwrap();
+        assert_eq!(
+            result.confidence,
+            Confidence::Provisional,
+            "{designator} has not been checked against a TCDS"
+        );
+    }
 }
