@@ -23,6 +23,21 @@ question:
   for Part 61 currency. Builds on the `FlightSimulationTrainingDevice` /
   `FstdSession` aggregates in `icao-shared-kernel-rs`.
 
+**One part of `aircraft` is not national, and knows it.** `AircraftDescription`
+and the `designator -> description` table (Layer A) are the ICAO Doc 8643
+description code — a New Zealand or UK package would need them unchanged.
+Only Layer B, the derivation to CASA category/class/design features, is
+regulatory interpretation.
+
+Layer A stays here because `au-casa` is the only national package that
+exists; extracting a shared crate for a hypothetical second country would be
+building the extension rather than leaving room for it. The module boundary
+is already the seam, so the move stays cheap when a second country arrives.
+`src/aircraft/description.rs` records what must be undone on extraction —
+chiefly restoring the wake turbulence category, dropped because no Part 61
+rule uses it. **Do not narrow Layer A further to suit Part 61 without noting
+it there**, since a consumer of a shared table cannot see what is missing.
+
 ## Conventions
 
 - **Stateless capabilities only.** This package provides pure derivation
