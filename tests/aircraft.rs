@@ -163,7 +163,7 @@ fn catalogued_designator_resolves() {
         Some(AircraftClassRating::SingleEngineAeroplane)
     );
     assert!(result.design_features.is_empty());
-    assert_eq!(result.confidence, Confidence::Provisional);
+    assert_eq!(result.confidence, Confidence::Confirmed);
     assert!(result.source.is_some());
 }
 
@@ -285,14 +285,39 @@ fn both_citabria_designators_classify_identically() {
     assert_eq!(aurora.class, adventure.class);
 }
 
-/// Rows checked against a type certificate data sheet say so, and cite it.
-/// The rest stay Provisional until someone does the same for them.
+/// Rows checked against a type certificate data sheet say so, and cite the
+/// sheet by number and revision. The flag is only worth carrying if it is
+/// applied honestly, so the rows nobody has checked must still say so.
 #[test]
-fn tcds_verified_rows_are_marked_confirmed() {
-    let citabria = resolve_classification("CH7A", None).unwrap();
-    assert_eq!(citabria.confidence, Confidence::Confirmed);
-    assert!(citabria.source.unwrap().contains("A-759"));
+fn confidence_reflects_whether_a_tcds_was_actually_read() {
+    for (designator, sheet) in [
+        ("CH7A", "A-759"),
+        ("CH7B", "A-759"),
+        ("C172", "3A12"),
+        ("PA34", "A7SO"),
+        ("PA44", "IM.A.232"),
+        ("C208", "A37CE"),
+    ] {
+        let result = resolve_classification(designator, None).unwrap();
+        assert_eq!(
+            result.confidence,
+            Confidence::Confirmed,
+            "{designator} should be confirmed"
+        );
+        assert!(
+            result.source.unwrap().contains(sheet),
+            "{designator} should cite {sheet}"
+        );
+    }
 
-    let unverified = resolve_classification("C172", None).unwrap();
-    assert_eq!(unverified.confidence, Confidence::Provisional);
+    // PA25's sheet could not be obtained and R44's is behind a login, so
+    // neither has been read by anyone. They stay Provisional.
+    for designator in ["PA25", "R44"] {
+        let result = resolve_classification(designator, None).unwrap();
+        assert_eq!(
+            result.confidence,
+            Confidence::Provisional,
+            "{designator} has not been checked against a TCDS"
+        );
+    }
 }
