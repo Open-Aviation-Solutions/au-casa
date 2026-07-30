@@ -47,16 +47,19 @@ const MANUFACTURER_MODEL: &str =
     "Manufacturer model series; pending verification against an FAA/EASA type \
      certificate data sheet";
 
+const TCDS_A759: &str = "FAA Type Certificate Data Sheet A-759 rev 73 (9 Feb 2011)";
+
 /// Look up the compiled facts for a Doc 8643 type designator.
 ///
 /// Returns `None` for an uncatalogued designator rather than guessing.
 pub fn lookup(designator: &str) -> Option<DesignatorFacts> {
-    let (airframe, engine_count, engine_type, source) = match designator {
+    let (airframe, engine_count, engine_type, confidence, source) = match designator {
         // Cessna 172 — single piston landplane.
         "C172" => (
             AirframeKind::LandPlane,
             1,
             EngineType::Piston,
+            Confidence::Provisional,
             MANUFACTURER_MODEL,
         ),
         // Piper PA-25 Pawnee — single piston landplane, tailwheel. The
@@ -66,6 +69,7 @@ pub fn lookup(designator: &str) -> Option<DesignatorFacts> {
             AirframeKind::LandPlane,
             1,
             EngineType::Piston,
+            Confidence::Provisional,
             MANUFACTURER_MODEL,
         ),
         // Piper PA-34 Seneca — twin piston landplane.
@@ -73,6 +77,7 @@ pub fn lookup(designator: &str) -> Option<DesignatorFacts> {
             AirframeKind::LandPlane,
             2,
             EngineType::Piston,
+            Confidence::Provisional,
             MANUFACTURER_MODEL,
         ),
         // Piper PA-44 Seminole — twin piston landplane.
@@ -80,6 +85,7 @@ pub fn lookup(designator: &str) -> Option<DesignatorFacts> {
             AirframeKind::LandPlane,
             2,
             EngineType::Piston,
+            Confidence::Provisional,
             MANUFACTURER_MODEL,
         ),
         // Cessna 208 Caravan — single turboprop landplane.
@@ -87,6 +93,7 @@ pub fn lookup(designator: &str) -> Option<DesignatorFacts> {
             AirframeKind::LandPlane,
             1,
             EngineType::TurboProp,
+            Confidence::Provisional,
             MANUFACTURER_MODEL,
         ),
         // Robinson R44 — single piston helicopter.
@@ -94,14 +101,51 @@ pub fn lookup(designator: &str) -> Option<DesignatorFacts> {
             AirframeKind::Helicopter,
             1,
             EngineType::Piston,
+            Confidence::Provisional,
             MANUFACTURER_MODEL,
+        ),
+        // Citabria, 7ECA series — single piston landplane.
+        // TCDS A-759 XVIII: Continental O-200-A, one reciprocating engine.
+        //
+        // Doc 8643 splits the Citabria across two designators rather than
+        // one, so a logbook row reading only "Citabria" is ambiguous between
+        // this and CH7B; the model number decides. CH7A additionally covers
+        // the Aeronca 7AC Champion, a different aeroplane sharing the
+        // designator (TCDS A-759 I: Continental A-65-8).
+        //
+        // Neither ambiguity affects the classification: every model under
+        // both designators is a single-engine piston landplane, so all of
+        // them resolve to Aeroplane / SingleEngineAeroplane either way.
+        //
+        // Undercarriage is not derived here, for the same reason as PA25 —
+        // and this family shows why. A-759 approves the 7ECA on floats
+        // (item 204(c)) and the 7GCBC on floats *or* skis (items 203(k),
+        // 203(l)), so Floatplane and SkiLandingGear are properties of an
+        // individual airframe, not of the designator.
+        "CH7A" => (
+            AirframeKind::LandPlane,
+            1,
+            EngineType::Piston,
+            Confidence::Confirmed,
+            TCDS_A759,
+        ),
+        // Citabria, 7GCAA/7GCBC/7KCAB series — single piston landplane.
+        // TCDS A-759 XIX and XX: Lycoming O-320-A2B/C2B/A2D; XXI: Lycoming
+        // IO-320-E2A or AEIO-320-E2B. One reciprocating engine throughout.
+        // See CH7A above on the split.
+        "CH7B" => (
+            AirframeKind::LandPlane,
+            1,
+            EngineType::Piston,
+            Confidence::Confirmed,
+            TCDS_A759,
         ),
         _ => return None,
     };
 
     Some(DesignatorFacts {
         description: AircraftDescription::new(airframe, engine_count, engine_type),
-        confidence: Confidence::Provisional,
+        confidence,
         source,
     })
 }

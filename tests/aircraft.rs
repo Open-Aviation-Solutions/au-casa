@@ -262,3 +262,37 @@ fn category_override_clears_the_derived_class() {
         vec![DesignFeature::GasTurbineEngine]
     );
 }
+
+/// The Citabria is split across two Doc 8643 designators, and CH7A is also
+/// shared with the Aeronca 7AC Champion. Neither ambiguity can change the
+/// Part 61 answer, because every model under both is a single piston
+/// landplane — assert that, so a future edit cannot quietly diverge them.
+#[test]
+fn both_citabria_designators_classify_identically() {
+    let aurora = resolve_classification("CH7A", None).unwrap();
+    let adventure = resolve_classification("CH7B", None).unwrap();
+
+    for result in [&aurora, &adventure] {
+        assert_eq!(result.category, AircraftCategory::Aeroplane);
+        assert_eq!(
+            result.class,
+            Some(AircraftClassRating::SingleEngineAeroplane)
+        );
+        // Piston, so no gas turbine feature; undercarriage is per-airframe.
+        assert!(result.design_features.is_empty());
+    }
+    assert_eq!(aurora.category, adventure.category);
+    assert_eq!(aurora.class, adventure.class);
+}
+
+/// Rows checked against a type certificate data sheet say so, and cite it.
+/// The rest stay Provisional until someone does the same for them.
+#[test]
+fn tcds_verified_rows_are_marked_confirmed() {
+    let citabria = resolve_classification("CH7A", None).unwrap();
+    assert_eq!(citabria.confidence, Confidence::Confirmed);
+    assert!(citabria.source.unwrap().contains("A-759"));
+
+    let unverified = resolve_classification("C172", None).unwrap();
+    assert_eq!(unverified.confidence, Confidence::Provisional);
+}
