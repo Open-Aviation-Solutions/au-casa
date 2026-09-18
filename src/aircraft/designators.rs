@@ -79,11 +79,21 @@ const TCDS_3A19_CANDIDATE: &str =
 const TCDS_2A13_CANDIDATE: &str =
     "FAA Type Certificate Data Sheet 2A13 (Piper PA-28 family) — revision not yet checked";
 const EASA_A221_CANDIDATE: &str =
-    "EASA Type-Certificate Data Sheet EASA.A.221 (Schleicher ASK 21) — not yet confirmed this covers the base ASK 21 rather than only the ASK 21 B";
+    "EASA Type-Certificate Data Sheet EASA.A.221 (Schleicher ASK-21Mi) — not yet confirmed \
+     whether this sheet covers the self-launching Mi variant directly or the airframe is \
+     certified via a supplemental/POA on the base ASK 21's own sheet";
 const EASA_A025_CANDIDATE: &str =
-    "EASA Type-Certificate Data Sheet EASA.A.025 (Schempp-Hirth Duo Discus) — not yet confirmed this is the unpowered variant, distinct from the self-launching Duo Discus T (EASA.A.074)";
+    "EASA Type-Certificate Data Sheet EASA.A.025 (Schempp-Hirth Duo Discus T) — issued for \
+     the base airframe; not yet confirmed whether the self-launch conversion (Solo 2350D \
+     sustainer) is covered by this sheet directly or by EASA.A.074, a separate reference \
+     found for the powered variant's noise/STC documentation";
 const LS4_CANDIDATE: &str =
-    "LBA type certificate 345 (Rolladen-Schneider LS4) — exact EASA TCDS reference not yet found";
+    "LBA type certificate 345 (Rolladen-Schneider LS4) — exact EASA TCDS reference not yet \
+     found; whether LS4 is even Doc 8643's individual designator for this type, rather than \
+     the generic GLID, is also unconfirmed — see the GLID/LS4 row comments";
+const GENERIC_GLIDER_SOURCE: &str =
+    "ICAO Doc 8643's generic \"(any manufacturer) Glider\" entry — a catch-all designator, \
+     not tied to any one manufacturer's type certificate, so there is no TCDS to cite";
 
 /// Look up the compiled facts for a Doc 8643 type designator.
 ///
@@ -210,13 +220,16 @@ pub fn lookup(designator: &str) -> Option<DesignatorFacts> {
             Confidence::Provisional,
             TCDS_3A19_CANDIDATE,
         ),
-        // Piper PA-28 — fixed-gear Cherokee/Warrior/Archer family, single
-        // piston landplane. TC 2A13 spans PA-28-140 through PA-28-236.
-        // Undercarriage is not derived here — see PA25/CH7A above; a fixed
-        // vs retractable split already exists at the designator level
-        // between this row and P28R, but that is per Doc 8643's own
-        // designator assignment, not something this table infers.
-        "PA28" => (
+        // Piper PA-28, fixed-gear family (Cherokee/Warrior/Archer, fixed-
+        // pitch prop) — single piston landplane. TC 2A13 spans PA-28-140
+        // through PA-28-236. "PA28" itself is *not* a Doc 8643 designator —
+        // it was retired and split into P28A/P28B/P28R/P28T/P28U around
+        // 1998; this row is deliberately keyed P28A, not PA28. Undercarriage
+        // is not derived here — see PA25/CH7A above; the fixed vs
+        // retractable split already exists at the designator level between
+        // this row and P28R, per Doc 8643's own designator assignment, not
+        // something this table infers.
+        "P28A" => (
             AirframeKind::LandPlane,
             1,
             EngineType::Piston,
@@ -224,7 +237,7 @@ pub fn lookup(designator: &str) -> Option<DesignatorFacts> {
             TCDS_2A13_CANDIDATE,
         ),
         // Piper PA-28R — retractable-gear Arrow variants (PA-28R-180, -200,
-        // -201 etc.), single piston landplane. Same TC 2A13 as PA28.
+        // -201 etc.), single piston landplane. Same TC 2A13 as P28A.
         "P28R" => (
             AirframeKind::LandPlane,
             1,
@@ -232,25 +245,56 @@ pub fn lookup(designator: &str) -> Option<DesignatorFacts> {
             Confidence::Provisional,
             TCDS_2A13_CANDIDATE,
         ),
-        // Schleicher ASK 21 — two-seat glider, no powerplant.
+        // Schleicher ASK-21Mi — *not* the plain, non-powered ASK 21. Doc
+        // 8643 does not appear to give the plain ASK 21 its own designator
+        // at all (an unpowered glider with no individual code would use the
+        // generic GLID below); AS21 is specifically the self-launching
+        // variant with a retractable IAE R50-AA rotary engine (41 kW),
+        // hence one piston engine, not zero. The resolved CASA category is
+        // unaffected either way — Glider always derives to
+        // RegisteredSailplane regardless of engine facts — but the engine
+        // count/type must describe the real airframe, and an aircraft
+        // actually logged under this designator is the motorglider, not a
+        // plain trainer.
         "AS21" => (
             AirframeKind::Glider,
-            0,
-            EngineType::None,
+            1,
+            EngineType::Piston,
             Confidence::Provisional,
             EASA_A221_CANDIDATE,
         ),
-        // Schempp-Hirth Duo Discus — two-seat glider, no powerplant. The
-        // self-launching "Duo Discus T" is a separate Doc 8643 designator
-        // (EASA.A.074), not this row — same kind of split as CH7A/CH7B.
+        // Schempp-Hirth Duo Discus T — likewise the self-launching variant,
+        // not the plain Duo Discus (same reasoning as AS21 above). Confirmed
+        // by Doc 8643 itself citing "Duo Discus T" against this exact
+        // designator. Fitted with a Solo 2350D sustainer engine.
         "DUOD" => (
+            AirframeKind::Glider,
+            1,
+            EngineType::Piston,
+            Confidence::Provisional,
+            EASA_A025_CANDIDATE,
+        ),
+        // (any manufacturer) — the ICAO Doc 8643 generic designator for an
+        // unpowered glider with no individual type designator of its own.
+        // Most real-world sailplanes fall here: Doc 8643 only assigns an
+        // individual code to a type that needs one for ATC/flight-plan
+        // purposes, which in practice means the self-launching motorglider
+        // variants (see AS21, DUOD above) — a plain, unpowered glider is
+        // GLID regardless of manufacturer or model.
+        "GLID" => (
             AirframeKind::Glider,
             0,
             EngineType::None,
             Confidence::Provisional,
-            EASA_A025_CANDIDATE,
+            GENERIC_GLIDER_SOURCE,
         ),
-        // Rolladen-Schneider LS4 — single-seat glider, no powerplant.
+        // Rolladen-Schneider LS4 — single-seat glider. No self-launching
+        // "LS4" variant is known to exist (unlike AS21/DUOD above), and no
+        // individual Doc 8643 entry for it was found this session — it may
+        // in fact belong under the generic GLID designator above rather
+        // than its own row. Kept as its own row only because it is what
+        // this pilot's actual stored data uses; revisit if a definitive
+        // Doc 8643 source turns up showing LS4 either way.
         "LS4" => (
             AirframeKind::Glider,
             0,
