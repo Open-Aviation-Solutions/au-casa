@@ -321,3 +321,65 @@ fn confidence_reflects_whether_a_tcds_was_actually_read() {
         );
     }
 }
+
+// --- Task 0003: additional GA and glider designators ---------------------
+
+/// Each newly seeded designator resolves to the expected category/class and
+/// is still Provisional — none of the candidate sources have been read yet.
+#[rstest]
+#[case(
+    "C152",
+    AircraftCategory::Aeroplane,
+    Some(AircraftClassRating::SingleEngineAeroplane)
+)]
+#[case(
+    "PA28",
+    AircraftCategory::Aeroplane,
+    Some(AircraftClassRating::SingleEngineAeroplane)
+)]
+#[case(
+    "P28R",
+    AircraftCategory::Aeroplane,
+    Some(AircraftClassRating::SingleEngineAeroplane)
+)]
+#[case("AS21", AircraftCategory::RegisteredSailplane, None)]
+#[case("DUOD", AircraftCategory::RegisteredSailplane, None)]
+#[case("LS4", AircraftCategory::RegisteredSailplane, None)]
+fn newly_seeded_designators_resolve(
+    #[case] designator: &str,
+    #[case] category: AircraftCategory,
+    #[case] class: Option<AircraftClassRating>,
+) {
+    let result = resolve_classification(designator, None).unwrap();
+    assert_eq!(result.category, category);
+    assert_eq!(result.class, class);
+    assert_eq!(
+        result.confidence,
+        Confidence::Provisional,
+        "{designator} has not been checked against a TCDS"
+    );
+}
+
+/// `PA28` and `P28R` share one type certificate (fixed vs retractable gear
+/// is a Doc 8643 designator-level split, not something this table derives),
+/// so they must classify identically, same guard as the Citabria pair above.
+#[test]
+fn pa28_and_p28r_classify_identically() {
+    let fixed = resolve_classification("PA28", None).unwrap();
+    let retractable = resolve_classification("P28R", None).unwrap();
+    assert_eq!(fixed.category, retractable.category);
+    assert_eq!(fixed.class, retractable.class);
+}
+
+/// A glider resolves to RegisteredSailplane with no class rating and no
+/// design features (reg 61.755 defines none for it), regardless of which
+/// seeded glider designator is used.
+#[test]
+fn gliders_have_no_class_and_no_design_features() {
+    for designator in ["AS21", "DUOD", "LS4"] {
+        let result = resolve_classification(designator, None).unwrap();
+        assert_eq!(result.category, AircraftCategory::RegisteredSailplane);
+        assert_eq!(result.class, None);
+        assert!(result.design_features.is_empty());
+    }
+}

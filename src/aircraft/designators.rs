@@ -69,6 +69,22 @@ const TCDS_A37CE: &str = "FAA Type Certificate Data Sheet A37CE rev 22 (31 Oct 2
 const TCDS_A759: &str = "FAA Type Certificate Data Sheet A-759 rev 73 (9 Feb 2011)";
 const TCDS_EASA_A232: &str = "EASA Type-Certificate Data Sheet IM.A.232 issue 03 (10 Feb 2017)";
 
+// Candidate sources for the rows below, identified this session by public
+// search rather than by opening the document — see task 0003. Each one
+// names the right certificate but not yet a checked revision/date, so every
+// row citing one of these stays Provisional until someone reads the actual
+// sheet and promotes it, same as PA25/R44 above.
+const TCDS_3A19_CANDIDATE: &str =
+    "FAA Type Certificate Data Sheet 3A19 (Cessna 150/152) — revision not yet checked";
+const TCDS_2A13_CANDIDATE: &str =
+    "FAA Type Certificate Data Sheet 2A13 (Piper PA-28 family) — revision not yet checked";
+const EASA_A221_CANDIDATE: &str =
+    "EASA Type-Certificate Data Sheet EASA.A.221 (Schleicher ASK 21) — not yet confirmed this covers the base ASK 21 rather than only the ASK 21 B";
+const EASA_A025_CANDIDATE: &str =
+    "EASA Type-Certificate Data Sheet EASA.A.025 (Schempp-Hirth Duo Discus) — not yet confirmed this is the unpowered variant, distinct from the self-launching Duo Discus T (EASA.A.074)";
+const LS4_CANDIDATE: &str =
+    "LBA type certificate 345 (Rolladen-Schneider LS4) — exact EASA TCDS reference not yet found";
+
 /// Look up the compiled facts for a Doc 8643 type designator.
 ///
 /// Returns `None` for an uncatalogued designator rather than guessing.
@@ -183,6 +199,64 @@ pub fn lookup(designator: &str) -> Option<DesignatorFacts> {
             EngineType::Piston,
             Confidence::Confirmed,
             TCDS_A759,
+        ),
+        // Cessna 152 — single piston landplane, Lycoming O-235.
+        // Shares TCDS 3A19 with the Cessna 150. Still Provisional: identified
+        // by public search this session, not read from the actual sheet.
+        "C152" => (
+            AirframeKind::LandPlane,
+            1,
+            EngineType::Piston,
+            Confidence::Provisional,
+            TCDS_3A19_CANDIDATE,
+        ),
+        // Piper PA-28 — fixed-gear Cherokee/Warrior/Archer family, single
+        // piston landplane. TC 2A13 spans PA-28-140 through PA-28-236.
+        // Undercarriage is not derived here — see PA25/CH7A above; a fixed
+        // vs retractable split already exists at the designator level
+        // between this row and P28R, but that is per Doc 8643's own
+        // designator assignment, not something this table infers.
+        "PA28" => (
+            AirframeKind::LandPlane,
+            1,
+            EngineType::Piston,
+            Confidence::Provisional,
+            TCDS_2A13_CANDIDATE,
+        ),
+        // Piper PA-28R — retractable-gear Arrow variants (PA-28R-180, -200,
+        // -201 etc.), single piston landplane. Same TC 2A13 as PA28.
+        "P28R" => (
+            AirframeKind::LandPlane,
+            1,
+            EngineType::Piston,
+            Confidence::Provisional,
+            TCDS_2A13_CANDIDATE,
+        ),
+        // Schleicher ASK 21 — two-seat glider, no powerplant.
+        "AS21" => (
+            AirframeKind::Glider,
+            0,
+            EngineType::None,
+            Confidence::Provisional,
+            EASA_A221_CANDIDATE,
+        ),
+        // Schempp-Hirth Duo Discus — two-seat glider, no powerplant. The
+        // self-launching "Duo Discus T" is a separate Doc 8643 designator
+        // (EASA.A.074), not this row — same kind of split as CH7A/CH7B.
+        "DUOD" => (
+            AirframeKind::Glider,
+            0,
+            EngineType::None,
+            Confidence::Provisional,
+            EASA_A025_CANDIDATE,
+        ),
+        // Rolladen-Schneider LS4 — single-seat glider, no powerplant.
+        "LS4" => (
+            AirframeKind::Glider,
+            0,
+            EngineType::None,
+            Confidence::Provisional,
+            LS4_CANDIDATE,
         ),
         _ => return None,
     };
