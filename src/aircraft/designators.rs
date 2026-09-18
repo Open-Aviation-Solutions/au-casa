@@ -264,9 +264,12 @@ pub fn lookup(designator: &str) -> Option<DesignatorFacts> {
             EASA_A221_CANDIDATE,
         ),
         // Schempp-Hirth Duo Discus T — likewise the self-launching variant,
-        // not the plain Duo Discus (same reasoning as AS21 above). Confirmed
-        // by Doc 8643 itself citing "Duo Discus T" against this exact
-        // designator. Fitted with a Solo 2350D sustainer engine.
+        // not the plain Duo Discus (same reasoning as AS21 above). The
+        // designator-to-model mapping itself is solid (a public reference
+        // names "Duo Discus T" directly against this designator); it's the
+        // TCDS/EASA sheet citation below that's still unverified, hence
+        // Confidence::Provisional, not the identification. Fitted with a
+        // Solo 2350D sustainer engine.
         "DUOD" => (
             AirframeKind::Glider,
             1,
@@ -276,11 +279,15 @@ pub fn lookup(designator: &str) -> Option<DesignatorFacts> {
         ),
         // (any manufacturer) — the ICAO Doc 8643 generic designator for an
         // unpowered glider with no individual type designator of its own.
-        // Most real-world sailplanes fall here: Doc 8643 only assigns an
-        // individual code to a type that needs one for ATC/flight-plan
-        // purposes, which in practice means the self-launching motorglider
-        // variants (see AS21, DUOD above) — a plain, unpowered glider is
-        // GLID regardless of manufacturer or model.
+        // Working hypothesis, not yet verified against Doc 8643 itself
+        // (which this crate does not vendor): individual codes seem to be
+        // reserved for types that need one for ATC/flight-plan purposes,
+        // which in practice means the self-launching motorglider variants
+        // (see AS21, DUOD above) — plausibly making GLID the right fallback
+        // for a plain, unpowered glider regardless of manufacturer or
+        // model. Treat this row's assignment the same as its Provisional
+        // confidence implies: a reasonable starting point, not a confirmed
+        // rule to build further seeding decisions on without checking.
         "GLID" => (
             AirframeKind::Glider,
             0,
