@@ -350,6 +350,16 @@ fn confidence_reflects_whether_a_tcds_was_actually_read() {
 #[case("DUOD", AircraftCategory::RegisteredSailplane, None)]
 #[case("GLID", AircraftCategory::RegisteredSailplane, None)]
 #[case("LS4", AircraftCategory::RegisteredSailplane, None)]
+#[case(
+    "BL8",
+    AircraftCategory::Aeroplane,
+    Some(AircraftClassRating::SingleEngineAeroplane)
+)]
+#[case(
+    "PTS2",
+    AircraftCategory::Aeroplane,
+    Some(AircraftClassRating::SingleEngineAeroplane)
+)]
 fn newly_seeded_designators_resolve(
     #[case] designator: &str,
     #[case] category: AircraftCategory,
