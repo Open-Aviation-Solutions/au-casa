@@ -94,6 +94,13 @@ const LS4_CANDIDATE: &str =
 const GENERIC_GLIDER_SOURCE: &str =
     "ICAO Doc 8643's generic \"(any manufacturer) Glider\" entry — a catch-all designator, \
      not tied to any one manufacturer's type certificate, so there is no TCDS to cite";
+const TCDS_8GCBC_CANDIDATE: &str =
+    "FAA Type Certificate Data Sheet for the American Champion 8GCBC Scout — exact number \
+     not yet found; not assumed to be A-759 (CH7A/CH7B's sheet) without checking, since \
+     American Champion's later designs are not guaranteed to share it";
+const TCDS_PTS2_CANDIDATE: &str =
+    "FAA Type Certificate Data Sheet for the Aerotek/Christen Pitts S-2A — exact number not \
+     yet found";
 
 /// Look up the compiled facts for a Doc 8643 type designator.
 ///
@@ -279,15 +286,17 @@ pub fn lookup(designator: &str) -> Option<DesignatorFacts> {
         ),
         // (any manufacturer) — the ICAO Doc 8643 generic designator for an
         // unpowered glider with no individual type designator of its own.
-        // Working hypothesis, not yet verified against Doc 8643 itself
-        // (which this crate does not vendor): individual codes seem to be
-        // reserved for types that need one for ATC/flight-plan purposes,
-        // which in practice means the self-launching motorglider variants
-        // (see AS21, DUOD above) — plausibly making GLID the right fallback
-        // for a plain, unpowered glider regardless of manufacturer or
-        // model. Treat this row's assignment the same as its Provisional
-        // confidence implies: a reasonable starting point, not a confirmed
-        // rule to build further seeding decisions on without checking.
+        // Confirmed directly against doc8643.com's own page for the code
+        // ("(any manufacturer) Glider GLID — ICAO Type Designator - -/-"),
+        // not inferred from pattern-matching other rows: GLID is ICAO's
+        // stated fallback for a glider with no individual designator.
+        // What remains this crate's own working rule, not something Doc
+        // 8643 states, is *which* gliders get GLID vs. an individual code
+        // — individual codes seem to be reserved for types that need one
+        // for ATC/flight-plan purposes, in practice the self-launching
+        // motorglider variants (see AS21, DUOD above). Confidence stays
+        // Provisional for that reason, not because GLID's existence is in
+        // doubt.
         "GLID" => (
             AirframeKind::Glider,
             0,
@@ -308,6 +317,26 @@ pub fn lookup(designator: &str) -> Option<DesignatorFacts> {
             EngineType::None,
             Confidence::Provisional,
             LS4_CANDIDATE,
+        ),
+        // American Champion 8GCBC Scout — single piston landplane. Not the
+        // same designator as the Citabria (CH7A/CH7B above) despite sharing
+        // a manufacturer lineage; Doc 8643 assigns the Scout its own code.
+        "BL8" => (
+            AirframeKind::LandPlane,
+            1,
+            EngineType::Piston,
+            Confidence::Provisional,
+            TCDS_8GCBC_CANDIDATE,
+        ),
+        // Aerotek/Christen Pitts S-2A — single piston landplane, aerobatic
+        // biplane. "Pitts S2A" is a model name, not the designator; this
+        // row is keyed PTS2, confirmed against doc8643.com.
+        "PTS2" => (
+            AirframeKind::LandPlane,
+            1,
+            EngineType::Piston,
+            Confidence::Provisional,
+            TCDS_PTS2_CANDIDATE,
         ),
         _ => return None,
     };
