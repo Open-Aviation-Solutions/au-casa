@@ -1,7 +1,6 @@
 # Seed BL8 and PTS2 designators
 
-**Status:** ready to implement — table growth against the pattern task
-`0003` established, not a new mechanism.
+**Status:** done, archived 2026-09-29 (PR #5).
 
 ## Purpose
 

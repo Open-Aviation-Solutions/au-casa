@@ -1,9 +1,6 @@
 # Seed additional GA and glider designators
 
-**Status:** ready to implement — table growth against the pattern task
-`0001` already established, not a new mechanism. Revised after the first
-pass turned up two real designator-correctness problems, not just missing
-TCDS citations — see "What changed on review" below.
+**Status:** done, archived 2026-09-29 (PR #4).
 
 ## Purpose
 

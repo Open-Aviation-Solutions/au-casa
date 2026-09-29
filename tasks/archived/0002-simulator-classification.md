@@ -1,8 +1,9 @@
 # Simulator classification (FSTD recognition under Part 61)
 
-**Status:** in progress — the `au-casa` layer is implemented in the working
-tree, uncommitted. The kernel aggregates it builds on are on
-`icao-shared-kernel-rs` PR #3 (that repo's task `0001`).
+**Status:** done, archived 2026-09-29 (commit `afe83c1`), on the kernel
+aggregates of `icao-shared-kernel-rs` task `0001`. pilot-logbook has since
+stopped storing a recognition (its issue #77): a pilot records whether a
+session was in an approved FSTD instead.
 
 ## Purpose
 

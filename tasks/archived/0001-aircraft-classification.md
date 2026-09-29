@@ -1,8 +1,8 @@
 # CASA aircraft classification (category, class, design features)
 
-**Status:** in progress — implemented in the working tree, uncommitted.
-Every seeded designator row is `Provisional` and needs TCDS verification
-before being marked `Confirmed` (see Data sourcing).
+**Status:** done, archived 2026-09-29 (commit `71f641a`). Seeded rows have
+since been checked against their TCDS (tasks `0003`, `0004`); those that
+could not be stay `Provisional`, each saying why.
 
 ## Purpose
 
