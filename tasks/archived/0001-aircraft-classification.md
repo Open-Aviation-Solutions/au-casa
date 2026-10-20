@@ -6,13 +6,15 @@ could not be stay `Provisional`, each saying why.
 
 ## Purpose
 
-`icao-shared-kernel`'s task `0011` removed `AircraftCategory`,
+`icao-shared-kernel-python`'s (originally `icao-shared-kernel`; renamed and
+archived 2026-10) task `0011` removed `AircraftCategory`,
 `AircraftClassRating`, and `DesignFeature` from the kernel `Aircraft` — they're
 CASA Part 61 concepts, not ICAO-universal, and its task `0012` specified where
 they'd land: a shared CASA national package. This is that package's first
 module, refined from `0012`'s design after a session of DIP-focused
 discussion. It supersedes `0012` as the live design surface for this
-question; `0012` stays in `icao-shared-kernel` as historical record.
+question; `0012` stays in `icao-shared-kernel-python` (originally
+`icao-shared-kernel`; renamed and archived 2026-10) as historical record.
 
 This directly unblocks `pilot-logbook`'s task `0007`
 (`adopt-icao-shared-kernel-py-for-core-aggregates`), confirmed by grep, not
@@ -235,7 +237,8 @@ order as `icao-shared-kernel-rs` before `icao-shared-kernel-py`.
 
 ## Related
 
-- `icao-shared-kernel` tasks `0011` (removed these fields from the kernel)
-  and `0012` (original package spec, superseded here).
+- `icao-shared-kernel-python` (originally `icao-shared-kernel`; renamed and
+  archived 2026-10) tasks `0011` (removed these fields from the kernel) and
+  `0012` (original package spec, superseded here).
 - `pilot-logbook` task `0007` — the consumer this unblocks.
 - `au-casa` task `0002` — simulator classification, a separate concern.
