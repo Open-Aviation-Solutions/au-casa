@@ -3,7 +3,7 @@
 CASA (Australia) national aviation regulatory package. Derives Part 61
 aircraft classification (category, class, design features) from ICAO Doc
 8643 type designators, and hosts other CASA-specific concerns that don't
-belong in the ICAO-universal [`icao-shared-kernel`](https://github.com/Open-Aviation-Solutions/icao-shared-kernel-rs).
+belong in the ICAO-universal [`icao-shared-kernel`](https://github.com/Open-Aviation-Solutions/icao-shared-kernel).
 
 ## What is (and isn't) here
 

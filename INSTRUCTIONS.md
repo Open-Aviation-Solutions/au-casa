@@ -1,11 +1,12 @@
 # au-casa — Working Instructions
 
 CASA (Australia) national aviation regulatory package. Sibling to
-[`icao-shared-kernel-rs`](https://github.com/Open-Aviation-Solutions/icao-shared-kernel-rs)
+[`icao-shared-kernel`](https://github.com/Open-Aviation-Solutions/icao-shared-kernel)
 (the ICAO-universal domain), following the same Rust-crate-plus-Python-bindings
-pattern (`au-casa-py`, not started yet). Grew out of `icao-shared-kernel`'s
+pattern (`au-casa-py`, not started yet). Grew out of the Python kernel's
 tasks `0011` (which trimmed CASA-specific fields out of the kernel `Aircraft`)
-and `0012` (which specified this package before it existed) — see those for
+and `0012` (which specified this package before it existed), in its
+repository `icao-shared-kernel-python`, now archived — see those for
 the "why ICAO-universal vs national" background; this repo is where the
 CASA-specific design now lives and evolves.
 
@@ -21,7 +22,7 @@ question:
 - Simulator classification (ready, task `0002`): recognition of a flight
   simulation training device under reg 61.010, and whether a session counts
   for Part 61 currency. Builds on the `FlightSimulationTrainingDevice` /
-  `FstdSession` aggregates in `icao-shared-kernel-rs`.
+  `FstdSession` aggregates in `icao-shared-kernel`.
 
 **One part of `aircraft` is not national, and knows it.** `AircraftDescription`
 and the `designator -> description` table (Layer A) are the ICAO Doc 8643
@@ -46,7 +47,7 @@ it there**, since a consumer of a shared table cannot see what is missing.
   any consumer-specific data (e.g. a per-aircraft category override) belongs
   to the consuming application that owns that data's lifecycle, not here —
   the same reasoning that kept repository protocols out of
-  `icao-shared-kernel-rs`/`icao-shared-kernel-py`.
+  `icao-shared-kernel`/`icao-shared-kernel-py`.
 - **No vendored ICAO-copyrighted data.** Doc 8643 itself may not be
   redistributed; only independently-compiled facts, each with a source
   citation. See task `0001` for the sourcing approach.
@@ -54,7 +55,7 @@ it there**, since a consumer of a shared table cannot see what is missing.
   CASA Part 61 (or the specific regulation cited).
 - **Discuss before implementing**: design decisions get a `tasks/NNNN-*.md`
   discussion first (see that directory's own conventions, mirrored from
-  `icao-shared-kernel`).
+  the Python kernel's repository, `icao-shared-kernel-python`, now archived).
 
 ## Commands
 
