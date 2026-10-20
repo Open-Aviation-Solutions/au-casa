@@ -14,8 +14,9 @@
 //! exists, so extracting a shared crate now would be building the extension
 //! rather than leaving room for it. The module boundary is already the seam,
 //! so the move stays cheap. A separate `icao-type-designators` crate is the
-//! likely home rather than `icao-shared-kernel`, whose thin-hub discipline
-//! covers aggregates and repository protocols — reference data is neither.
+//! likely home rather than the kernel, whose thin-hub discipline (written
+//! down in `icao-shared-kernel-python`'s `INSTRUCTIONS.md`, archived) covers
+//! aggregates and repository protocols — reference data is neither.
 //!
 //! **If it is ever extracted, restore the wake turbulence category.** Layer A
 //! is nominally universal but has been narrowed by one country's needs in

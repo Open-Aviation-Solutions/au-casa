@@ -7,8 +7,9 @@ session was in an approved FSTD instead.
 
 ## Purpose
 
-`icao-shared-kernel-python` task `0011` (link updated 2026-10: the Python package's repository, since renamed icao-shared-kernel-python and archived) removed `SimType` and `is_regulatory_sim`
-from the kernel `Aircraft` and left their home explicitly undecided:
+`icao-shared-kernel-python` (originally `icao-shared-kernel`; renamed and
+archived 2026-10) task `0011` removed `SimType` and `is_regulatory_sim` from the
+kernel `Aircraft` and left their home explicitly undecided:
 *"pilot-training owning a `Simulator`, or the CASA package if logbook also
 needs sim currency — a separate downstream task."* `pilot-logbook`'s task
 `0007` confirms it's the latter, at least in part: `metrics/_run.py` and five
@@ -321,7 +322,8 @@ Resolve it when a mapping is actually required.
 
 ## Related
 
-- `icao-shared-kernel-python` task `0011` (link updated 2026-10: the Python package's repository, since renamed icao-shared-kernel-python and archived) — origin of the undecided simulator home.
+- `icao-shared-kernel-python` (originally `icao-shared-kernel`; renamed and
+  archived 2026-10) task `0011` — origin of the undecided simulator home.
 - `pilot-logbook` task `0007` — the consumer this blocks.
 - `au-casa` task `0001` — aircraft classification; sibling concern, and the
   contrast that explains why this task has no resolver.

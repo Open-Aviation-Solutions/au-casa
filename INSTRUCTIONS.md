@@ -3,19 +3,18 @@
 CASA (Australia) national aviation regulatory package. Sibling to
 [`icao-shared-kernel`](https://github.com/Open-Aviation-Solutions/icao-shared-kernel)
 (the ICAO-universal domain), following the same Rust-crate-plus-Python-bindings
-pattern (`au-casa-py`, not started yet). Grew out of the Python kernel's
-tasks `0011` (which trimmed CASA-specific fields out of the kernel `Aircraft`)
-and `0012` (which specified this package before it existed), in its
-repository `icao-shared-kernel-python`, now archived — see those for
-the "why ICAO-universal vs national" background; this repo is where the
-CASA-specific design now lives and evolves.
+pattern (`au-casa-py`). Grew out of the Python kernel's tasks `0011` (which
+trimmed CASA-specific fields out of the kernel `Aircraft`) and `0012` (which
+specified this package before it existed), in `icao-shared-kernel-python`
+(archived) — see those for the "why ICAO-universal vs national" background;
+this repo is where the CASA-specific design now lives and evolves.
 
 ## Purpose and scope
 
 This package resolves **national** (CASA Part 61) facts that the kernel
-deliberately does not carry, because they aren't ICAO-universal — see
-`icao-shared-kernel`'s thin-hub discipline. Each module answers one such
-question:
+deliberately does not carry, because they aren't ICAO-universal — see the
+kernel's thin-hub discipline, written down in `icao-shared-kernel-python`'s
+`INSTRUCTIONS.md` (archived). Each module answers one such question:
 
 - `aircraft` (implemented, task `0001`): CASA category/class/design-feature
   classification, derived from an ICAO Doc 8643 type designator.
@@ -54,8 +53,9 @@ it there**, since a consumer of a shared table cannot see what is missing.
 - **Regulatory terms only**: names and terminology must be verifiable against
   CASA Part 61 (or the specific regulation cited).
 - **Discuss before implementing**: design decisions get a `tasks/NNNN-*.md`
-  discussion first (see that directory's own conventions, mirrored from
-  the Python kernel's repository, `icao-shared-kernel-python`, now archived).
+  discussion first. This repository follows the conventions written down in
+  `icao-shared-kernel-python`'s `tasks/INSTRUCTIONS.md` (archived); `tasks/`
+  here has none of its own.
 
 ## Commands
 
