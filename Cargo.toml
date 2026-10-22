@@ -11,6 +11,8 @@ name = "au_casa"
 path = "src/lib.rs"
 
 [dependencies]
+# Released as patch versions, so pinned exactly.
+icao-shared-kernel = "=0.1.2"
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 

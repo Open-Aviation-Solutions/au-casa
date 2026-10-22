@@ -22,6 +22,28 @@ kernel's thin-hub discipline, written down in `icao-shared-kernel-python`'s
   simulation training device under reg 61.010, and whether a session counts
   for Part 61 currency. Builds on the `FlightSimulationTrainingDevice` /
   `FstdSession` aggregates in `icao-shared-kernel`.
+- `licence` (issue #14): for each of the kernel's Annex 1 titles of licence
+  (`icao_shared_kernel::LicenceTitle`), whether CASA issues it and, if so, its
+  Part 61 term (the flight crew licence and aircraft category rating), with
+  citations. A CASA host names and offers titles through it, not by the
+  kernel's ICAO names. The `match` is exhaustive on purpose: a title the
+  kernel adds is a compile error here, and a decision.
+
+`icao-shared-kernel` is a dependency pinned exactly (`=0.1.2`), as it is
+released as patch versions; moving to a new one is a deliberate change.
+
+## Reading Part 61 for licences and category ratings
+
+Division 61.L.2 does not list which aircraft category ratings each licence can
+carry. Reg 61.730 grants a category rating on meeting the requirements for
+"the pilot licence with the aircraft category rating", so the pairs are those
+each licence's Subpart (61.H to 61.K) gives aeronautical experience
+requirements for, and those requirements are what a pair cites. Some pairs
+appear only in the requirements for applicants who have not completed an
+integrated training course (Divisions 61.H.3 and 61.I.3); CASA still issues
+them. The glider pilot licence is a flight crew licence but not a pilot
+licence (reg 61.010), and a glider is not a category of aircraft (reg 61.015),
+so it carries no category rating (Subpart 61.Z).
 
 **One part of `aircraft` is not national, and knows it.** `AircraftDescription`
 and the `designator -> description` table (Layer A) are the ICAO Doc 8643

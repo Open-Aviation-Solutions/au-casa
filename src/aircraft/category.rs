@@ -1,6 +1,8 @@
 //! Aircraft categories under CASA Part 61, and the design features each may
 //! carry.
 
+use std::fmt;
+
 use serde::{Deserialize, Serialize};
 
 use super::design_feature::DesignFeature;
@@ -79,5 +81,20 @@ impl AircraftCategory {
     /// Whether `feature` requires an endorsement for this category.
     pub fn allows(self, feature: DesignFeature) -> bool {
         self.design_features().contains(&feature)
+    }
+}
+
+impl fmt::Display for AircraftCategory {
+    /// The category's name as reg 61.015 words it; a registered sailplane as
+    /// reg 61.007(2) does.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Aeroplane => "aeroplane",
+            Self::Helicopter => "helicopter",
+            Self::PoweredLift => "powered-lift aircraft",
+            Self::Gyroplane => "gyroplane",
+            Self::Airship => "airship",
+            Self::RegisteredSailplane => "registered sailplane",
+        })
     }
 }
