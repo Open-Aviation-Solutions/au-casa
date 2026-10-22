@@ -27,10 +27,14 @@ kernel's thin-hub discipline, written down in `icao-shared-kernel-python`'s
   Part 61 term (the flight crew licence and aircraft category rating), with
   citations. A CASA host names and offers titles through it, not by the
   kernel's ICAO names. The `match` is exhaustive on purpose: a title the
-  kernel adds is a compile error here, and a decision.
+  kernel adds is a compile error here, and a decision. National licences and
+  categories that are not Annex 1's (the recreational pilot licence, the
+  gyroplane category rating) are not expressed here: they are issue #15.
 
 `icao-shared-kernel` is a dependency pinned exactly (`=0.1.2`), as it is
 released as patch versions; moving to a new one is a deliberate change.
+A consumer must take the kernel from the same source and version, or its
+`LicenceTitle` is a different type from the one `part61_term` takes.
 
 ## Reading Part 61 for licences and category ratings
 
@@ -38,10 +42,11 @@ Division 61.L.2 does not list which aircraft category ratings each licence can
 carry. Reg 61.730 grants a category rating on meeting the requirements for
 "the pilot licence with the aircraft category rating", so the pairs are those
 each licence's Subpart (61.H to 61.K) gives aeronautical experience
-requirements for, and those requirements are what a pair cites. Some pairs
-appear only in the requirements for applicants who have not completed an
-integrated training course (Divisions 61.H.3 and 61.I.3); CASA still issues
-them. The glider pilot licence is a flight crew licence but not a pilot
+requirements for. A pair cites those requirements and, for the multi-crew
+and air transport pilot licences, also the privileges regulation that names
+the category (regs 61.635 and 61.665). Some pairs appear only in the
+requirements for applicants who have not completed an integrated training
+course (Divisions 61.H.3 and 61.I.3); CASA still issues them. The glider pilot licence is a flight crew licence but not a pilot
 licence (reg 61.010), and a glider is not a category of aircraft (reg 61.015),
 so it carries no category rating (Subpart 61.Z).
 

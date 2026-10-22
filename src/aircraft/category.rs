@@ -84,9 +84,9 @@ impl AircraftCategory {
     }
 }
 
+/// The category's name as reg 61.015 words it. A registered sailplane, which
+/// is not a reg 61.015 category, is named as reg 61.007(2) words it.
 impl fmt::Display for AircraftCategory {
-    /// The category's name as reg 61.015 words it; a registered sailplane as
-    /// reg 61.007(2) does.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             Self::Aeroplane => "aeroplane",

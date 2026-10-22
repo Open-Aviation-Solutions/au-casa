@@ -7,6 +7,10 @@
 //! "powered-lift"), and CASA does not issue every title (there is no free
 //! balloon licence), so a CASA host names and offers titles through
 //! [`part61_term`] rather than the kernel's own names.
+//!
+//! National licences and categories that are not Annex 1's (the recreational
+//! pilot licence, the gyroplane category rating) are not expressed here: they
+//! are issue #15.
 
 use std::fmt;
 
@@ -55,8 +59,10 @@ impl fmt::Display for FlightCrewLicence {
 /// Division 61.L.2 does not list which category ratings each licence can
 /// carry: reg 61.730 grants one on meeting the requirements for "the pilot
 /// licence with the aircraft category rating", so the pairs are those each
-/// licence's Subpart gives aeronautical experience requirements for, and those
-/// requirements are cited.
+/// licence's Subpart gives aeronautical experience requirements for. Those
+/// requirements are cited, and for the multi-crew and air transport pilot
+/// licences also the privileges regulation that names the category (regs
+/// 61.635 and 61.665).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Part61Term {
     pub licence: FlightCrewLicence,
@@ -139,6 +145,9 @@ pub fn part61_term(title: LicenceTitle) -> Option<Part61Term> {
                 term(Commercial, Some(Category::Airship), &["reg 61.630"])
             }
         },
+        // Regs 61.635 and 61.665 are the privileges of the multi-crew and air
+        // transport pilot licences, which name the categories; the other
+        // citations are aeronautical experience requirements.
         LicenceTitle::MultiCrew => term(
             MultiCrew,
             Some(Category::Aeroplane),
