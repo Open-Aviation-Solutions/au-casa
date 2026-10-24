@@ -102,6 +102,26 @@ added to the table there, not here; a type the table lacks is
   the earlier Python kernel's tasks, which are not published; `tasks/`
   here has none of its own.
 
+## Releasing
+
+Released to crates.io as the kernel is, from `main` only. Bump `version` in
+`Cargo.toml` in a pull request, and merge it: that is the release. On each
+push to `main`, the Release workflow (`.github/workflows/release.yml`) asks
+crates.io whether `Cargo.toml`'s version is there yet. When it is not, it runs
+`make check`, publishes it through trusted publishing (no crates.io token is
+kept in the repository), and tags the commit `v<version>`. Don't push version
+tags by hand: nothing runs on them.
+
+Only `main` can release. The publishing job runs in the `release` environment,
+which GitHub allows only on `main`, and crates.io's trusted publisher accepts
+only that environment; `main` changes only through a pull request with CI
+passing.
+
+While on `0.x`, every release bumps the patch version, a breaking one
+included, to keep the numbers low, as the kernel's do: consumers pin the
+version exactly (`=0.1.0`), so a `cargo update` never takes a new release
+until they move the pin.
+
 ## Commands
 
 ```sh
