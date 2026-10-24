@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 //! CASA (Australia) national aviation regulatory package.
 //!
 //! Resolves national (CASA Part 61) facts that the ICAO-universal kernel
@@ -24,3 +28,8 @@ pub use aircraft::{
 };
 pub use fstd::{counts_for_part61, FstdRecognition, RecognisedForeignState};
 pub use licence::{part61_term, FlightCrewLicence, IssuedNationalTitle, NationalTitle, Part61Term};
+
+// Compiles and runs the README's examples with the doc tests.
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+struct ReadmeDoctests;

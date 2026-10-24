@@ -4,16 +4,17 @@
 
 ## Purpose
 
-Importing a real 226-entry personal logbook into `pilot-logbook` (its task
-`0009`) showed that most of the aircraft types actually flown don't resolve
-to a CASA classification at all: only `C172`, `PA25`, `PA34`, `PA44` (of the
-aeroplane types already seeded) resolved. `C152`, `PA28`, `P28R`, `AS21`,
-`DUOD`, `LS4` were the literal strings stored against those aircraft and
-none of them resolved — but as this task discovered, at least one of those
-strings (`PA28`) is not actually a valid designator at all, and two more
-(`AS21`, `DUOD`) name a more specific aircraft than assumed.
+Importing a real 226-entry personal logbook into the logbook application
+that builds on this crate (its task `0009`) showed that most of the aircraft
+types actually flown don't resolve to a CASA classification at all: only
+`C172`, `PA25`, `PA34`, `PA44` (of the aeroplane types already seeded)
+resolved. `C152`, `PA28`, `P28R`, `AS21`, `DUOD`, `LS4` were the literal
+strings stored against those aircraft and none of them resolved — but as
+this task discovered, at least one of those strings (`PA28`) is not actually
+a valid designator at all, and two more (`AS21`, `DUOD`) name a more
+specific aircraft than assumed.
 
-`pilot-logbook`'s task `0008` found the same root cause specifically for
+The logbook's task `0008` found the same root cause specifically for
 `AircraftCategory.RegisteredSailplane`: it **cannot be reached at all**,
 because no glider designator is seeded here, even though
 `AirframeKind::Glider` and `EngineType::None` already exist in
@@ -26,7 +27,7 @@ to mirror Doc 8643."*
 ## What changed on review
 
 The first pass of this task assumed the six strings found in
-`pilot-logbook`'s data were themselves valid, unambiguous Doc 8643
+the logbook's data were themselves valid, unambiguous Doc 8643
 designators and just needed TCDS facts attached. Checking each one against
 public designator references (`doc8643.com`, FAA JO 7360.1K, ICAO's own
 Doc 8643 site) before opening the PR found that assumption wrong twice:
@@ -34,11 +35,11 @@ Doc 8643 site) before opening the PR found that assumption wrong twice:
 1. **`PA28` is not a Doc 8643 designator.** It was retired around 1998 and
    split into `P28A` (fixed gear, fixed-pitch prop — Cherokee/Warrior/
    Archer), `P28B` (fixed gear, variable-pitch prop), `P28R` (Arrow,
-   retractable gear), `P28T`/`P28U` (Turbo Arrow variants). `pilot-logbook`'s
-   own data has three aircraft stored with the invalid `PA28` string
-   (VH-INH, VH-MDL, VH-HTK) — seeding a `PA28` row here would perpetuate the
-   error rather than fix it. **This table seeds `P28A`, not `PA28`**, and
-   `pilot-logbook` needs a follow-up data correction (flagged separately,
+   retractable gear), `P28T`/`P28U` (Turbo Arrow variants). The logbook's
+   own data has three aircraft stored with the invalid `PA28` string —
+   seeding a `PA28` row here would perpetuate the error rather than fix
+   it. **This table seeds `P28A`, not `PA28`**, and
+   the logbook needs a follow-up data correction (flagged separately,
    see Related) to rewrite those three `Aircraft` records' designator to
    `P28A` — the same shape of fix as its task `0010`'s `ZZZZ` corrections.
 2. **`AS21` and `DUOD` are not the plain, unpowered gliders.** Doc 8643 only
@@ -51,8 +52,8 @@ Doc 8643 site) before opening the PR found that assumption wrong twice:
    "Duo Discus T" directly. The plain, unpowered ASK 21 and Duo Discus have
    no individual designator at all — they fall under Doc 8643's **generic**
    `GLID` ("(any manufacturer) Glider") designator, which this table now
-   also seeds. `pilot-logbook`'s two real aircraft under these designators
-   (VH-GBW as `AS21`, VH-GKX as `DUOD`) may genuinely be the self-launching
+   also seeds. The logbook's two real aircraft under these designators
+   (one under each) may genuinely be the self-launching
    variants — plausible for club two-seat trainers, where self-launch
    removes the need for a tow plane — but that's independent registration
    information this task can't verify from here.
@@ -63,7 +64,7 @@ it is truly Doc 8643's designator for this type (rather than it, too,
 falling under the generic `GLID`) remains unconfirmed; see its row comment.
 
 This changes the *facts* seeded for `AS21`/`DUOD` (one piston engine, not
-zero) but not the *conclusion* `pilot-logbook`'s tasks care about — `Glider`
+zero) but not the *conclusion* the logbook's tasks care about — `Glider`
 still derives to `RegisteredSailplane` regardless of engine count, so the
 sailplane blocker is closed exactly as before. It's recorded here because
 an aircraft's description should describe the real aircraft, and because a
@@ -143,18 +144,18 @@ module goes out of its way to keep sharp. No change made.
   document opened and read, same outstanding item `PA25`/`R44` already carry.
 - Resolving whether `LS4` is really Doc 8643's designator for that type, or
   should be removed in favour of relying on `GLID` — flagged, not settled.
-- `au-casa-py`'s `Cargo.lock` bump and `pilot-logbook`'s `uv.lock` bump to
+- The Python bindings' `Cargo.lock` bump and the logbook's `uv.lock` bump to
   pick this up — separate, mechanical follow-ups in those repos once this
   merges.
-- Correcting `pilot-logbook`'s three `PA28`-designated `Aircraft` records to
+- Correcting the logbook's three `PA28`-designated `Aircraft` records to
   `P28A` — a data fix in that repo, not this one, flagged for the same
   reason task `0010` flagged the `ZZZZ` placeholders.
 
 ## Related
 
-- `pilot-logbook` tasks `0008` (sailplane blocker) and `0009` (sparse table
+- The logbook's tasks `0008` (sailplane blocker) and `0009` (sparse table
   found via a real logbook import) — this closes both.
-- `pilot-logbook` task `0010` (`ZZZZ` placeholder designators) — the `PA28`
+- The logbook's task `0010` (`ZZZZ` placeholder designators) — the `PA28`
   data-correction finding above is the same shape of problem, tracked as a
   new follow-up there rather than duplicated here.
 - `au-casa` task `0001` — the table and its sourcing discipline, unchanged
