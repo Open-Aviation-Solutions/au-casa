@@ -109,3 +109,27 @@ fn a_national_title_is_held_from_its_licences_minimum_age(
     assert!(first_issued(birthday).holder_of_age(born));
     assert!(!first_issued(birthday.previous_day().unwrap()).holder_of_age(born));
 }
+
+/// National titles are ordered as Part 61 lists them: licences by reg 61.010,
+/// then category ratings by reg 61.015.
+#[test]
+fn national_titles_are_ordered_as_part_61_lists_them() {
+    let mut titles = vec![
+        NationalTitle::RecreationalGyroplane,
+        NationalTitle::CommercialGyroplane,
+        NationalTitle::RecreationalAeroplane,
+        NationalTitle::PrivateGyroplane,
+        NationalTitle::RecreationalHelicopter,
+    ];
+    titles.sort();
+    assert_eq!(
+        titles,
+        [
+            NationalTitle::CommercialGyroplane,
+            NationalTitle::PrivateGyroplane,
+            NationalTitle::RecreationalAeroplane,
+            NationalTitle::RecreationalHelicopter,
+            NationalTitle::RecreationalGyroplane,
+        ]
+    );
+}
