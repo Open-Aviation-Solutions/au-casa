@@ -127,21 +127,6 @@ test under `tests/`.
 Report a problem, or propose a change, in this repository's
 [issues](https://github.com/Open-Aviation-Solutions/au-casa/issues).
 
-## Status
-
-Early: the version is `0.1.0`. Until `1.0`, the API may change between any two
-versions, patch releases included, so pin the version exactly. Each release
-depends on one exact release of `icao-shared-kernel`; take the kernel at that
-same version, or its types are not the ones this crate takes.
-
-## Usage
-
-```toml
-[dependencies]
-au-casa = "=0.1.0"
-icao-shared-kernel = "=0.1.3"
-```
-
 ## Development
 
 Requires a Rust toolchain, a C linker (`build-essential` on Debian/Ubuntu) and
