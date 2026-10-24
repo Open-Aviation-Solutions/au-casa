@@ -151,7 +151,8 @@ the recognition *that applied at the time of the session*, checking
 The temporal question is answered when the snapshot is taken, not when the
 predicate is asked — which is the whole point of snapshotting. Keeping the
 date out also keeps this crate dependency-free, matching task `0001`'s
-`resolve_classification(designator: &str, ...)`.
+`resolve_classification(designator: &str, ...)`. (So it was then: the crate
+has since come to depend on the kernel, for its titles of licence.)
 
 `RecognisedForeignState` is a closed list, defined in reg 61.010 itself (see
 Verification), extensible by instrument under reg 61.047.

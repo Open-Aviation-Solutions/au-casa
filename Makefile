@@ -18,7 +18,7 @@ ADDLICENSE_SHA256_macOS_arm64 := 0597305c619f7349748e830e38322dbe7d13cf86cf415b2
 ADDLICENSE_SHA256 := $(ADDLICENSE_SHA256_$(ADDLICENSE_PLATFORM))
 SHA256SUM := $(if $(shell command -v sha256sum),sha256sum,shasum -a 256)
 
-.PHONY: help dev build test lint fmt fmt-check license-check check
+.PHONY: help dev build test lint fmt fmt-check license-add license-check check
 
 help: ## List available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -50,6 +50,9 @@ $(ADDLICENSE):
 	cd $(dir $(ADDLICENSE)) && echo "$(ADDLICENSE_SHA256)  $(ADDLICENSE_ARCHIVE)" | $(SHA256SUM) -c -
 	tar -xzf $(dir $(ADDLICENSE))$(ADDLICENSE_ARCHIVE) -C $(dir $(ADDLICENSE)) addlicense
 	rm $(dir $(ADDLICENSE))$(ADDLICENSE_ARCHIVE)
+
+license-add: $(ADDLICENSE) ## Add the MPL notice to each tracked source file that has none
+	git ls-files -z | xargs -0 $(ADDLICENSE) -l mpl
 
 # addlicense checks the tracked files of the types it knows (Rust, TOML, YAML)
 # for a licence header, and passes over the rest (Cargo.lock, Markdown, LICENSE).

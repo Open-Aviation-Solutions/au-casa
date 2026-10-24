@@ -28,9 +28,9 @@ What is covered:
   registered sailplane), class (reg 61.020) and design features (reg 61.755),
   from its ICAO type designator, with a caller's override for what varies
   between airframes of one type. The table of designators is small and grows
-  as types are needed: 17 are catalogued, 6 of them checked against their
-  type certificate data sheets (`Confidence::Confirmed`), and 11 still
-  `Confidence::Provisional`, each saying what is left to check.
+  as types are needed. A row checked against its type certificate data sheet
+  is `Confidence::Confirmed`; the rest are `Confidence::Provisional`, each
+  saying what is left to check.
 - **Flight simulation training devices** (`FstdRecognition`,
   `counts_for_part61`): the five kinds of device in reg 61.010's definition of
   a flight simulation training device, including those qualified by a
