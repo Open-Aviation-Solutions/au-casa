@@ -2,11 +2,16 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! The Part 61 term for each of the kernel's Annex 1 titles of licence.
+//! The Part 61 term for each of the kernel's Annex 1 titles of licence, and the
+//! national titles.
 
-use au_casa::{part61_term, AircraftCategory, FlightCrewLicence, Part61Term};
+use au_casa::{
+    part61_term, AircraftCategory, FlightCrewLicence, IssuedNationalTitle, NationalTitle,
+    Part61Term,
+};
 use icao_shared_kernel::{AirlineTransportCategory, LicenceTitle, PrivateOrCommercialCategory};
 use rstest::rstest;
+use time::macros::date;
 
 use AirlineTransportCategory as Atpl;
 use PrivateOrCommercialCategory as PrivOrComm;
@@ -49,4 +54,58 @@ fn casa_issues_title(
 #[test]
 fn casa_does_not_issue_a_free_balloon_licence() {
     assert_eq!(part61_term(LicenceTitle::FreeBalloon), None);
+}
+
+/// Every national title, with its licence, category rating, citations and the
+/// term a host shows.
+#[rstest]
+#[case(NationalTitle::RecreationalAeroplane, FlightCrewLicence::Recreational, AircraftCategory::Aeroplane, &["reg 61.475", "MOS Schedule 1, Appendix G.1"], "recreational pilot licence, aeroplane category rating")]
+#[case(NationalTitle::RecreationalHelicopter, FlightCrewLicence::Recreational, AircraftCategory::Helicopter, &["reg 61.475", "MOS Schedule 1, Appendix G.2"], "recreational pilot licence, helicopter category rating")]
+#[case(NationalTitle::RecreationalGyroplane, FlightCrewLicence::Recreational, AircraftCategory::Gyroplane, &["reg 61.475", "MOS Schedule 1, Appendix G.3"], "recreational pilot licence, gyroplane category rating")]
+#[case(NationalTitle::PrivateGyroplane, FlightCrewLicence::Private, AircraftCategory::Gyroplane, &["reg 61.535", "reg 61.560"], "private pilot licence, gyroplane category rating")]
+#[case(NationalTitle::CommercialGyroplane, FlightCrewLicence::Commercial, AircraftCategory::Gyroplane, &["reg 61.625"], "commercial pilot licence, gyroplane category rating")]
+fn a_national_title_is_its_part61_pair(
+    #[case] title: NationalTitle,
+    #[case] licence: FlightCrewLicence,
+    #[case] category: AircraftCategory,
+    #[case] citations: &'static [&'static str],
+    #[case] shown: &str,
+) {
+    assert_eq!(
+        title.part61_term(),
+        Part61Term {
+            licence,
+            category_rating: Some(category),
+            citations,
+        }
+    );
+    assert_eq!(title.to_string(), shown);
+}
+
+#[test]
+fn every_licence_but_the_glider_pilot_licence_is_a_pilot_licence() {
+    use FlightCrewLicence::*;
+    for licence in [AirTransport, Commercial, MultiCrew, Private, Recreational] {
+        assert!(licence.is_pilot_licence(), "{licence}");
+    }
+    assert!(!Glider.is_pilot_licence());
+}
+
+/// The minimum age is the licence's (regs 61.475(1), 61.515(1), 61.580(1)),
+/// reached on the birthday.
+#[rstest]
+#[case(NationalTitle::RecreationalAeroplane, 16)]
+#[case(NationalTitle::RecreationalHelicopter, 16)]
+#[case(NationalTitle::RecreationalGyroplane, 16)]
+#[case(NationalTitle::PrivateGyroplane, 17)]
+#[case(NationalTitle::CommercialGyroplane, 18)]
+fn a_national_title_is_held_from_its_licences_minimum_age(
+    #[case] title: NationalTitle,
+    #[case] age: i32,
+) {
+    let born = date!(2000 - 06 - 15);
+    let first_issued = |on| IssuedNationalTitle::new(title, on);
+    let birthday = born.replace_year(2000 + age).unwrap();
+    assert!(first_issued(birthday).holder_of_age(born));
+    assert!(!first_issued(birthday.previous_day().unwrap()).holder_of_age(born));
 }

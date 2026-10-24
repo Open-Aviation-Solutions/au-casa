@@ -26,9 +26,15 @@ answers one such question:
   Part 61 term (the flight crew licence and aircraft category rating), with
   citations. A CASA host names and offers titles through it, not by the
   kernel's ICAO names. The `match` is exhaustive on purpose: a title the
-  kernel adds is a compile error here, and a decision. National licences and
-  categories that are not Annex 1's (the recreational pilot licence, the
-  gyroplane category rating) are not expressed here: they are issue #15.
+  kernel adds is a compile error here, and a decision. The pairs Part 61
+  grants that Annex 1 has no title for (the recreational pilot licence, and
+  the gyroplane category rating) are `NationalTitle`s (issue #15), listed by
+  an exhaustive `match` the same way, each with its licence's minimum age;
+  `IssuedNationalTitle` is one held from a date of first issue. They sit
+  beside the kernel's titles: a consumer stores them with the licence, keyed
+  by its identity, and the kernel stays the source for what Annex 1 can say.
+  `FlightCrewLicence::is_pilot_licence` says which licences are pilot
+  licences (reg 61.010), so no caller matches on the licences' names for it.
 
 `icao-shared-kernel` is a dependency pinned exactly (`=0.1.3`), as it is
 released as patch versions; moving to a new one is a deliberate change.
@@ -48,6 +54,14 @@ requirements for applicants who have not completed an integrated training
 course (Divisions 61.H.3 and 61.I.3); CASA still issues them. The glider pilot licence is a flight crew licence but not a pilot
 licence (reg 61.010), and a glider is not a category of aircraft (reg 61.015),
 so it carries no category rating (Subpart 61.Z).
+
+The recreational pilot licence is the exception to reading the pairs from
+the regulations: reg 61.475 grants it with "the associated aircraft category
+rating", naming none. Its pairs are those the Part 61 Manual of Standards has
+standards for (Schedule 1, Section G, Appendices G.1 to G.3: aeroplane,
+helicopter and gyroplane), each cited with reg 61.475. Appendix G.4, the
+airship, is reserved, and there is no appendix for a powered-lift aircraft
+(decided on issue #15).
 
 **One part of `aircraft` is not national, and knows it.** `AircraftDescription`
 and the `designator -> description` table (Layer A) are the ICAO Doc 8643

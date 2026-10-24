@@ -39,15 +39,16 @@ What is covered:
   titles of licence, the flight crew licence and aircraft category rating
   CASA issues for it, with the regulations that say so, or that CASA does not
   issue it.
+- **National titles** (`NationalTitle`, `IssuedNationalTitle`): the licence and
+  category rating pairs Part 61 grants and Annex 1 has no title for, the
+  recreational pilot licence and the gyroplane category rating, with what is
+  cited for each and the licence's minimum age.
 
 What is not:
 
 - Storage: no repositories, databases or file formats. Those belong to the
   application using the crate.
 - Bindings for other languages, or a WebAssembly interface.
-- The national licences and categories that are not Annex 1's, such as the
-  recreational pilot licence and the gyroplane category rating
-  ([#15](https://github.com/Open-Aviation-Solutions/au-casa/issues/15)).
 
 Known not to work:
 

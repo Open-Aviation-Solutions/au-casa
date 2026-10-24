@@ -2,9 +2,9 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! The Part 61 term for each Annex 1 title of licence the kernel records: the
-//! flight crew licence and category rating CASA issues for it, if it issues
-//! one at all.
+//! The Part 61 term for each title of licence a pilot can hold, the kernel's
+//! Annex 1 titles and the [`NationalTitle`]s Annex 1 has none for: the flight
+//! crew licence and category rating CASA issues for it, if it issues one.
 //!
 //! The kernel's [`LicenceTitle`] is in ICAO's words. CASA's differ ("air
 //! transport" for Annex 1's "airline transport", "powered-lift aircraft" for
@@ -12,23 +12,25 @@
 //! balloon licence), so a CASA host names and offers titles through
 //! [`part61_term`] rather than the kernel's own names.
 //!
-//! National licences and categories that are not Annex 1's (the recreational
-//! pilot licence, the gyroplane category rating) are not expressed here: they
-//! are issue #15.
+//! Part 61 also grants licence and category rating pairs that Annex 1 has no
+//! title for: the recreational pilot licence, and the gyroplane category rating
+//! (Annex 1 2.1.1.1 lists no gyroplane). Those are [`NationalTitle`]s, held from
+//! a date of first issue as [`IssuedNationalTitle`]s, beside the kernel's
+//! titles rather than in place of them: the kernel stays the source for what
+//! Annex 1 can say.
 
 use std::fmt;
 
 use icao_shared_kernel::{AirlineTransportCategory, LicenceTitle, PrivateOrCommercialCategory};
+use time::Date;
 
 use crate::aircraft::AircraftCategory;
 
 /// A flight crew licence (reg 61.010) that a pilot holds.
 ///
-/// These are the pilot licences that are Annex 1's (reg 61.010, "pilot
-/// licence" (a) to (d)) and the glider pilot licence (reg 61.010, "flight crew
-/// licence" (c); Subpart 61.Z). The recreational pilot licence, a pilot licence
-/// that is not Annex 1's, and the flight engineer licence, which is not a
-/// pilot's, are not here.
+/// These are the pilot licences (reg 61.010, "pilot licence" (a) to (e)) and
+/// the glider pilot licence (reg 61.010, "flight crew licence" (c); Subpart
+/// 61.Z). The flight engineer licence, which is not a pilot's, is not here.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FlightCrewLicence {
     /// Reg 61.010, "pilot licence" (a).
@@ -39,6 +41,8 @@ pub enum FlightCrewLicence {
     MultiCrew,
     /// Reg 61.010, "pilot licence" (d).
     Private,
+    /// Reg 61.010, "pilot licence" (e). Not Annex 1's: see [`NationalTitle`].
+    Recreational,
     /// Reg 61.010, "flight crew licence" (c). Not a pilot licence under reg
     /// 61.010, so it carries no aircraft category rating.
     Glider,
@@ -51,22 +55,43 @@ impl fmt::Display for FlightCrewLicence {
             Self::Commercial => "commercial pilot licence",
             Self::MultiCrew => "multi-crew pilot licence",
             Self::Private => "private pilot licence",
+            Self::Recreational => "recreational pilot licence",
             Self::Glider => "glider pilot licence",
         })
     }
 }
 
-/// The Part 61 term for a title of licence: the licence and, for a pilot
-/// licence, the aircraft category rating it carries for the title's category,
-/// with the regulations that say CASA issues that pair.
+impl FlightCrewLicence {
+    /// Whether this is a pilot licence (reg 61.010, "pilot licence"): every
+    /// licence here but the glider pilot licence, which is a flight crew
+    /// licence and not a pilot licence.
+    pub fn is_pilot_licence(self) -> bool {
+        // Exhaustive, so a licence added here is a decision.
+        match self {
+            Self::AirTransport
+            | Self::Commercial
+            | Self::MultiCrew
+            | Self::Private
+            | Self::Recreational => true,
+            Self::Glider => false,
+        }
+    }
+}
+
+/// The Part 61 term for a title of licence (the kernel's, or a
+/// [`NationalTitle`]): the licence and, for a pilot licence, the aircraft
+/// category rating it carries for the title's category, with what is cited
+/// for CASA issuing that pair.
 ///
 /// Division 61.L.2 does not list which category ratings each licence can
 /// carry: reg 61.730 grants one on meeting the requirements for "the pilot
-/// licence with the aircraft category rating", so the pairs are those each
-/// licence's Subpart gives aeronautical experience requirements for. Those
-/// requirements are cited, and for the multi-crew and air transport pilot
-/// licences also the privileges regulation that names the category (regs
-/// 61.635 and 61.665).
+/// licence with the aircraft category rating". For every licence but the
+/// recreational pilot licence, the pairs are those its Subpart gives
+/// aeronautical experience requirements for, and those are cited, with the
+/// privileges regulation that names the category for the multi-crew and air
+/// transport pilot licences (regs 61.635 and 61.665). The recreational pilot
+/// licence's pairs cite reg 61.475, which grants it, and the Manual of
+/// Standards appendix for the category ([`NationalTitle::part61_term`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Part61Term {
     pub licence: FlightCrewLicence,
@@ -176,5 +201,137 @@ pub fn part61_term(title: LicenceTitle) -> Option<Part61Term> {
         },
         LicenceTitle::Glider => term(Glider, None, &["reg 61.010", "Subpart 61.Z"]),
         LicenceTitle::FreeBalloon => None,
+    }
+}
+
+/// A Part 61 pilot licence and aircraft category rating pair that Annex 1 has
+/// no title for, so the kernel's [`LicenceTitle`] cannot hold it.
+///
+/// A pair, not a category rating alone: a category rating "has effect only for
+/// the pilot licence with which it is associated" (reg 61.010, "associated";
+/// reg 61.725), so a gyroplane category rating on a private pilot licence and
+/// one on a commercial pilot licence are different grants.
+///
+/// The pairs are listed by [`NationalTitle::part61_term`]'s exhaustive
+/// `match`, as [`part61_term`] lists Annex 1's. The flight engineer licence is
+/// not a pilot licence and is left out; CASA issues no free balloon licence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum NationalTitle {
+    /// Recreational pilot licence, aeroplane category rating.
+    RecreationalAeroplane,
+    /// Recreational pilot licence, helicopter category rating.
+    RecreationalHelicopter,
+    /// Recreational pilot licence, gyroplane category rating.
+    RecreationalGyroplane,
+    /// Private pilot licence, gyroplane category rating.
+    PrivateGyroplane,
+    /// Commercial pilot licence, gyroplane category rating.
+    CommercialGyroplane,
+}
+
+impl NationalTitle {
+    /// The licence and category rating, with what is cited for CASA issuing
+    /// the pair.
+    ///
+    /// Part 61 does not list the recreational pilot licence's category
+    /// ratings: reg 61.475 grants it with "the associated aircraft category
+    /// rating" of any category. The Part 61 Manual of Standards has standards
+    /// for three (Schedule 1, Appendices G.1 to G.3); its airship category
+    /// rating (Appendix G.4) is reserved, and it has none for a powered-lift
+    /// aircraft, so neither is a pair here (decided on issue #15). The
+    /// gyroplane category rating on a private or commercial pilot licence
+    /// cites its aeronautical experience requirements, as [`part61_term`]'s
+    /// pairs do; no multi-crew or air transport pilot licence carries one
+    /// (regs 61.635 and 61.665).
+    pub fn part61_term(self) -> Part61Term {
+        use AircraftCategory as Category;
+        use FlightCrewLicence::*;
+
+        let term = |licence, category, citations| Part61Term {
+            licence,
+            category_rating: Some(category),
+            citations,
+        };
+        // Exhaustive, with no wildcard: a pair added is a compile error here,
+        // and a decision.
+        match self {
+            Self::RecreationalAeroplane => term(
+                Recreational,
+                Category::Aeroplane,
+                &["reg 61.475", "MOS Schedule 1, Appendix G.1"],
+            ),
+            Self::RecreationalHelicopter => term(
+                Recreational,
+                Category::Helicopter,
+                &["reg 61.475", "MOS Schedule 1, Appendix G.2"],
+            ),
+            Self::RecreationalGyroplane => term(
+                Recreational,
+                Category::Gyroplane,
+                &["reg 61.475", "MOS Schedule 1, Appendix G.3"],
+            ),
+            Self::PrivateGyroplane => {
+                term(Private, Category::Gyroplane, &["reg 61.535", "reg 61.560"])
+            }
+            Self::CommercialGyroplane => term(Commercial, Category::Gyroplane, &["reg 61.625"]),
+        }
+    }
+
+    /// The age, in whole years, an applicant for the licence must have reached
+    /// (regs 61.475(1), 61.515(1) and 61.580(1)): the licence's, whatever its
+    /// category, as Annex 1's ages are in the kernel.
+    pub fn minimum_age(self) -> u8 {
+        match self {
+            Self::RecreationalAeroplane
+            | Self::RecreationalHelicopter
+            | Self::RecreationalGyroplane => 16,
+            Self::PrivateGyroplane => 17,
+            Self::CommercialGyroplane => 18,
+        }
+    }
+}
+
+impl fmt::Display for NationalTitle {
+    /// The Part 61 term: "recreational pilot licence, gyroplane category
+    /// rating".
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.part61_term().fmt(f)
+    }
+}
+
+/// A national title held, from the date the holder was first issued it: the
+/// counterpart of the kernel's `IssuedTitle`, kept beside a licence's titles
+/// by a consumer, keyed by the licence's identity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct IssuedNationalTitle {
+    pub title: NationalTitle,
+    pub date_of_first_issue: Date,
+}
+
+impl IssuedNationalTitle {
+    pub fn new(title: NationalTitle, date_of_first_issue: Date) -> Self {
+        Self {
+            title,
+            date_of_first_issue,
+        }
+    }
+
+    /// Whether the holder, born on `date_of_birth`, had reached the title's
+    /// [`NationalTitle::minimum_age`] on its date of first issue.
+    ///
+    /// Checked against the date of first issue, as the kernel checks Annex 1's
+    /// ages, so it can miss an applicant who was too young when they applied,
+    /// though not one who was too young when the title was issued. A year is
+    /// complete on the birthday, compared by month and day, as the kernel
+    /// counts it: someone born on 29 February completes a year on 1 March in a
+    /// year that is not a leap year.
+    pub fn holder_of_age(&self, date_of_birth: Date) -> bool {
+        let on = self.date_of_first_issue;
+        let mut age = on.year() - date_of_birth.year();
+        if (u8::from(on.month()), on.day()) < (u8::from(date_of_birth.month()), date_of_birth.day())
+        {
+            age -= 1;
+        }
+        age >= i32::from(self.title.minimum_age())
     }
 }
