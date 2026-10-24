@@ -4,12 +4,13 @@
 
 ## Purpose
 
-A fresh CSV import into `pilot-logbook` picked up two aircraft types not yet
-in the compiled table: an American Champion 8GCBC Scout (VH-VPW) and an
-Aerotek/Christen Pitts S-2A (VH-IPU). Both are ordinary, real Doc 8643
-designators, confirmed against public `doc8643.com` listings before writing
-the row (same discipline as task `0003`, after that task found relying on
-the CSV's raw string without checking it first was a mistake):
+A fresh CSV import into the logbook application that builds on this crate
+picked up two aircraft types not yet in the compiled table: an American
+Champion 8GCBC Scout (VH-VPW) and an Aerotek/Christen Pitts S-2A (VH-IPU).
+Both are ordinary, real Doc 8643 designators, confirmed against public
+`doc8643.com` listings before writing the row (same discipline as task
+`0003`, after that task found relying on the CSV's raw string without
+checking it first was a mistake):
 
 - `BL8` — "AMERICAN CHAMPION 8 Scout BL8 — ICAO Type Designator L1P L/G".
   The pilot's own CSV already used this exact string, and it checks out —

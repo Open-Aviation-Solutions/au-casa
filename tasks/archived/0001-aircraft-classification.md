@@ -6,21 +6,21 @@ could not be stay `Provisional`, each saying why.
 
 ## Purpose
 
-`icao-shared-kernel-python`'s (originally `icao-shared-kernel`; renamed and
-archived 2026-10) task `0011` removed `AircraftCategory`,
-`AircraftClassRating`, and `DesignFeature` from the kernel `Aircraft` — they're
+The earlier Python kernel's (not published) task `0011` removed
+`AircraftCategory`, `AircraftClassRating`, and `DesignFeature` from the
+kernel `Aircraft` — they're
 CASA Part 61 concepts, not ICAO-universal, and its task `0012` specified where
 they'd land: a shared CASA national package. This is that package's first
 module, refined from `0012`'s design after a session of DIP-focused
 discussion. It supersedes `0012` as the live design surface for this
-question; `0012` stays in `icao-shared-kernel-python` (originally
-`icao-shared-kernel`; renamed and archived 2026-10) as historical record.
+question; `0012` stays with the earlier Python kernel as historical
+record.
 
-This directly unblocks `pilot-logbook`'s task `0007`
-(`adopt-icao-shared-kernel-py-for-core-aggregates`), confirmed by grep, not
-theorised: `services/currency.py` and nine files under `metrics/currency/`
-and `metrics/totals/` read `entry.aircraft.category` / `.class_rating`,
-comparing against the old `aviation_core.AircraftCategory` /
+This directly unblocks the task in the pilot's logbook that builds on this
+crate (adopting the kernel's Python bindings for its core aggregates),
+confirmed by grep, not theorised: `services/currency.py` and nine files
+under `metrics/currency/` and `metrics/totals/` read `entry.aircraft.category` / `.class_rating`,
+comparing against the old Python kernel's `AircraftCategory` /
 `AircraftClassRating` values (`AEROPLANE`, `REGISTERED_SAILPLANE`,
 `SINGLE_ENGINE_AEROPLANE`, `MULTI_ENGINE_AEROPLANE` — carried over here as
 the terms already in use, not newly proposed). Simulator classification
@@ -53,7 +53,7 @@ No I/O, no `aircraft_id`, nothing persisted here.
 
 Per this repo's `INSTRUCTIONS.md` (DIP: storage belongs to the consumer that
 owns the data's lifecycle, same reasoning that kept repository protocols out
-of `icao-shared-kernel-rs`/`-py`):
+of `icao-shared-kernel` and its Python bindings):
 
 - No repository protocol, no persistence, no `aircraft_id`-keyed storage.
 - Per-airframe overrides — needed routinely, not just for uncatalogued
@@ -63,7 +63,7 @@ of `icao-shared-kernel-rs`/`-py`):
   case. Storage of any such override is
   the consuming application's own aggregate, keyed by `aircraft_id: str`,
   referencing the kernel `Aircraft` by identity — the same "extend by
-  reference" pattern as `pilot-logbook`'s `LogbookFlight.flight_id`. A
+  reference" pattern as the logbook's `LogbookFlight.flight_id`. A
   consumer calls `resolve_classification(designator, its_own_stored_override)`
   to get the effective classification; this package never sees or stores an
   `aircraft_id`.
@@ -97,7 +97,7 @@ Validity is enforced at the **function boundary, not the type boundary**:
 `CasaAircraftClassification`, and it never emits an invalid
 category/feature combination. An override supplying a feature that doesn't
 belong to the resolved category is a validation error there (consistent
-with `icao-shared-kernel-rs`'s "parse, don't validate" discipline, applied
+with `icao-shared-kernel`'s "parse, don't validate" discipline, applied
 at the one real construction path rather than baked into the enum's type
 structure).
 
@@ -130,7 +130,7 @@ override, independent of how confident the ADC lookup was.
 
 Checked against the actual regulation text (Federal Register of Legislation,
 CASR 1998, compilation as at 2024-10-14 — fetched directly, not taken from a
-summary), not just carried over from the old `aviation_core` names.
+summary), not just carried over from the old Python kernel's names.
 
 - **Category (reg 61.015) — exact match.** "Each of the following is a
   category of aircraft: (a) aeroplane; (b) helicopter; (c) powered-lift
@@ -164,15 +164,15 @@ summary), not just carried over from the old `aviation_core` names.
   (distinct from the aeroplane-only `floatplane`/`floating hull`). It also had
   no category scoping, so a helicopter could nonsensically be assigned
   `FLOATPLANE`. **Not currently blocking**: confirmed by grep that
-  `pilot-logbook` doesn't read `design_features` anywhere today, unlike
+  the logbook doesn't read `design_features` anywhere today, unlike
   `category`/`class_rating`, so this can be designed properly rather than
   rushed.
 
 ## Sequencing
 
-`au-casa-py` (PyO3 bindings) is **deferred, not started alongside this
+This crate's Python (PyO3) bindings are **deferred, not started alongside this
 module** — decided, not still open. Land the Rust domain logic first, same
-order as `icao-shared-kernel-rs` before `icao-shared-kernel-py`.
+order as `icao-shared-kernel` before its Python bindings.
 
 ## Acceptance criteria
 
@@ -193,7 +193,7 @@ order as `icao-shared-kernel-rs` before `icao-shared-kernel-py`.
       don't belong to the resolved (or overridden) `category`; returns a
       clear "unknown" outcome for an uncatalogued designator with no
       override.
-- [x] ADC-facts table seeded for the designators `pilot-logbook` currently
+- [x] ADC-facts table seeded for the designators the logbook currently
       uses (YAGNI — grow on demand, not full Doc 8643 coverage), each row
       carrying `confidence` + a `source` citation.
 - [x] Tests: one derivation per aircraft category, the override-rejection
@@ -231,14 +231,14 @@ order as `icao-shared-kernel-rs` before `icao-shared-kernel-py`.
   `C208` and `R44` are compiled from manufacturer model information, not
   checked against a type certificate data sheet in this session. The `source`
   string says exactly that rather than citing a document that was not opened.
-- **`Citabria` is not seeded.** `pilot-logbook`'s importer uses it as a type
+- **`Citabria` is not seeded.** The logbook's importer uses it as a type
   string, but it is a model name, not a Doc 8643 designator. Mapping it needs
   a decision at import time, not a guessed table row.
 
 ## Related
 
-- `icao-shared-kernel-python` (originally `icao-shared-kernel`; renamed and
-  archived 2026-10) tasks `0011` (removed these fields from the kernel) and
-  `0012` (original package spec, superseded here).
-- `pilot-logbook` task `0007` — the consumer this unblocks.
+- The earlier Python kernel's tasks `0011` (removed these fields from the
+  kernel) and `0012` (original package spec, superseded here).
+- The logbook's task adopting the kernel's Python bindings — the consumer
+  this unblocks.
 - `au-casa` task `0002` — simulator classification, a separate concern.
