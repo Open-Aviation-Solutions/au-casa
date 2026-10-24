@@ -7,8 +7,10 @@ name = "au-casa"
 version = "0.1.0"
 edition = "2021"
 license = "MPL-2.0"
-description = "CASA (Australia) national aviation regulatory package: derives Part 61 aircraft classification from ICAO Doc 8643 type designators."
-publish = false
+description = "CASA (Australia) Part 61 rules that the ICAO-universal icao-shared-kernel leaves out: aircraft classification, simulator recognition and titles of licence."
+repository = "https://github.com/Open-Aviation-Solutions/au-casa"
+readme = "README.md"
+include = ["/src", "/tests", "/README.md", "/LICENSE"]
 
 [lib]
 name = "au_casa"
