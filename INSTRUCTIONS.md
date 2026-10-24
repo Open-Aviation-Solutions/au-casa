@@ -31,7 +31,7 @@ kernel's thin-hub discipline, written down in `icao-shared-kernel-python`'s
   categories that are not Annex 1's (the recreational pilot licence, the
   gyroplane category rating) are not expressed here: they are issue #15.
 
-`icao-shared-kernel` is a dependency pinned exactly (`=0.1.2`), as it is
+`icao-shared-kernel` is a dependency pinned exactly (`=0.1.3`), as it is
 released as patch versions; moving to a new one is a deliberate change.
 A consumer must take the kernel from the same source and version, or its
 `LicenceTitle` is a different type from the one `part61_term` takes.
