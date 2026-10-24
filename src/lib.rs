@@ -9,7 +9,9 @@
 //! - [`fstd`] — recognition of a flight simulation training device under reg
 //!   61.010, and whether time on it counts for Part 61 (task `0002`).
 //! - [`licence`] — the Part 61 term (licence and category rating) for each of
-//!   the kernel's Annex 1 titles of licence, or that CASA does not issue it.
+//!   the kernel's Annex 1 titles of licence, or that CASA does not issue it;
+//!   and the national titles, the pairs Part 61 grants that Annex 1 has no
+//!   title for.
 
 pub mod aircraft;
 pub mod fstd;
@@ -21,4 +23,4 @@ pub use aircraft::{
     Confidence, DesignFeature, EngineType,
 };
 pub use fstd::{counts_for_part61, FstdRecognition, RecognisedForeignState};
-pub use licence::{part61_term, FlightCrewLicence, Part61Term};
+pub use licence::{part61_term, FlightCrewLicence, IssuedNationalTitle, NationalTitle, Part61Term};
