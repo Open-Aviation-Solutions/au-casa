@@ -36,9 +36,9 @@ Doc 8643 site) before opening the PR found that assumption wrong twice:
    split into `P28A` (fixed gear, fixed-pitch prop — Cherokee/Warrior/
    Archer), `P28B` (fixed gear, variable-pitch prop), `P28R` (Arrow,
    retractable gear), `P28T`/`P28U` (Turbo Arrow variants). The logbook's
-   own data has three aircraft stored with the invalid `PA28` string
-   (VH-INH, VH-MDL, VH-HTK) — seeding a `PA28` row here would perpetuate the
-   error rather than fix it. **This table seeds `P28A`, not `PA28`**, and
+   own data has three aircraft stored with the invalid `PA28` string —
+   seeding a `PA28` row here would perpetuate the error rather than fix
+   it. **This table seeds `P28A`, not `PA28`**, and
    the logbook needs a follow-up data correction (flagged separately,
    see Related) to rewrite those three `Aircraft` records' designator to
    `P28A` — the same shape of fix as its task `0010`'s `ZZZZ` corrections.
@@ -53,7 +53,7 @@ Doc 8643 site) before opening the PR found that assumption wrong twice:
    no individual designator at all — they fall under Doc 8643's **generic**
    `GLID` ("(any manufacturer) Glider") designator, which this table now
    also seeds. The logbook's two real aircraft under these designators
-   (VH-GBW as `AS21`, VH-GKX as `DUOD`) may genuinely be the self-launching
+   (one under each) may genuinely be the self-launching
    variants — plausible for club two-seat trainers, where self-launch
    removes the need for a tow plane — but that's independent registration
    information this task can't verify from here.

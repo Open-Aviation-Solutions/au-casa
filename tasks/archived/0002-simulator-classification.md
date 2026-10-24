@@ -261,13 +261,12 @@ above comes from AC 60-01's references and the ICAO Store catalogue.
 
 ### ICAO Annex 1 — verified, and it does not match CASR exactly
 
-ICAO Annex 1 (Personnel Licensing), Fourteenth Edition, July 2022, Chapter 1:
-
-> **Flight simulation training device (FSTD).** Any one of the following three
-> types of apparatus in which flight conditions are simulated on the ground:
-> a **flight simulator** […]; a **flight procedures trainer**, which […]
-> simulates […] the performance and flight characteristics of aircraft of a
-> particular class; a **basic instrument flight trainer** […].
+ICAO Annex 1 (Personnel Licensing), Fourteenth Edition, July 2022, Chapter 1,
+defines a **flight simulation training device (FSTD)** as any of three kinds of
+apparatus that simulate flight conditions on the ground (paraphrased here): a
+**flight simulator**; a **flight procedures trainer**, which gives the
+performance and flight characteristics of aircraft of one *class*; and a
+**basic instrument flight trainer**.
 
 Two differences from CASR matter here:
 

@@ -6,20 +6,18 @@
 //!
 //! # Where the data comes from — and where it does not
 //!
-//! **No ICAO Doc 8643 data is vendored here, and Doc 8643 is not the source
-//! of any fact in this table.** Doc 8643 is sold by ICAO and is not freely
-//! redistributable.
+//! **No ICAO Doc 8643 list, table or description code is copied into this
+//! crate.** Doc 8643 is sold by ICAO and is not freely redistributable.
 //!
-//! Two different things are easy to conflate, so to be explicit:
-//!
-//! - The **designator strings** (`"C172"`, `"CH7A"`) are used only as lookup
+//! - The **designator strings** (`"C172"`, `"CH7A"`) are used as lookup
 //!   keys — short public identifiers, in the same way an airport code is.
-//!   Comments naming which models a designator covers are orientation for a
-//!   reader, not transcribed Doc 8643 content.
 //! - The **facts** each row asserts — airframe kind, engine count, engine
-//!   type — come from the type certificate data sheet named in that row's
-//!   `source`, which is a free publication of the FAA or EASA. Nothing is
-//!   copied from Doc 8643 or from any mirror of it.
+//!   type — come from the source named in that row's `source`.
+//! - The designator-to-model identifications of the rows from tasks `0003`
+//!   and `0004` were checked against Doc 8643's entries as `doc8643.com` (an
+//!   independent site, not associated with ICAO or any agency) and ICAO's own
+//!   site publish them. `GLID` cites Doc 8643's generic glider entry; its
+//!   basis is to be settled when the table moves (issue #7).
 //!
 //! A row is [`Confidence::Confirmed`] only when someone has actually read
 //! the cited TCDS. Rows still carrying [`Confidence::Provisional`] were

@@ -6,7 +6,7 @@
 
 A fresh CSV import into the logbook application that builds on this crate
 picked up two aircraft types not yet in the compiled table: an American
-Champion 8GCBC Scout (VH-VPW) and an Aerotek/Christen Pitts S-2A (VH-IPU).
+Champion 8GCBC Scout and an Aerotek/Christen Pitts S-2A.
 Both are ordinary, real Doc 8643 designators, confirmed against public
 `doc8643.com` listings before writing the row (same discipline as task
 `0003`, after that task found relying on the CSV's raw string without

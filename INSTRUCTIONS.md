@@ -74,8 +74,11 @@ it there**, since a consumer of a shared table cannot see what is missing.
   the same reasoning that kept repository protocols out of
   `icao-shared-kernel`.
 - **No vendored ICAO-copyrighted data.** Doc 8643 itself may not be
-  redistributed; only independently-compiled facts, each with a source
-  citation. See task `0001` for the sourcing approach.
+  redistributed, and no list, table or description code of it is copied
+  here; each row's facts come from its cited source. Some rows' designators
+  were checked against Doc 8643's published entries, and `GLID` cites its
+  generic entry (see `src/aircraft/designators.rs`). See task `0001` for the
+  sourcing approach.
 - **The MPL notice heads each file** in `src/`, `tests/`, the `Makefile`,
   `Cargo.toml` and `.github/workflows/` (the licence's Exhibit A, in that
   file's comment syntax); `make license-add` adds it to each tracked file
