@@ -26,3 +26,8 @@ pub use aircraft::{
 };
 pub use fstd::{counts_for_part61, FstdRecognition, RecognisedForeignState};
 pub use licence::{part61_term, FlightCrewLicence, Part61Term};
+
+// Compiles and runs the README's examples with the doc tests.
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+struct ReadmeDoctests;
