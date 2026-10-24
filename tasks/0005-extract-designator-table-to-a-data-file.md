@@ -14,13 +14,13 @@ fmt, borrow-checker noise all in the diff even though the actual change is
 have been exactly that shape.
 
 It's also the *first* step of a three-repo chain every time: this crate's
-PR, then `au-casa-py`'s `Cargo.lock` bump (`cargo update -p au-casa`), then
-every consumer's own lockfile bump (`pilot-logbook`'s `uv.lock`). Extracting
-the table to a data file doesn't remove that chain — the data still gets
-baked into the compiled wheel either way, so `au-casa-py` and consumers
-still need a new pinned commit — but it does shrink each *au-casa-side* PR
-to a pure data diff, reviewable by anyone who can read the table without
-reading Rust.
+PR, then the Python bindings' `Cargo.lock` bump (`cargo update -p au-casa`),
+then every consumer's own lockfile bump (the logbook's `uv.lock`).
+Extracting the table to a data file doesn't remove that chain — the data
+still gets baked into the compiled wheel either way, so the Python bindings
+and consumers still need a new pinned commit — but it does shrink each
+*au-casa-side* PR to a pure data diff, reviewable by anyone who can read the
+table without reading Rust.
 
 ## What moves, what doesn't
 

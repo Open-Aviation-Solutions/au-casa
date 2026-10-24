@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 //! Layer A: the country-agnostic description of an aircraft type.
 //!
 //! # Why country-agnostic types live in a national package
@@ -14,9 +18,8 @@
 //! exists, so extracting a shared crate now would be building the extension
 //! rather than leaving room for it. The module boundary is already the seam,
 //! so the move stays cheap. A separate `icao-type-designators` crate is the
-//! likely home rather than the kernel, whose thin-hub discipline (written
-//! down in `icao-shared-kernel-python`'s `INSTRUCTIONS.md`, archived) covers
-//! aggregates and repository protocols — reference data is neither.
+//! likely home rather than the kernel, whose `INSTRUCTIONS.md` limits it to
+//! value objects and aggregates — reference data is neither.
 //!
 //! **If it is ever extracted, restore the wake turbulence category.** Layer A
 //! is nominally universal but has been narrowed by one country's needs in
