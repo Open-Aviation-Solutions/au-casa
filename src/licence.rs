@@ -215,18 +215,23 @@ pub fn part61_term(title: LicenceTitle) -> Option<Part61Term> {
 /// The pairs are listed by [`NationalTitle::part61_term`]'s exhaustive
 /// `match`, as [`part61_term`] lists Annex 1's. The flight engineer licence is
 /// not a pilot licence and is left out; CASA issues no free balloon licence.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+///
+/// The pairs are ordered as Part 61 lists them, licences by reg 61.010's
+/// definition of a pilot licence and then category ratings by reg 61.015, and
+/// that is their `Ord`, as the kernel's `LicenceTitle` is ordered by its
+/// declaration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum NationalTitle {
+    /// Commercial pilot licence, gyroplane category rating.
+    CommercialGyroplane,
+    /// Private pilot licence, gyroplane category rating.
+    PrivateGyroplane,
     /// Recreational pilot licence, aeroplane category rating.
     RecreationalAeroplane,
     /// Recreational pilot licence, helicopter category rating.
     RecreationalHelicopter,
     /// Recreational pilot licence, gyroplane category rating.
     RecreationalGyroplane,
-    /// Private pilot licence, gyroplane category rating.
-    PrivateGyroplane,
-    /// Commercial pilot licence, gyroplane category rating.
-    CommercialGyroplane,
 }
 
 impl NationalTitle {
