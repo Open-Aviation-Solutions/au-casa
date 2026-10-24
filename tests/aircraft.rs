@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 //! Part 61 aircraft classification: the reg 61.755 table, Layer B derivation
 //! per category, and the resolver's override and unknown-designator paths.
 

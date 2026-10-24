@@ -77,6 +77,13 @@ it there**, since a consumer of a shared table cannot see what is missing.
 - **No vendored ICAO-copyrighted data.** Doc 8643 itself may not be
   redistributed; only independently-compiled facts, each with a source
   citation. See task `0001` for the sourcing approach.
+- **The MPL notice heads each file** in `src/`, `tests/`, the `Makefile`,
+  `Cargo.toml` and `.github/workflows/` (the licence's Exhibit A, in that
+  file's comment syntax); `addlicense -l mpl <file>` adds it. `make
+  license-check`, part of `make check`, runs `addlicense -check` over the
+  tracked files, which fails on a Rust, TOML or YAML file with no licence
+  header, though it does not check that the header is the MPL's wording. It
+  does not check the `Makefile`, which it does not recognise.
 - **Regulatory terms only**: names and terminology must be verifiable against
   CASA Part 61 (or the specific regulation cited).
 - **Discuss before implementing**: design decisions get a `tasks/NNNN-*.md`
@@ -87,8 +94,9 @@ it there**, since a consumer of a shared table cannot see what is missing.
 ## Commands
 
 ```sh
-make test   # cargo test
-make lint   # cargo clippy -- -D warnings
-make fmt    # cargo fmt
-make check  # lint + fmt check + test
+make test           # cargo test
+make lint           # cargo clippy -- -D warnings
+make fmt            # cargo fmt
+make license-check  # addlicense -check over the tracked files
+make check          # lint + fmt check + licence headers + test
 ```
