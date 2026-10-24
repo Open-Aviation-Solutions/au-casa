@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 //! The Part 61 term for each Annex 1 title of licence the kernel records: the
 //! flight crew licence and category rating CASA issues for it, if it issues
 //! one at all.

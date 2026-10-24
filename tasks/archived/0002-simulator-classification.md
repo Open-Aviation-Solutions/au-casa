@@ -1,19 +1,19 @@
 # Simulator classification (FSTD recognition under Part 61)
 
 **Status:** done, archived 2026-09-29 (commit `afe83c1`), on the kernel
-aggregates of `icao-shared-kernel-rs` task `0001`. pilot-logbook has since
-stopped storing a recognition (its issue #77): a pilot records whether a
+aggregates of `icao-shared-kernel` task `0001`. The logbook that builds on
+this crate has since stopped storing a recognition: a pilot records whether a
 session was in an approved FSTD instead.
 
 ## Purpose
 
-`icao-shared-kernel-python` (originally `icao-shared-kernel`; renamed and
-archived 2026-10) task `0011` removed `SimType` and `is_regulatory_sim` from the
-kernel `Aircraft` and left their home explicitly undecided:
-*"pilot-training owning a `Simulator`, or the CASA package if logbook also
-needs sim currency — a separate downstream task."* `pilot-logbook`'s task
-`0007` confirms it's the latter, at least in part: `metrics/_run.py` and five
-files under `metrics/currency/`/`metrics/totals/` depend on `SimType`/
+The earlier Python kernel's (not published) task `0011` removed `SimType`
+and `is_regulatory_sim` from the kernel `Aircraft` and left their home
+explicitly undecided:
+*"[a training application] owning a `Simulator`, or the CASA package if
+logbook also needs sim currency — a separate downstream task."* The logbook's
+task adopting the kernel's Python bindings confirms it's the latter, at
+least in part: `metrics/_run.py` and five files under `metrics/currency/`/`metrics/totals/` depend on `SimType`/
 `is_regulatory_sim` for real currency/totals logic, blocking that branch —
 same as task `0001`'s aircraft classification, not deferrable.
 
@@ -22,7 +22,7 @@ question `0001` doesn't have, resolved below.
 
 ## What consumers actually need (grepped, not theorised)
 
-Six call sites in `pilot-logbook`, needing only a **three-way** distinction —
+Six call sites in the logbook, needing only a **three-way** distinction —
 real aircraft / recognised FSTD / unrecognised device:
 
 - `metrics/_run.py:36` — skip the entry entirely if the device is
@@ -34,8 +34,8 @@ real aircraft / recognised FSTD / unrecognised device:
   include only if `category == AEROPLANE` **or** it's a recognised FSTD.
 
 Nothing branches on the specific `SimType` variant. Note these six files are
-currently *broken*, not merely stale — they import from `aviation_core`,
-which was renamed `icao_shared_kernel`.
+currently *broken*, not merely stale — they import the Python kernel's
+package by its old name.
 
 ## The open question, and its resolution
 
@@ -56,7 +56,7 @@ ICAO-agnostic, and the verification below shows why:
   it always **references** a type that does. That is the ICAO link, by
   identity rather than by pretending the device is an aircraft.
 
-**Decided: sibling aggregates in `icao-shared-kernel-rs`, not a widening of
+**Decided: sibling aggregates in `icao-shared-kernel`, not a widening of
 `Flight`.** A simulator session is not a physical flight event, and the
 kernel's thin-hub rule forbids widening `Flight` for a field group. The
 session becomes its own aggregate alongside `Flight`, and the device becomes
@@ -64,7 +64,7 @@ its own aggregate referenced by identity.
 
 ## Design
 
-### Kernel (`icao-shared-kernel-rs`) — ICAO-universal, reusable by any State
+### Kernel (`icao-shared-kernel`) — ICAO-universal, reusable by any State
 
 Two new aggregates, siblings to `Flight`:
 
@@ -143,7 +143,7 @@ distinction between them — so the predicate is not a per-variant match:
 pub fn counts_for_part61(recognition: Option<&FstdRecognition>) -> bool
 ```
 
-**No date parameter, and no dependency on `icao-shared-kernel-rs`.** An
+**No date parameter, and no dependency on `icao-shared-kernel`.** An
 earlier draft of this task had the predicate take the qualification and a
 date. That was redundant once snapshotting was chosen: the consumer records
 the recognition *that applied at the time of the session*, checking
@@ -151,12 +151,13 @@ the recognition *that applied at the time of the session*, checking
 The temporal question is answered when the snapshot is taken, not when the
 predicate is asked — which is the whole point of snapshotting. Keeping the
 date out also keeps this crate dependency-free, matching task `0001`'s
-`resolve_classification(designator: &str, ...)`.
+`resolve_classification(designator: &str, ...)`. (So it was then: the crate
+has since come to depend on the kernel, for its titles of licence.)
 
 `RecognisedForeignState` is a closed list, defined in reg 61.010 itself (see
 Verification), extensible by instrument under reg 61.047.
 
-### Consumer snapshot (`pilot-logbook`)
+### Consumer snapshot (the logbook)
 
 **Decided: snapshot the recognition onto the logbook record at the time the
 session is logged**, rather than reconstructing it from dated qualification
@@ -170,7 +171,7 @@ prefer extending `LogbookFlight` (a `session_id` alongside `flight_id`, with
 a validator enforcing exactly one, plus the snapshot fields) over minting a
 parallel aggregate. `EnrichedEntry` then needs a discriminated subject —
 flown-aircraft vs simulated-session — so each accumulator's guard stays
-explicit. That work belongs in a `pilot-logbook` task, not here.
+explicit. That work belongs in a task of the logbook's, not here.
 
 ## Verification (2026-07-26)
 
@@ -260,13 +261,12 @@ above comes from AC 60-01's references and the ICAO Store catalogue.
 
 ### ICAO Annex 1 — verified, and it does not match CASR exactly
 
-ICAO Annex 1 (Personnel Licensing), Fourteenth Edition, July 2022, Chapter 1:
-
-> **Flight simulation training device (FSTD).** Any one of the following three
-> types of apparatus in which flight conditions are simulated on the ground:
-> a **flight simulator** […]; a **flight procedures trainer**, which […]
-> simulates […] the performance and flight characteristics of aircraft of a
-> particular class; a **basic instrument flight trainer** […].
+ICAO Annex 1 (Personnel Licensing), Fourteenth Edition, July 2022, Chapter 1,
+defines a **flight simulation training device (FSTD)** as any of three kinds of
+apparatus that simulate flight conditions on the ground (paraphrased here): a
+**flight simulator**; a **flight procedures trainer**, which gives the
+performance and flight characteristics of aircraft of one *class*; and a
+**basic instrument flight trainer**.
 
 Two differences from CASR matter here:
 
@@ -290,14 +290,14 @@ Resolve it when a mapping is actually required.
 
 ## Sequencing
 
-1. **`icao-shared-kernel-rs`** — task `0001`, the two aggregates. On PR #3.
+1. **`icao-shared-kernel`** — task `0001`, the two aggregates. On PR #3.
 
 2. **`au-casa`** — this task: the enum, the recognition value object, the
    `counts_for_part61` predicate.
-3. **`pilot-logbook`** — snapshot fields, the `EnrichedEntry` discriminated
+3. **The logbook** — snapshot fields, the `EnrichedEntry` discriminated
    subject, and rewiring the six broken call sites. Its own task.
 
-`au-casa-py` (PyO3 bindings) remains deferred, same as task `0001`.
+This crate's Python (PyO3) bindings remain deferred, same as task `0001`.
 
 ## Acceptance criteria
 
@@ -322,8 +322,9 @@ Resolve it when a mapping is actually required.
 
 ## Related
 
-- `icao-shared-kernel-python` (originally `icao-shared-kernel`; renamed and
-  archived 2026-10) task `0011` — origin of the undecided simulator home.
-- `pilot-logbook` task `0007` — the consumer this blocks.
+- The earlier Python kernel's task `0011` — origin of the undecided
+  simulator home.
+- The logbook's task adopting the kernel's Python bindings — the consumer
+  this blocks.
 - `au-casa` task `0001` — aircraft classification; sibling concern, and the
   contrast that explains why this task has no resolver.

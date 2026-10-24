@@ -2,19 +2,18 @@
 
 CASA (Australia) national aviation regulatory package. Sibling to
 [`icao-shared-kernel`](https://github.com/Open-Aviation-Solutions/icao-shared-kernel)
-(the ICAO-universal domain), following the same Rust-crate-plus-Python-bindings
-pattern (`au-casa-py`). Grew out of the Python kernel's tasks `0011` (which
-trimmed CASA-specific fields out of the kernel `Aircraft`) and `0012` (which
-specified this package before it existed), in `icao-shared-kernel-python`
-(archived) — see those for the "why ICAO-universal vs national" background;
-this repo is where the CASA-specific design now lives and evolves.
+(the ICAO-universal domain), on which it builds. Grew out of the earlier
+Python kernel's tasks `0011` (which trimmed CASA-specific fields out of the
+kernel `Aircraft`) and `0012` (which specified this package before it
+existed), which are not published; this repo is where the CASA-specific
+design now lives and evolves.
 
 ## Purpose and scope
 
 This package resolves **national** (CASA Part 61) facts that the kernel
-deliberately does not carry, because they aren't ICAO-universal — see the
-kernel's thin-hub discipline, written down in `icao-shared-kernel-python`'s
-`INSTRUCTIONS.md` (archived). Each module answers one such question:
+deliberately does not carry, because they aren't ICAO-universal (the
+kernel's `INSTRUCTIONS.md` keeps a State's own rules out of it). Each module
+answers one such question:
 
 - `aircraft` (implemented, task `0001`): CASA category/class/design-feature
   classification, derived from an ICAO Doc 8643 type designator.
@@ -73,15 +72,26 @@ it there**, since a consumer of a shared table cannot see what is missing.
   any consumer-specific data (e.g. a per-aircraft category override) belongs
   to the consuming application that owns that data's lifecycle, not here —
   the same reasoning that kept repository protocols out of
-  `icao-shared-kernel`/`icao-shared-kernel-py`.
+  `icao-shared-kernel`.
 - **No vendored ICAO-copyrighted data.** Doc 8643 itself may not be
-  redistributed; only independently-compiled facts, each with a source
-  citation. See task `0001` for the sourcing approach.
+  redistributed, and no list, table or description code of it is copied
+  here; each row's facts come from its cited source. Some rows' designators
+  were checked against Doc 8643's published entries, and `GLID` cites its
+  generic entry (see `src/aircraft/designators.rs`). See task `0001` for the
+  sourcing approach.
+- **The MPL notice heads each file** in `src/`, `tests/`, the `Makefile`,
+  `Cargo.toml` and `.github/workflows/` (the licence's Exhibit A, in that
+  file's comment syntax); `make license-add` adds it to each tracked file
+  that has none (so `git add` a new file first). `make license-check`, part
+  of `make check`, runs `addlicense -check` over the tracked files, which
+  fails on a Rust, TOML or YAML file with no licence header, though it does
+  not check that the header is the MPL's wording. Neither covers the
+  `Makefile`, which addlicense does not recognise.
 - **Regulatory terms only**: names and terminology must be verifiable against
   CASA Part 61 (or the specific regulation cited).
 - **Discuss before implementing**: design decisions get a `tasks/NNNN-*.md`
   discussion first. This repository follows the conventions written down in
-  `icao-shared-kernel-python`'s `tasks/INSTRUCTIONS.md` (archived); `tasks/`
+  the earlier Python kernel's tasks, which are not published; `tasks/`
   here has none of its own.
 
 ## Releasing
@@ -107,8 +117,10 @@ until they move the pin.
 ## Commands
 
 ```sh
-make test   # cargo test
-make lint   # cargo clippy -- -D warnings
-make fmt    # cargo fmt
-make check  # lint + fmt check + test
+make test           # cargo test
+make lint           # cargo clippy -- -D warnings
+make fmt            # cargo fmt
+make license-add    # add the MPL notice where a tracked file has none
+make license-check  # addlicense -check over the tracked files
+make check          # lint + fmt check + licence headers + test
 ```
