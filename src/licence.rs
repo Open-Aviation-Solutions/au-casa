@@ -1,6 +1,6 @@
-//! The Part 61 term for each Annex 1 title of licence the kernel records: the
-//! flight crew licence and category rating CASA issues for it, if it issues
-//! one at all.
+//! The Part 61 term for each title of licence a pilot can hold, the kernel's
+//! Annex 1 titles and the [`NationalTitle`]s Annex 1 has none for: the flight
+//! crew licence and category rating CASA issues for it, if it issues one.
 //!
 //! The kernel's [`LicenceTitle`] is in ICAO's words. CASA's differ ("air
 //! transport" for Annex 1's "airline transport", "powered-lift aircraft" for
@@ -76,16 +76,18 @@ impl FlightCrewLicence {
 
 /// The Part 61 term for a title of licence (the kernel's, or a
 /// [`NationalTitle`]): the licence and, for a pilot licence, the aircraft
-/// category rating it carries for the title's category,
-/// with the regulations that say CASA issues that pair.
+/// category rating it carries for the title's category, with what is cited
+/// for CASA issuing that pair.
 ///
 /// Division 61.L.2 does not list which category ratings each licence can
 /// carry: reg 61.730 grants one on meeting the requirements for "the pilot
-/// licence with the aircraft category rating", so the pairs are those each
-/// licence's Subpart gives aeronautical experience requirements for. Those
-/// requirements are cited, and for the multi-crew and air transport pilot
-/// licences also the privileges regulation that names the category (regs
-/// 61.635 and 61.665).
+/// licence with the aircraft category rating". For every licence but the
+/// recreational pilot licence, the pairs are those its Subpart gives
+/// aeronautical experience requirements for, and those are cited, with the
+/// privileges regulation that names the category for the multi-crew and air
+/// transport pilot licences (regs 61.635 and 61.665). The recreational pilot
+/// licence's pairs cite reg 61.475, which grants it, and the Manual of
+/// Standards appendix for the category ([`NationalTitle::part61_term`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Part61Term {
     pub licence: FlightCrewLicence,
@@ -224,8 +226,8 @@ pub enum NationalTitle {
 }
 
 impl NationalTitle {
-    /// The licence and category rating, with the regulations that say CASA
-    /// issues the pair.
+    /// The licence and category rating, with what is cited for CASA issuing
+    /// the pair.
     ///
     /// Part 61 does not list the recreational pilot licence's category
     /// ratings: reg 61.475 grants it with "the associated aircraft category

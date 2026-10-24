@@ -90,6 +90,8 @@ fn every_licence_but_the_glider_pilot_licence_is_a_pilot_licence() {
 /// The minimum age is the licence's (regs 61.475(1), 61.515(1), 61.580(1)),
 /// reached on the birthday.
 #[rstest]
+#[case(NationalTitle::RecreationalAeroplane, 16)]
+#[case(NationalTitle::RecreationalHelicopter, 16)]
 #[case(NationalTitle::RecreationalGyroplane, 16)]
 #[case(NationalTitle::PrivateGyroplane, 17)]
 #[case(NationalTitle::CommercialGyroplane, 18)]
