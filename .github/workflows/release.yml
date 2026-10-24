@@ -1,0 +1,79 @@
+name: Release
+
+# Merging a pull request that changes Cargo.toml's `version` releases that
+# version: published to crates.io, then tagged `v<version>`. Only a push to
+# `main` runs this, and `main` changes only through a pull request with CI
+# passing, so nothing on another branch, and no tag pushed by hand, can release.
+on:
+  push:
+    branches: [main]
+
+# One release at a time, in the order of the pushes.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      published: ${{ steps.version.outputs.published }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Is Cargo.toml's version on crates.io yet?
+        id: version
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+          status=$(curl -s -o /dev/null -w '%{http_code}' \
+            -A 'au-casa release workflow (github.com/Open-Aviation-Solutions/au-casa)' \
+            "https://crates.io/api/v1/crates/au-casa/$version")
+          case "$status" in
+            200) published=true ;;
+            404) published=false ;;
+            *) echo "crates.io answered $status for version $version."; exit 1 ;;
+          esac
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "published=$published" >> "$GITHUB_OUTPUT"
+          echo "Version $version, on crates.io: $published."
+
+  publish:
+    needs: version
+    if: needs.version.outputs.published == 'false'
+    runs-on: ubuntu-latest
+    # GitHub runs this job only on `main`, the one ref the environment allows,
+    # and crates.io's trusted publisher accepts only this environment.
+    environment: release
+    permissions:
+      # To push the version's tag.
+      contents: write
+      # For crates.io's trusted publishing, which exchanges this job's OIDC
+      # token for a short-lived publishing token: no secret is stored.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - run: make check
+
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+
+      - run: cargo publish --locked
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+
+      - name: Tag the release
+        env:
+          TAG: v${{ needs.version.outputs.version }}
+        run: |
+          git tag "$TAG" "$GITHUB_SHA"
+          git push origin "$TAG"
