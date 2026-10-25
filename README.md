@@ -20,9 +20,10 @@ Early: the version is `0.1.0`. Until `1.0`, the API may change between any two
 versions, patch releases included, so pin the version exactly. It takes
 `icao-shared-kernel` and
 [aircraft-type-descriptions](https://github.com/Open-Aviation-Solutions/aircraft-type-descriptions)
-by a compatible range (`^0.1`), as other countries' crates are to, so that
-one copy of each is built; take them by an overlapping range, or their types
-are not the ones this crate takes.
+by a caret range (`^0.1.3` and `^0.1.0`) from its next release, and on `main`
+now, as other countries' crates are to, so that one copy of each is built;
+take them by an overlapping range, or their types are not the ones this crate
+takes. The published `0.1.0` still pins them exactly (`=0.1.3` and `=0.1.0`).
 
 What is covered:
 
@@ -85,7 +86,8 @@ and what they fly.
 
 ## Usage
 
-Add it from crates.io, with the kernel by the range it depends on:
+Add it from crates.io, with the kernel at a version it accepts (`0.1.0`
+requires exactly `0.1.3`):
 
 ```toml
 [dependencies]
@@ -95,8 +97,10 @@ icao-shared-kernel = "0.1.3"
 
 The aircraft description types (`AircraftDescription`, `AirframeKind`,
 `EngineType`, `Confidence`) are aircraft-type-descriptions' own, re-exported
-here for convenience. To use its table as well, add it by the same range
-(`aircraft-type-descriptions = "0.1"`) and name the types from either crate.
+here for convenience. To use its table as well, add it at a version au-casa
+accepts (`aircraft-type-descriptions = "0.1.0"` for au-casa `0.1.0`; by a
+range overlapping `^0.1.0` from its next release) and name the types from
+either crate.
 
 ```rust
 use au_casa::{

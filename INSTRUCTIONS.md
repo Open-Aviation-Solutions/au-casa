@@ -38,16 +38,22 @@ answers one such question:
   licences (reg 61.010), so no caller matches on the licences' names for it.
 
 `icao-shared-kernel` and aircraft-type-descriptions are taken by a
-compatible range (`^0.1`), not pinned exactly (au-casa#24): sibling country
+caret range (`^0.1.3` and `^0.1.0`), not pinned exactly (au-casa#24): sibling country
 crates (nz-caa and the like) depend on them too, and a consumer such as a
 logbook imports several country crates at once. With exact pins two siblings
 on different patches could not be resolved together; with a range Cargo
 builds one copy of each, so the kernel's `LicenceTitle` and the table's
-`AirframeKind` are the same types in every crate. Both crates release a change
-that could alter a classification or a title as a minor version, which a
-caret range does not take up, so a patch they release cannot change what
-au-casa answers. A minor release is taken by the country crates together. A
-consumer takes them from the same source, by a range that overlaps au-casa's.
+`AirframeKind` are the same types in every crate. A caret range takes up
+patches but not a minor version. The kernel releases a breaking change,
+including one that could alter a title of licence, as a minor version; the
+table releases a change to an existing row's description facts (airframe,
+number or kind of engines, wake turbulence category), or a row removed, as a
+minor version. A patch can still change what au-casa answers for a
+designator (a new row classifies one the table lacked; a confidence or a
+citation can change), but it never changes an existing row's description
+facts or removes a row. A minor release is taken by the country crates
+together. A consumer takes them from the same source, by a range that
+overlaps au-casa's.
 
 ## Reading Part 61 for licences and category ratings
 
@@ -128,7 +134,7 @@ only that environment; `main` changes only through a pull request with CI
 passing.
 
 While on `0.x`, every release bumps the patch version, a breaking one
-included, to keep the numbers low, as the kernel's do: consumers pin the
+included, to keep the numbers low: consumers pin the
 version exactly (`=0.1.0`), so a `cargo update` never takes a new release
 until they move the pin.
 
