@@ -2,14 +2,14 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! CASA Part 61 aircraft classification, derived from an ICAO Doc 8643 type
+//! CASA Part 61 aircraft classification, derived from an aircraft type
 //! designator.
 //!
 //! Two layers:
 //!
 //! - **Layer A** — `designator -> `[`AircraftDescription`]: country-agnostic
-//!   facts about the type, compiled independently of Doc 8643 (see
-//!   [`designators`]).
+//!   facts about the type, from the `aircraft-type-descriptions` crate, which
+//!   holds the table and cites each row's sources.
 //! - **Layer B** — [`AircraftDescription`]` -> `[`CasaAircraftClassification`]:
 //!   the Part 61 reading of those facts (regs 61.015, 61.020, 61.755).
 //!
@@ -19,16 +19,16 @@
 
 pub mod category;
 pub mod class_rating;
-pub mod description;
 pub mod design_feature;
-pub mod designators;
 
+pub use aircraft_type_descriptions::{
+    AircraftDescription, AirframeKind, Confidence, EngineType, WakeTurbulenceCategory,
+};
 pub use category::AircraftCategory;
 pub use class_rating::AircraftClassRating;
-pub use description::{AircraftDescription, AirframeKind, EngineType};
 pub use design_feature::DesignFeature;
-pub use designators::Confidence;
 
+use aircraft_type_descriptions::DesignatorTable;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -173,7 +173,7 @@ pub fn resolve_classification(
     designator: &str,
     classification_override: Option<&ClassificationOverride>,
 ) -> Result<CasaAircraftClassification, ClassificationError> {
-    let facts = designators::lookup(designator);
+    let facts = DesignatorTable::packaged().lookup(designator);
 
     let (mut category, mut class, mut design_features, confidence, source) = match facts {
         Some(facts) => {
@@ -184,7 +184,7 @@ pub fn resolve_classification(
                 class,
                 features,
                 facts.confidence,
-                Some(facts.source),
+                Some(facts.citation),
             )
         }
         None => {

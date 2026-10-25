@@ -16,7 +16,8 @@ kernel's `INSTRUCTIONS.md` keeps a State's own rules out of it). Each module
 answers one such question:
 
 - `aircraft` (implemented, task `0001`): CASA category/class/design-feature
-  classification, derived from an ICAO Doc 8643 type designator.
+  classification, derived from an aircraft type designator, with the
+  table of types in aircraft-type-descriptions.
 - Simulator classification (ready, task `0002`): recognition of a flight
   simulation training device under reg 61.010, and whether a session counts
   for Part 61 currency. Builds on the `FlightSimulationTrainingDevice` /
@@ -63,20 +64,16 @@ helicopter and gyroplane), each cited with reg 61.475. Appendix G.4, the
 airship, is reserved, and there is no appendix for a powered-lift aircraft
 (decided on issue #15).
 
-**One part of `aircraft` is not national, and knows it.** `AircraftDescription`
-and the `designator -> description` table (Layer A) are the ICAO Doc 8643
-description code — a New Zealand or UK package would need them unchanged.
-Only Layer B, the derivation to CASA category/class/design features, is
-regulatory interpretation.
-
-Layer A stays here because `au-casa` is the only national package that
-exists; extracting a shared crate for a hypothetical second country would be
-building the extension rather than leaving room for it. The module boundary
-is already the seam, so the move stays cheap when a second country arrives.
-`src/aircraft/description.rs` records what must be undone on extraction —
-chiefly restoring the wake turbulence category, dropped because no Part 61
-rule uses it. **Do not narrow Layer A further to suit Part 61 without noting
-it there**, since a consumer of a shared table cannot see what is missing.
+**One part of `aircraft` is not national, and is not here.** `AircraftDescription`
+and the `designator -> description` table (Layer A) are the same for any
+country, so they live in
+[aircraft-type-descriptions](https://github.com/Open-Aviation-Solutions/aircraft-type-descriptions)
+(au-casa#7), which this crate depends on, pinned exactly: a row decides
+a licence-relevant classification, so moving to a new version is a deliberate
+change. Only Layer B, the derivation to CASA category/class/design
+features, is regulatory interpretation, and it is what stays here. A type is
+added to the table there, not here; a type the table lacks is
+`UnknownDesignator` until it is, or the caller overrides the category.
 
 ## Conventions
 
@@ -87,12 +84,9 @@ it there**, since a consumer of a shared table cannot see what is missing.
   to the consuming application that owns that data's lifecycle, not here —
   the same reasoning that kept repository protocols out of
   `icao-shared-kernel`.
-- **No vendored ICAO-copyrighted data.** Doc 8643 itself may not be
-  redistributed, and no list, table or description code of it is copied
-  here; each row's facts come from its cited source. Some rows' designators
-  were checked against Doc 8643's published entries, and `GLID` cites its
-  generic entry (see `src/aircraft/designators.rs`). See task `0001` for the
-  sourcing approach.
+- **No vendored ICAO-copyrighted data.** The table of types, and how it is
+  sourced, is aircraft-type-descriptions' to say (and it sources US public
+  domain data).
 - **The MPL notice heads each file** in `src/`, `tests/`, the `Makefile`,
   `Cargo.toml` and `.github/workflows/` (the licence's Exhibit A, in that
   file's comment syntax); `make license-add` adds it to each tracked file

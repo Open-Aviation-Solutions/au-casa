@@ -28,7 +28,9 @@ What is covered:
   registered sailplane), class (reg 61.020) and design features (reg 61.755),
   from its ICAO type designator, with a caller's override for what varies
   between airframes of one type. The table of designators is small and grows
-  as types are needed. A row checked against its type certificate data sheet
+  as types are needed, in
+  [aircraft-type-descriptions](https://github.com/Open-Aviation-Solutions/aircraft-type-descriptions),
+  which this crate takes it from. A row checked against its type certificate data sheet
   is `Confidence::Confirmed`; the rest are `Confidence::Provisional`, each
   saying what is left to check.
 - **Flight simulation training devices** (`FstdRecognition`,
@@ -53,9 +55,10 @@ What is not:
 Known not to work:
 
 - A designator that is not in the table is refused (`UnknownDesignator`)
-  unless the caller supplies a category, so most types, `C700` among them,
-  cannot yet be classified from their designator alone
-  ([#7](https://github.com/Open-Aviation-Solutions/au-casa/issues/7)).
+  unless the caller supplies a category, so a type that
+  [aircraft-type-descriptions](https://github.com/Open-Aviation-Solutions/aircraft-type-descriptions)
+  does not yet describe cannot be classified from its designator alone. That
+  table grows in batches; a type is added there, not here.
 - An aeroplane with two or more engines is always put in the multi-engine
   class, though reg 61.020(2) puts a multi-engine centre-line thrust
   aeroplane, and any prescribed under reg 61.050, in the single-engine class
@@ -101,7 +104,7 @@ fn main() -> Result<(), ClassificationError> {
     assert_eq!(c172.confidence, Confidence::Confirmed);
 
     // A designator that is not in the table is refused, not guessed at.
-    assert!(resolve_classification("C700", None).is_err());
+    assert!(resolve_classification("ZZZZ", None).is_err());
 
     let title = LicenceTitle::Private(PrivateOrCommercialCategory::Aeroplane);
     let term = part61_term(title).expect("CASA issues this title");
@@ -121,6 +124,9 @@ test under `tests/`.
 - **[icao-shared-kernel](https://github.com/Open-Aviation-Solutions/icao-shared-kernel)**
   holds the ICAO concepts this crate builds on: aircraft, licences, flights
   and flight simulation training devices.
+- **[aircraft-type-descriptions](https://github.com/Open-Aviation-Solutions/aircraft-type-descriptions)**
+  holds the table of aircraft types by designator, with each row's sources.
+  This crate reads those facts under Part 61.
 - A pilot's logbook, not yet public, builds on this crate.
 
 ## Reporting a problem, and contributing
