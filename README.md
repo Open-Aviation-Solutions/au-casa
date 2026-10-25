@@ -16,8 +16,9 @@ that are Australia's alone are kept here.
 
 ## Status
 
-Early: the version is `0.1.0`. Until `1.0`, the API may change between any two
-versions, patch releases included, so pin the version exactly. It takes
+Early: the version is `0.1.0`. Until `1.0`, a release that breaks the API bumps
+the minor version and a compatible one the patch, so take it by a caret range
+(`"0.1"`) and a `cargo update` takes no breaking release. It takes
 `icao-shared-kernel` and
 [aircraft-type-descriptions](https://github.com/Open-Aviation-Solutions/aircraft-type-descriptions)
 by a caret range (`^0.1.3` and `^0.1.0`) from its next release, and on `main`
@@ -91,7 +92,7 @@ requires exactly `0.1.3`):
 
 ```toml
 [dependencies]
-au-casa = "=0.1.0"
+au-casa = "0.1"
 icao-shared-kernel = "0.1.3"
 ```
 

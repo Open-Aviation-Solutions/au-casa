@@ -133,10 +133,11 @@ which GitHub allows only on `main`, and crates.io's trusted publisher accepts
 only that environment; `main` changes only through a pull request with CI
 passing.
 
-While on `0.x`, every release bumps the patch version, a breaking one
-included, to keep the numbers low: consumers pin the
-version exactly (`=0.1.0`), so a `cargo update` never takes a new release
-until they move the pin.
+While on `0.x`, a breaking release bumps the minor version (`0.2.0`) and a
+compatible one the patch, as the kernel's and the table's do (decided on
+au-casa#24). Consumers take au-casa by a caret range (`^0.1.0`), so a `cargo
+update` takes up patches but not a breaking release, which they move to on
+purpose.
 
 ## Commands
 
