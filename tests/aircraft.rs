@@ -5,7 +5,6 @@
 //! Part 61 aircraft classification: the reg 61.755 table, Layer B derivation
 //! per category, and the resolver's override and unknown-designator paths.
 
-use au_casa::aircraft::designators::lookup;
 use au_casa::{
     classify, resolve_classification, AircraftCategory, AircraftClassRating, AircraftDescription,
     AirframeKind, ClassificationError, ClassificationOverride, Confidence, DesignFeature,
@@ -172,12 +171,37 @@ fn catalogued_designator_resolves() {
     assert!(result.source.is_some());
 }
 
+/// The resolver's reading of a description for one designator of each shape,
+/// so that its wiring to Layer B is tested whatever the table's other rows.
+#[rstest]
+#[case("C172", AircraftCategory::Aeroplane, Some(AircraftClassRating::SingleEngineAeroplane), vec![])]
+#[case("PA44", AircraftCategory::Aeroplane, Some(AircraftClassRating::MultiEngineAeroplane), vec![])]
+#[case("C208", AircraftCategory::Aeroplane, Some(AircraftClassRating::SingleEngineAeroplane), vec![DesignFeature::GasTurbineEngine])]
+#[case("R44", AircraftCategory::Helicopter, Some(AircraftClassRating::SingleEngineHelicopter), vec![])]
+#[case("GLID", AircraftCategory::RegisteredSailplane, None, vec![])]
+fn designator_resolves_through_layer_b(
+    #[case] designator: &str,
+    #[case] category: AircraftCategory,
+    #[case] class: Option<AircraftClassRating>,
+    #[case] features: Vec<DesignFeature>,
+) {
+    let result = resolve_classification(designator, None).unwrap();
+    assert_eq!(result.category, category);
+    assert_eq!(result.class, class);
+    assert_eq!(result.design_features, features);
+}
+
+/// C700 was refused while the table lived in this crate (#7).
 #[test]
-fn twin_resolves_to_multi_engine_aeroplane() {
-    let result = resolve_classification("PA44", None).unwrap();
+fn citation_longitude_resolves() {
+    let result = resolve_classification("C700", None).unwrap();
     assert_eq!(
         result.class,
         Some(AircraftClassRating::MultiEngineAeroplane)
+    );
+    assert_eq!(
+        result.design_features,
+        vec![DesignFeature::GasTurbineEngine]
     );
 }
 
@@ -266,179 +290,4 @@ fn category_override_clears_the_derived_class() {
         result.design_features,
         vec![DesignFeature::GasTurbineEngine]
     );
-}
-
-/// The Citabria is split across two Doc 8643 designators, and CH7A is also
-/// shared with the Aeronca 7AC Champion. Neither ambiguity can change the
-/// Part 61 answer, because every model under both is a single piston
-/// landplane — assert that, so a future edit cannot quietly diverge them.
-#[test]
-fn both_citabria_designators_classify_identically() {
-    let aurora = resolve_classification("CH7A", None).unwrap();
-    let adventure = resolve_classification("CH7B", None).unwrap();
-
-    for result in [&aurora, &adventure] {
-        assert_eq!(result.category, AircraftCategory::Aeroplane);
-        assert_eq!(
-            result.class,
-            Some(AircraftClassRating::SingleEngineAeroplane)
-        );
-        // Piston, so no gas turbine feature; undercarriage is per-airframe.
-        assert!(result.design_features.is_empty());
-    }
-    assert_eq!(aurora.category, adventure.category);
-    assert_eq!(aurora.class, adventure.class);
-}
-
-/// Rows checked against a type certificate data sheet say so, and cite the
-/// sheet by number and revision. The flag is only worth carrying if it is
-/// applied honestly, so the rows nobody has checked must still say so.
-#[test]
-fn confidence_reflects_whether_a_tcds_was_actually_read() {
-    for (designator, sheet) in [
-        ("CH7A", "A-759"),
-        ("CH7B", "A-759"),
-        ("C172", "3A12"),
-        ("PA34", "A7SO"),
-        ("PA44", "IM.A.232"),
-        ("C208", "A37CE"),
-    ] {
-        let result = resolve_classification(designator, None).unwrap();
-        assert_eq!(
-            result.confidence,
-            Confidence::Confirmed,
-            "{designator} should be confirmed"
-        );
-        assert!(
-            result.source.unwrap().contains(sheet),
-            "{designator} should cite {sheet}"
-        );
-    }
-
-    // PA25's sheet could not be obtained and R44's is behind a login, so
-    // neither has been read by anyone. They stay Provisional.
-    for designator in ["PA25", "R44"] {
-        let result = resolve_classification(designator, None).unwrap();
-        assert_eq!(
-            result.confidence,
-            Confidence::Provisional,
-            "{designator} has not been checked against a TCDS"
-        );
-    }
-}
-
-// --- Task 0003: additional GA and glider designators ---------------------
-
-/// Each newly seeded designator resolves to the expected category/class and
-/// is still Provisional — none of the candidate sources have been read yet.
-/// Note "PA28" is deliberately absent: it was retired from Doc 8643 in
-/// favour of P28A/P28B/P28R/P28T/P28U around 1998, so it is not seeded here
-/// at all — see `pa28_is_not_a_valid_designator` below.
-#[rstest]
-#[case(
-    "C152",
-    AircraftCategory::Aeroplane,
-    Some(AircraftClassRating::SingleEngineAeroplane)
-)]
-#[case(
-    "P28A",
-    AircraftCategory::Aeroplane,
-    Some(AircraftClassRating::SingleEngineAeroplane)
-)]
-#[case(
-    "P28R",
-    AircraftCategory::Aeroplane,
-    Some(AircraftClassRating::SingleEngineAeroplane)
-)]
-#[case("AS21", AircraftCategory::RegisteredSailplane, None)]
-#[case("DUOD", AircraftCategory::RegisteredSailplane, None)]
-#[case("GLID", AircraftCategory::RegisteredSailplane, None)]
-#[case("LS4", AircraftCategory::RegisteredSailplane, None)]
-#[case(
-    "BL8",
-    AircraftCategory::Aeroplane,
-    Some(AircraftClassRating::SingleEngineAeroplane)
-)]
-#[case(
-    "PTS2",
-    AircraftCategory::Aeroplane,
-    Some(AircraftClassRating::SingleEngineAeroplane)
-)]
-fn newly_seeded_designators_resolve(
-    #[case] designator: &str,
-    #[case] category: AircraftCategory,
-    #[case] class: Option<AircraftClassRating>,
-) {
-    let result = resolve_classification(designator, None).unwrap();
-    assert_eq!(result.category, category);
-    assert_eq!(result.class, class);
-    assert_eq!(
-        result.confidence,
-        Confidence::Provisional,
-        "{designator} has not been checked against a TCDS"
-    );
-}
-
-/// "PA28" was a real designator once, but Doc 8643 retired it around 1998 in
-/// favour of a fixed/retractable/turbo split — it must stay unresolved
-/// rather than being seeded as an alias for P28A, so a consumer storing the
-/// stale string surfaces as "unknown, needs correcting" rather than silently
-/// resolving to the wrong confidence trail.
-#[test]
-fn pa28_is_not_a_valid_designator() {
-    let result = resolve_classification("PA28", None);
-    assert!(matches!(
-        result,
-        Err(ClassificationError::UnknownDesignator(d)) if d == "PA28"
-    ));
-}
-
-/// `P28A` and `P28R` share one type certificate (fixed vs retractable gear
-/// is a Doc 8643 designator-level split, not something this table derives),
-/// so they must classify identically, same guard as the Citabria pair above.
-#[test]
-fn p28a_and_p28r_classify_identically() {
-    let fixed = resolve_classification("P28A", None).unwrap();
-    let retractable = resolve_classification("P28R", None).unwrap();
-    assert_eq!(fixed.category, retractable.category);
-    assert_eq!(fixed.class, retractable.class);
-}
-
-/// A glider resolves to RegisteredSailplane with no class rating and no
-/// design features (reg 61.755 defines none for it), regardless of which
-/// seeded glider designator is used, whether or not that designator happens
-/// to be a self-launching (engined) variant.
-#[test]
-fn gliders_have_no_class_and_no_design_features() {
-    for designator in ["AS21", "DUOD", "GLID", "LS4"] {
-        let result = resolve_classification(designator, None).unwrap();
-        assert_eq!(result.category, AircraftCategory::RegisteredSailplane);
-        assert_eq!(result.class, None);
-        assert!(result.design_features.is_empty());
-    }
-}
-
-/// AS21 and DUOD are specifically the self-launching motorglider variants
-/// (ASK-21Mi, Duo Discus T) — the plain, unpowered types have no individual
-/// Doc 8643 designator and fall under the generic GLID instead. The engine
-/// facts must say so, even though it does not change the derived category
-/// (Layer B's Glider -> RegisteredSailplane mapping ignores engine facts
-/// entirely, so this can only be checked against Layer A's own table).
-#[test]
-fn self_launching_gliders_carry_an_engine() {
-    for designator in ["AS21", "DUOD"] {
-        let facts = lookup(designator).unwrap();
-        assert_eq!(facts.description.engine_count, 1);
-        assert_eq!(facts.description.engine_type, EngineType::Piston);
-    }
-}
-
-/// GLID and LS4, by contrast, carry no engine at all.
-#[test]
-fn unpowered_gliders_carry_no_engine() {
-    for designator in ["GLID", "LS4"] {
-        let facts = lookup(designator).unwrap();
-        assert_eq!(facts.description.engine_count, 0);
-        assert_eq!(facts.description.engine_type, EngineType::None);
-    }
 }

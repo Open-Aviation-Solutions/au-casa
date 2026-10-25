@@ -2,14 +2,14 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! CASA Part 61 aircraft classification, derived from an ICAO Doc 8643 type
+//! CASA Part 61 aircraft classification, derived from an aircraft type
 //! designator.
 //!
 //! Two layers:
 //!
 //! - **Layer A** — `designator -> `[`AircraftDescription`]: country-agnostic
-//!   facts about the type, compiled independently of Doc 8643 (see
-//!   [`designators`]).
+//!   facts about the type, from the `aircraft-type-descriptions` crate, which
+//!   holds the table and cites each row's sources.
 //! - **Layer B** — [`AircraftDescription`]` -> `[`CasaAircraftClassification`]:
 //!   the Part 61 reading of those facts (regs 61.015, 61.020, 61.755).
 //!
@@ -19,27 +19,25 @@
 
 pub mod category;
 pub mod class_rating;
-pub mod description;
 pub mod design_feature;
-pub mod designators;
 
+pub use aircraft_type_descriptions::{AircraftDescription, AirframeKind, Confidence, EngineType};
 pub use category::AircraftCategory;
 pub use class_rating::AircraftClassRating;
-pub use description::{AircraftDescription, AirframeKind, EngineType};
 pub use design_feature::DesignFeature;
-pub use designators::Confidence;
 
+use aircraft_type_descriptions::DesignatorTable;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// Everything that can go wrong resolving a classification.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum ClassificationError {
-    /// The designator is not in the compiled table and the override did not
-    /// supply a category to fall back on.
+    /// The designator is not in the aircraft-type-descriptions table and the
+    /// override did not supply a category to fall back on.
     #[error(
-        "aircraft type '{0}' is not in the compiled designator table; supply \
-         a category override to classify it"
+        "aircraft type '{0}' is not in the aircraft-type-descriptions table; \
+         supply a category override to classify it"
     )]
     UnknownDesignator(String),
 
@@ -173,7 +171,7 @@ pub fn resolve_classification(
     designator: &str,
     classification_override: Option<&ClassificationOverride>,
 ) -> Result<CasaAircraftClassification, ClassificationError> {
-    let facts = designators::lookup(designator);
+    let facts = DesignatorTable::packaged().lookup(designator);
 
     let (mut category, mut class, mut design_features, confidence, source) = match facts {
         Some(facts) => {
@@ -184,7 +182,7 @@ pub fn resolve_classification(
                 class,
                 features,
                 facts.confidence,
-                Some(facts.source),
+                Some(facts.citation),
             )
         }
         None => {

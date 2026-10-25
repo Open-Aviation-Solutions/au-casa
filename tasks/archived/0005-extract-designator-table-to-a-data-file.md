@@ -1,7 +1,10 @@
 # Extract the designator table to a data file
 
-**Status:** proposal — format not decided, flagging for discussion before
-implementing.
+**Status:** closed, 26 October 2026, in favour of
+[#7](https://github.com/Open-Aviation-Solutions/au-casa/issues/7). The table is
+in [aircraft-type-descriptions](https://github.com/Open-Aviation-Solutions/aircraft-type-descriptions),
+as TOML with a schema, and this crate depends on it. What follows is the
+proposal as it stood, before that was decided.
 
 ## Purpose
 

@@ -63,7 +63,7 @@ pub enum RecognisedForeignState {
 /// This is a judgement recorded about a specific physical device, not
 /// something derivable: a qualification is a certificate an authority issues
 /// to one device. Unlike CASA aircraft classification, which is derived from a
-/// Doc 8643 designator, there is no resolver here and no lookup table.
+/// type designator, there is no resolver here and no lookup table.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum FstdRecognition {
