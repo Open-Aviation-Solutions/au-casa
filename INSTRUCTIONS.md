@@ -37,10 +37,17 @@ answers one such question:
   `FlightCrewLicence::is_pilot_licence` says which licences are pilot
   licences (reg 61.010), so no caller matches on the licences' names for it.
 
-`icao-shared-kernel` is a dependency pinned exactly (`=0.1.3`), as it is
-released as patch versions; moving to a new one is a deliberate change.
-A consumer must take the kernel from the same source and version, or its
-`LicenceTitle` is a different type from the one `part61_term` takes.
+`icao-shared-kernel` and aircraft-type-descriptions are taken by a
+compatible range (`^0.1`), not pinned exactly (au-casa#24): sibling country
+crates (nz-caa and the like) depend on them too, and a consumer such as a
+logbook imports several country crates at once. With exact pins two siblings
+on different patches could not be resolved together; with a range Cargo
+builds one copy of each, so the kernel's `LicenceTitle` and the table's
+`AirframeKind` are the same types in every crate. Both crates release a change
+that could alter a classification or a title as a minor version, which a
+caret range does not take up, so a patch they release cannot change what
+au-casa answers. A minor release is taken by the country crates together. A
+consumer takes them from the same source, by a range that overlaps au-casa's.
 
 ## Reading Part 61 for licences and category ratings
 
@@ -68,9 +75,12 @@ airship, is reserved, and there is no appendix for a powered-lift aircraft
 and the `designator -> description` table (Layer A) are the same for any
 country, so they live in
 [aircraft-type-descriptions](https://github.com/Open-Aviation-Solutions/aircraft-type-descriptions)
-(au-casa#7), which this crate depends on, pinned exactly: a row decides
-a licence-relevant classification, so moving to a new version is a deliberate
-change. Only Layer B, the derivation to CASA category/class/design
+(au-casa#7), which this crate depends on by a compatible range (see above). It
+is the vocabulary for aircraft facts shared by the country crates, as the
+kernel is for `AircraftType` and `LicenceTitle`, so au-casa does not wrap or
+redefine its types: it re-exports `AircraftDescription`, `AirframeKind`,
+`EngineType` and `Confidence` as a convenience only, and nothing relies on
+that being the only way to name them. Only Layer B, the derivation to CASA category/class/design
 features, is regulatory interpretation, and it is what stays here. A type is
 added to the table there, not here; a type the table lacks is
 `UnknownDesignator` until it is, or the caller overrides the category.
