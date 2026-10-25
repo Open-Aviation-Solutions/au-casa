@@ -171,6 +171,26 @@ fn catalogued_designator_resolves() {
     assert!(result.source.is_some());
 }
 
+/// The resolver's reading of a description for one designator of each shape,
+/// so that its wiring to Layer B is tested whatever the table's other rows.
+#[rstest]
+#[case("C172", AircraftCategory::Aeroplane, Some(AircraftClassRating::SingleEngineAeroplane), vec![])]
+#[case("PA44", AircraftCategory::Aeroplane, Some(AircraftClassRating::MultiEngineAeroplane), vec![])]
+#[case("C208", AircraftCategory::Aeroplane, Some(AircraftClassRating::SingleEngineAeroplane), vec![DesignFeature::GasTurbineEngine])]
+#[case("R44", AircraftCategory::Helicopter, Some(AircraftClassRating::SingleEngineHelicopter), vec![])]
+#[case("GLID", AircraftCategory::RegisteredSailplane, None, vec![])]
+fn designator_resolves_through_layer_b(
+    #[case] designator: &str,
+    #[case] category: AircraftCategory,
+    #[case] class: Option<AircraftClassRating>,
+    #[case] features: Vec<DesignFeature>,
+) {
+    let result = resolve_classification(designator, None).unwrap();
+    assert_eq!(result.category, category);
+    assert_eq!(result.class, class);
+    assert_eq!(result.design_features, features);
+}
+
 /// C700 was refused while the table lived in this crate (#7).
 #[test]
 fn citation_longitude_resolves() {

@@ -26,13 +26,13 @@ What is covered:
 - **Aircraft classification** (`resolve_classification`, `classify`): an
   aircraft type's Part 61 category (reg 61.015, or reg 61.007(2) for a
   registered sailplane), class (reg 61.020) and design features (reg 61.755),
-  from its ICAO type designator, with a caller's override for what varies
+  from its aircraft type designator, with a caller's override for what varies
   between airframes of one type. The table of designators is small and grows
-  as types are needed, in
+  as types are needed; it is kept in
   [aircraft-type-descriptions](https://github.com/Open-Aviation-Solutions/aircraft-type-descriptions),
-  which this crate takes it from. A row checked against its type certificate data sheet
-  is `Confidence::Confirmed`; the rest are `Confidence::Provisional`, each
-  saying what is left to check.
+  which this crate depends on, and each row cites its sources. A row checked
+  against its type certificate data sheet is `Confidence::Confirmed`; the rest
+  are `Confidence::Provisional`.
 - **Flight simulation training devices** (`FstdRecognition`,
   `counts_for_part61`): the five kinds of device in reg 61.010's definition of
   a flight simulation training device, including those qualified by a

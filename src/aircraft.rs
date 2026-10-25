@@ -21,9 +21,7 @@ pub mod category;
 pub mod class_rating;
 pub mod design_feature;
 
-pub use aircraft_type_descriptions::{
-    AircraftDescription, AirframeKind, Confidence, EngineType, WakeTurbulenceCategory,
-};
+pub use aircraft_type_descriptions::{AircraftDescription, AirframeKind, Confidence, EngineType};
 pub use category::AircraftCategory;
 pub use class_rating::AircraftClassRating;
 pub use design_feature::DesignFeature;
@@ -35,11 +33,11 @@ use thiserror::Error;
 /// Everything that can go wrong resolving a classification.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum ClassificationError {
-    /// The designator is not in the compiled table and the override did not
-    /// supply a category to fall back on.
+    /// The designator is not in the aircraft-type-descriptions table and the
+    /// override did not supply a category to fall back on.
     #[error(
-        "aircraft type '{0}' is not in the compiled designator table; supply \
-         a category override to classify it"
+        "aircraft type '{0}' is not in the aircraft-type-descriptions table; \
+         supply a category override to classify it"
     )]
     UnknownDesignator(String),
 
