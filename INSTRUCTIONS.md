@@ -97,10 +97,10 @@ added to the table there, not here; a type the table lacks is
   `Makefile`, which addlicense does not recognise.
 - **Regulatory terms only**: names and terminology must be verifiable against
   CASA Part 61 (or the specific regulation cited).
-- **Discuss before implementing**: design decisions get a `tasks/NNNN-*.md`
-  discussion first. This repository follows the conventions written down in
-  the earlier Python kernel's tasks, which are not published; `tasks/`
-  here has none of its own.
+- **Discuss before implementing**: a design decision is discussed in an issue
+  first, and the issue records what was decided. `tasks/archived/` holds the
+  earlier design notes (`NNNN-*.md`), kept as history; tasks `0001` and `0002`
+  cite tasks of the earlier Python kernel that are not published.
 
 ## Releasing
 
