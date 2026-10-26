@@ -16,10 +16,13 @@ that are Australia's alone are kept here.
 
 ## Status
 
-Early: the version is `0.1.0`. Until `1.0`, the API may change between any two
-versions, patch releases included, so pin the version exactly. Each release
-depends on one exact release of `icao-shared-kernel`; take the kernel at that
-same version, or its types are not the ones this crate takes.
+Early: the version is `0.1.0`. Take it by a caret range (`"0.1"`): until `1.0`
+a breaking release is a minor version, as
+[`INSTRUCTIONS.md`, "Releasing"](INSTRUCTIONS.md#releasing) sets out. From its
+next release, and on `main` now, it takes `icao-shared-kernel` and
+[aircraft-type-descriptions](https://github.com/Open-Aviation-Solutions/aircraft-type-descriptions)
+by caret range (`^0.1.3` and `^0.1.0`); the published `0.1.0` pins them
+exactly (`=0.1.3` and `=0.1.0`).
 
 What is covered:
 
@@ -82,13 +85,19 @@ and what they fly.
 
 ## Usage
 
-Add it from crates.io, with the kernel at the version it depends on:
+Add it from crates.io, with the kernel at a version it accepts (`0.1.0`
+requires exactly `0.1.3`):
 
 ```toml
 [dependencies]
-au-casa = "=0.1.0"
-icao-shared-kernel = "=0.1.3"
+au-casa = "0.1"
+icao-shared-kernel = "0.1.3"
 ```
+
+The aircraft description types (`AircraftDescription`, `AirframeKind`,
+`EngineType`, `Confidence`) are aircraft-type-descriptions' own, re-exported
+here for convenience. To use its table as well, add
+`aircraft-type-descriptions = "0.1.0"` and name the types from either crate.
 
 ```rust
 use au_casa::{

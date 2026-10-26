@@ -37,10 +37,19 @@ answers one such question:
   `FlightCrewLicence::is_pilot_licence` says which licences are pilot
   licences (reg 61.010), so no caller matches on the licences' names for it.
 
-`icao-shared-kernel` is a dependency pinned exactly (`=0.1.3`), as it is
-released as patch versions; moving to a new one is a deliberate change.
-A consumer must take the kernel from the same source and version, or its
-`LicenceTitle` is a different type from the one `part61_term` takes.
+`icao-shared-kernel` and aircraft-type-descriptions are taken by a caret
+range (`^0.1.3` and `^0.1.0`), not pinned exactly (au-casa#24): sibling
+country crates (nz-caa and the like) depend on them too, and a consumer such
+as a logbook imports several at once. Exact pins on different patches cannot
+be resolved together; with caret ranges Cargo builds one copy of each, so the
+kernel's `LicenceTitle` and the table's `AirframeKind` are the same types in
+every crate. A caret range takes up patches but not a minor version, and each
+crate releases a change that could alter a classification as a minor version:
+the kernel by [its rule](https://github.com/Open-Aviation-Solutions/icao-shared-kernel/blob/main/INSTRUCTIONS.md#consumers), the table by [its rule](https://github.com/Open-Aviation-Solutions/aircraft-type-descriptions/blob/main/INSTRUCTIONS.md#releasing). A patch of the
+table can still change an answer (a new row, a confidence, a citation). A
+minor release is taken by the country crates together. A consumer takes them
+from the same source, by a caret range compatible with au-casa's (the same
+`0.x` minor), since Cargo builds one copy only within one such range.
 
 ## Reading Part 61 for licences and category ratings
 
@@ -68,9 +77,12 @@ airship, is reserved, and there is no appendix for a powered-lift aircraft
 and the `designator -> description` table (Layer A) are the same for any
 country, so they live in
 [aircraft-type-descriptions](https://github.com/Open-Aviation-Solutions/aircraft-type-descriptions)
-(au-casa#7), which this crate depends on, pinned exactly: a row decides
-a licence-relevant classification, so moving to a new version is a deliberate
-change. Only Layer B, the derivation to CASA category/class/design
+(au-casa#7), which this crate depends on by a compatible range (see above). It
+is the vocabulary for aircraft facts shared by the country crates, as the
+kernel is for `AircraftType` and `LicenceTitle`, so au-casa does not wrap or
+redefine its types: it re-exports `AircraftDescription`, `AirframeKind`,
+`EngineType` and `Confidence` as a convenience only, and nothing relies on
+that being the only way to name them. Only Layer B, the derivation to CASA category/class/design
 features, is regulatory interpretation, and it is what stays here. A type is
 added to the table there, not here; a type the table lacks is
 `UnknownDesignator` until it is, or the caller overrides the category.
@@ -117,10 +129,13 @@ which GitHub allows only on `main`, and crates.io's trusted publisher accepts
 only that environment; `main` changes only through a pull request with CI
 passing.
 
-While on `0.x`, every release bumps the patch version, a breaking one
-included, to keep the numbers low, as the kernel's do: consumers pin the
-version exactly (`=0.1.0`), so a `cargo update` never takes a new release
-until they move the pin.
+While on `0.x`, a breaking release bumps the minor version (`0.2.0`) and a
+compatible one the patch, as the kernel's do (decided on au-casa#24).
+Breaking includes a change to the API and a change to the Part 61 reading
+that changes an existing designator's category, class or design features, or
+a title of licence's Part 61 term. Consumers take au-casa by a caret range
+(`^0.1.0`), so a `cargo update` takes up patches but not a breaking release,
+which they move to on purpose.
 
 ## Commands
 

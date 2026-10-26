@@ -17,11 +17,10 @@ name = "au_casa"
 path = "src/lib.rs"
 
 [dependencies]
-# Released as patch versions, so pinned exactly.
-icao-shared-kernel = "=0.1.3"
-# Likewise pinned exactly: a new row is a new patch version, and a row decides
-# a licence-relevant classification.
-aircraft-type-descriptions = "=0.1.0"
+# By caret range, not pinned exactly, so that one copy of each is built with
+# sibling country crates; see INSTRUCTIONS.md ("Purpose and scope").
+icao-shared-kernel = "^0.1.3"
+aircraft-type-descriptions = "^0.1.0"
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 time = "0.3"
