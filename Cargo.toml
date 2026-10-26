@@ -17,15 +17,8 @@ name = "au_casa"
 path = "src/lib.rs"
 
 [dependencies]
-# Both are shared with sibling country crates (au-casa#24), so they are taken
-# by a compatible range, not pinned exactly: Cargo then builds one copy of each
-# for a consumer that has au-casa and a sibling, and their types are the same
-# types. aircraft-type-descriptions releases a change to an existing row's
-# description facts, or a row removed, as a minor version, and the kernel a
-# breaking change (one that could alter a title of licence included) as a
-# minor version once icao-shared-kernel's companion pull request to au-casa#24
-# merges; a caret range takes neither up. A minor release is taken by the
-# country crates together.
+# By caret range, not pinned exactly, so that one copy of each is built with
+# sibling country crates; see INSTRUCTIONS.md ("Purpose and scope").
 icao-shared-kernel = "^0.1.3"
 aircraft-type-descriptions = "^0.1.0"
 serde = { version = "1", features = ["derive"] }

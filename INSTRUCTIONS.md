@@ -37,23 +37,19 @@ answers one such question:
   `FlightCrewLicence::is_pilot_licence` says which licences are pilot
   licences (reg 61.010), so no caller matches on the licences' names for it.
 
-`icao-shared-kernel` and aircraft-type-descriptions are taken by a
-caret range (`^0.1.3` and `^0.1.0`), not pinned exactly (au-casa#24): sibling country
-crates (nz-caa and the like) depend on them too, and a consumer such as a
-logbook imports several country crates at once. With exact pins two siblings
-on different patches could not be resolved together; with a range Cargo
-builds one copy of each, so the kernel's `LicenceTitle` and the table's
-`AirframeKind` are the same types in every crate. A caret range takes up
-patches but not a minor version. The kernel releases a breaking change,
-including one that could alter a title of licence, as a minor version; the
-table releases a change to an existing row's description facts (airframe,
-number or kind of engines, wake turbulence category), or a row removed, as a
-minor version. A patch can still change what au-casa answers for a
-designator (a new row classifies one the table lacked; a confidence or a
-citation can change), but it never changes an existing row's description
-facts or removes a row. A minor release is taken by the country crates
-together. A consumer takes them from the same source, by a range that
-overlaps au-casa's.
+`icao-shared-kernel` and aircraft-type-descriptions are taken by a caret
+range (`^0.1.3` and `^0.1.0`), not pinned exactly (au-casa#24): sibling
+country crates (nz-caa and the like) depend on them too, and a consumer such
+as a logbook imports several at once. Exact pins on different patches cannot
+be resolved together; with caret ranges Cargo builds one copy of each, so the
+kernel's `LicenceTitle` and the table's `AirframeKind` are the same types in
+every crate. A caret range takes up patches but not a minor version, and each
+crate releases a change that could alter a classification as a minor version:
+the kernel by [its rule](https://github.com/Open-Aviation-Solutions/icao-shared-kernel/blob/main/INSTRUCTIONS.md#consumers), the table by [its rule](https://github.com/Open-Aviation-Solutions/aircraft-type-descriptions/blob/main/INSTRUCTIONS.md#releasing). A patch of the
+table can still change an answer (a new row, a confidence, a citation). A
+minor release is taken by the country crates together. A consumer takes them
+from the same source, by a caret range compatible with au-casa's (the same
+`0.x` minor), since Cargo builds one copy only within one such range.
 
 ## Reading Part 61 for licences and category ratings
 
@@ -134,10 +130,12 @@ only that environment; `main` changes only through a pull request with CI
 passing.
 
 While on `0.x`, a breaking release bumps the minor version (`0.2.0`) and a
-compatible one the patch, as the kernel's and the table's do (decided on
-au-casa#24). Consumers take au-casa by a caret range (`^0.1.0`), so a `cargo
-update` takes up patches but not a breaking release, which they move to on
-purpose.
+compatible one the patch, as the kernel's do (decided on au-casa#24).
+Breaking includes a change to the API and a change to the Part 61 reading
+that changes an existing designator's category, class or design features, or
+a title of licence's Part 61 term. Consumers take au-casa by a caret range
+(`^0.1.0`), so a `cargo update` takes up patches but not a breaking release,
+which they move to on purpose.
 
 ## Commands
 
