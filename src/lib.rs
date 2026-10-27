@@ -22,9 +22,8 @@ pub mod fstd;
 pub mod licence;
 
 pub use aircraft::{
-    classify, resolve_classification, AircraftCategory, AircraftClassRating, AircraftDescription,
-    AirframeKind, CasaAircraftClassification, ClassificationError, ClassificationOverride,
-    Confidence, DesignFeature, EngineType,
+    classify, resolve_classification, AircraftCategory, AircraftClassRating,
+    CasaAircraftClassification, ClassificationError, ClassificationOverride, DesignFeature,
 };
 pub use fstd::{counts_for_part61, FstdRecognition, RecognisedForeignState};
 pub use licence::{part61_term, FlightCrewLicence, IssuedNationalTitle, NationalTitle, Part61Term};
