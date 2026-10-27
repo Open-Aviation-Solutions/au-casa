@@ -79,10 +79,9 @@ country, so they live in
 [aircraft-type-descriptions](https://github.com/Open-Aviation-Solutions/aircraft-type-descriptions)
 (au-casa#7), which this crate depends on by a compatible range (see above). It
 is the vocabulary for aircraft facts shared by the country crates, as the
-kernel is for `AircraftType` and `LicenceTitle`, so au-casa does not wrap or
-redefine its types: it re-exports `AircraftDescription`, `AirframeKind`,
-`EngineType` and `Confidence` as a convenience only, and nothing relies on
-that being the only way to name them. Only Layer B, the derivation to CASA category/class/design
+kernel is for `AircraftType` and `LicenceTitle`, so au-casa does not wrap,
+redefine or re-export its types (`AircraftDescription`, `AirframeKind`,
+`EngineType` and `Confidence`): a consumer names them from that crate. Only Layer B, the derivation to CASA category/class/design
 features, is regulatory interpretation, and it is what stays here. A type is
 added to the table there, not here; a type the table lacks is
 `UnknownDesignator` until it is, or the caller overrides the category.
@@ -134,7 +133,7 @@ compatible one the patch, as the kernel's do (decided on au-casa#24).
 Breaking includes a change to the API and a change to the Part 61 reading
 that changes an existing designator's category, class or design features, or
 a title of licence's Part 61 term. Consumers take au-casa by a caret range
-(`^0.1.0`), so a `cargo update` takes up patches but not a breaking release,
+on its 0.x minor, so a `cargo update` takes up patches but not a breaking release,
 which they move to on purpose.
 
 ## Commands

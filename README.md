@@ -16,13 +16,12 @@ that are Australia's alone are kept here.
 
 ## Status
 
-Early: the version is `0.1.0`. Take it by a caret range (`"0.1"`): until `1.0`
-a breaking release is a minor version, as
-[`INSTRUCTIONS.md`, "Releasing"](INSTRUCTIONS.md#releasing) sets out. From its
-next release, and on `main` now, it takes `icao-shared-kernel` and
+Early: the version is `0.2.0`. Take it by a caret range (`"0.2"`): until `1.0`
+a breaking release is a minor version (0.2 stopped re-exporting the aircraft
+description types), as
+[`INSTRUCTIONS.md`, "Releasing"](INSTRUCTIONS.md#releasing) sets out. It takes `icao-shared-kernel` and
 [aircraft-type-descriptions](https://github.com/Open-Aviation-Solutions/aircraft-type-descriptions)
-by caret range (`^0.1.3` and `^0.1.0`); the published `0.1.0` pins them
-exactly (`=0.1.3` and `=0.1.0`).
+by caret range (`^0.1.3` and `^0.1.0`).
 
 What is covered:
 
@@ -85,25 +84,27 @@ and what they fly.
 
 ## Usage
 
-Add it from crates.io, with the kernel at a version it accepts (`0.1.0`
-requires exactly `0.1.3`):
+Add it from crates.io, with the kernel at a version it accepts (`^0.1.3`):
 
 ```toml
 [dependencies]
-au-casa = "0.1"
+au-casa = "0.2"
+aircraft-type-descriptions = "0.1.0"
 icao-shared-kernel = "0.1.3"
 ```
 
 The aircraft description types (`AircraftDescription`, `AirframeKind`,
-`EngineType`, `Confidence`) are aircraft-type-descriptions' own, re-exported
-here for convenience. To use its table as well, add
-`aircraft-type-descriptions = "0.1.0"` and name the types from either crate.
+`EngineType`, `Confidence`) are aircraft-type-descriptions' own, and
+au-casa does not re-export them: name them from that crate, taken by a caret
+range compatible with au-casa's own dependency on it (the same 0.x minor; see
+`Cargo.toml`), so that Cargo builds one copy.
 
 ```rust
 use au_casa::{
     part61_term, resolve_classification, AircraftCategory, AircraftClassRating,
-    ClassificationError, Confidence,
+    ClassificationError,
 };
+use aircraft_type_descriptions::Confidence;
 use icao_shared_kernel::{LicenceTitle, PrivateOrCommercialCategory};
 
 fn main() -> Result<(), ClassificationError> {
