@@ -10,10 +10,11 @@
 //! - **Layer A** — `designator -> `[`AircraftDescription`]: country-agnostic
 //!   facts about the type, from the `aircraft-type-descriptions` crate, which
 //!   holds the table and cites each row's sources. [`AircraftDescription`],
-//!   [`AirframeKind`], `EngineType` and [`Confidence`] are that crate's
+//!   [`AirframeKind`], [`EngineType`](aircraft_type_descriptions::EngineType) and [`Confidence`] are that crate's
 //!   types, the vocabulary shared with sibling country crates. They are named
 //!   from that crate, not from here; a consumer takes it by a caret range
-//!   compatible with au-casa's `^0.1.0`, so that Cargo builds one copy.
+//!   compatible with au-casa's own dependency on it (the same 0.x minor; see
+//!   `Cargo.toml`), so that Cargo builds one copy.
 //! - **Layer B** — [`AircraftDescription`]` -> `[`CasaAircraftClassification`]:
 //!   the Part 61 reading of those facts (regs 61.015, 61.020, 61.755).
 //!

@@ -133,7 +133,7 @@ compatible one the patch, as the kernel's do (decided on au-casa#24).
 Breaking includes a change to the API and a change to the Part 61 reading
 that changes an existing designator's category, class or design features, or
 a title of licence's Part 61 term. Consumers take au-casa by a caret range
-(`^0.1.0`), so a `cargo update` takes up patches but not a breaking release,
+on its 0.x minor, so a `cargo update` takes up patches but not a breaking release,
 which they move to on purpose.
 
 ## Commands
