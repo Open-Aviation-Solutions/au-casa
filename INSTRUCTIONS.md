@@ -51,6 +51,13 @@ minor release is taken by the country crates together. A consumer takes them
 from the same source, by a caret range compatible with au-casa's (the same
 `0.x` minor), since Cargo builds one copy only within one such range.
 
+Before starting work, check whether either has a newer release
+(`cargo search icao-shared-kernel --limit 1`, and the same for
+aircraft-type-descriptions). A newer patch is taken up with `cargo update -p
+<crate>` in the same pull request. A newer minor version is breaking, and is
+moved to first, in a pull request of its own, before the work; it then needs
+an au-casa minor release of its own, as above.
+
 ## Reading Part 61 for licences and category ratings
 
 Division 61.L.2 does not list which aircraft category ratings each licence can
