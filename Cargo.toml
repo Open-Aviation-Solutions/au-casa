@@ -4,7 +4,7 @@
 
 [package]
 name = "au-casa"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 license = "MPL-2.0"
 description = "CASA (Australia) Part 61 rules that the ICAO-universal icao-shared-kernel leaves out: aircraft classification, simulator recognition and titles of licence."
@@ -19,7 +19,7 @@ path = "src/lib.rs"
 [dependencies]
 # By caret range, not pinned exactly, so that one copy of each is built with
 # sibling country crates; see INSTRUCTIONS.md ("Purpose and scope").
-icao-shared-kernel = "^0.1.3"
+icao-shared-kernel = "^0.2.0"
 aircraft-type-descriptions = "^0.1.0"
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"

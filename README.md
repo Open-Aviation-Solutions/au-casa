@@ -16,12 +16,12 @@ that are Australia's alone are kept here.
 
 ## Status
 
-Early: the version is `0.1.0`. Take it by a caret range (`"0.1"`): until `1.0`
+Early: the version is `0.2.0`. Take it by a caret range (`"0.2"`): until `1.0`
 a breaking release is a minor version, as
 [`INSTRUCTIONS.md`, "Releasing"](INSTRUCTIONS.md#releasing) sets out. From its
 next release, and on `main` now, it takes `icao-shared-kernel` and
 [aircraft-type-descriptions](https://github.com/Open-Aviation-Solutions/aircraft-type-descriptions)
-by caret range (`^0.1.3` and `^0.1.0`); the published `0.1.0` pins them
+by caret range (`^0.2.0` and `^0.1.0`); the published `0.1.0` pins them
 exactly (`=0.1.3` and `=0.1.0`).
 
 What is covered:
@@ -85,13 +85,12 @@ and what they fly.
 
 ## Usage
 
-Add it from crates.io, with the kernel at a version it accepts (`0.1.0`
-requires exactly `0.1.3`):
+Add it from crates.io, with the kernel at a version it accepts (`^0.2.0`):
 
 ```toml
 [dependencies]
-au-casa = "0.1"
-icao-shared-kernel = "0.1.3"
+au-casa = "0.2"
+icao-shared-kernel = "0.2.0"
 ```
 
 The aircraft description types (`AircraftDescription`, `AirframeKind`,
