@@ -5,10 +5,10 @@
 //! Part 61 aircraft classification: the reg 61.755 table, Layer B derivation
 //! per category, and the resolver's override and unknown-designator paths.
 
+use aircraft_type_descriptions::{AircraftDescription, AirframeKind, Confidence, EngineType};
 use au_casa::{
-    classify, resolve_classification, AircraftCategory, AircraftClassRating, AircraftDescription,
-    AirframeKind, ClassificationError, ClassificationOverride, Confidence, DesignFeature,
-    EngineType,
+    classify, resolve_classification, AircraftCategory, AircraftClassRating, ClassificationError,
+    ClassificationOverride, DesignFeature,
 };
 use rstest::rstest;
 
