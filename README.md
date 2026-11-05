@@ -16,13 +16,14 @@ that are Australia's alone are kept here.
 
 ## Status
 
-Early: the version is `0.2.0`. Take it by a caret range (`"0.2"`): until `1.0`
+Early: a `0.x` release. Take it by a caret range on its minor version (such as `"0.1"`): until `1.0`
 a breaking release is a minor version, as
 [`INSTRUCTIONS.md`, "Releasing"](INSTRUCTIONS.md#releasing) sets out. From its
 next release, and on `main` now, it takes `icao-shared-kernel` and
 [aircraft-type-descriptions](https://github.com/Open-Aviation-Solutions/aircraft-type-descriptions)
-by caret range (`^0.2.0` and `^0.1.0`); the published `0.1.0` pins them
-exactly (`=0.1.3` and `=0.1.0`).
+by caret range; `0.1.0` pinned them exactly (`=0.1.3` and `=0.1.0`), and `0.1.1`
+onwards use `^0.1.3` and `^0.1.0`. `main` takes the kernel at `^0.2.0`, unreleased
+until au-casa `0.2.0`.
 
 What is covered:
 
@@ -85,12 +86,15 @@ and what they fly.
 
 ## Usage
 
-Add it from crates.io, with the kernel at a version it accepts (`^0.2.0`):
+Add it from crates.io, with the kernel at a version it accepts. au-casa takes
+the kernel at a matching `0.x` minor (au-casa `0.1.x` with kernel `0.1.x`,
+`0.2.x` with `0.2.x`); mixing them builds two copies of `LicenceTitle`. The
+published pair is:
 
 ```toml
 [dependencies]
-au-casa = "0.2"
-icao-shared-kernel = "0.2.0"
+au-casa = "0.1"
+icao-shared-kernel = "0.1.3"
 ```
 
 The aircraft description types (`AircraftDescription`, `AirframeKind`,
