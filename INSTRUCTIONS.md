@@ -18,10 +18,17 @@ answers one such question:
 - `aircraft` (implemented, task `0001`): CASA category/class/design-feature
   classification, derived from an aircraft type designator, with the
   table of types in aircraft-type-descriptions.
-- Simulator classification (ready, task `0002`): recognition of a flight
-  simulation training device under reg 61.010, and whether a session counts
-  for Part 61 currency. Builds on the `FlightSimulationTrainingDevice` /
-  `FstdSession` aggregates in `icao-shared-kernel`.
+- `fstd` (implemented, task `0002`): recognition of a flight simulation
+  training device under reg 61.010, and whether a device is one at all
+  (`counts_for_part61`). Builds on the `FlightSimulationTrainingDevice` /
+  `FstdSession` aggregates in `icao-shared-kernel`. Reg 61.010 defines two
+  terms: a "flight simulation training device" (any of five recognised kinds,
+  which is what `fstd` models), and an "approved flight simulation training
+  device" for a purpose (one such device that, by the definition's
+  paragraphs, may be used for that purpose). The recency rules (reg 61.870,
+  for one) use the second, so whether a session
+  counts for them is `logbook`'s `approved_fstd`, which the pilot records,
+  not `counts_for_part61`.
 - `licence` (issue #14): for each of the kernel's Annex 1 titles of licence
   (`icao_shared_kernel::LicenceTitle`), whether CASA issues it and, if so, its
   Part 61 term (the flight crew licence and aircraft category rating), with
@@ -36,13 +43,26 @@ answers one such question:
   by its identity, and the kernel stays the source for what Annex 1 can say.
   `FlightCrewLicence::is_pilot_licence` says which licences are pilot
   licences (reg 61.010), so no caller matches on the licences' names for it.
+- `logbook` (au-casa#29, in progress): CASA's rules for a pilot's logbook,
+  as `Casa`, which implements logbook-shared-kernel's `LicensingAuthority`
+  for `AU-CASA`; and CASA's authority-specific information on an entry
+  (`EntryInformation`), a stored format whose every key and spelling is
+  mapped by hand, with no derived serde, under a version of its own (the
+  kernel's reserved key `_version`). So far `Casa` says which entries count
+  (`counts`: a session only in an approved flight simulation training
+  device, reg 61.010), what a type counts as (`classify`), and refuses
+  information on an entry it cannot read (`problems_for`), so that the host
+  does not stamp and save it; its questions, its other problems, its
+  requirements, currency and totals follow in the issues under au-casa#29.
+  Stored information must carry its version (`EntryInformation::read`);
+  only information about to be saved may lack it (`read_to_save`).
 
-`icao-shared-kernel` and aircraft-type-descriptions are taken by a caret
-range (`^0.2.0` and `^0.1.0`), not pinned exactly (au-casa#24): sibling
-country crates (nz-caa and the like) depend on them too, and a consumer such
-as a logbook imports several at once. Exact pins on different patches cannot
-be resolved together; with caret ranges Cargo builds one copy of each, so the
-kernel's `LicenceTitle` and the table's `AirframeKind` are the same types in
+`icao-shared-kernel`, logbook-shared-kernel and aircraft-type-descriptions
+are taken by a caret range (`^0.5`, `^0.2` and `^0.1.0`), not pinned exactly
+(au-casa#24): sibling country crates (nz-caa and the like) depend on them
+too, and a consumer such as a logbook imports several at once. Exact pins on
+different patches cannot be resolved together; with caret ranges Cargo builds
+one copy of each, so the kernel's `LicenceTitle` and the table's `AirframeKind` are the same types in
 every crate. A caret range takes up patches but not a minor version, and each
 crate releases a change that could alter a classification as a minor version:
 the kernel by [its rule](https://github.com/Open-Aviation-Solutions/icao-shared-kernel/blob/main/INSTRUCTIONS.md#consumers), the table by [its rule](https://github.com/Open-Aviation-Solutions/aircraft-type-descriptions/blob/main/INSTRUCTIONS.md#releasing). A patch of the
@@ -51,12 +71,15 @@ minor release is taken by the country crates together. A consumer takes them
 from the same source, by a caret range compatible with au-casa's (the same
 `0.x` minor), since Cargo builds one copy only within one such range.
 
-Before starting work, check whether either has a newer release
+Before starting work, check whether any of the three has a newer release
 (`cargo search icao-shared-kernel --limit 1`, and the same for
-aircraft-type-descriptions). A newer patch is taken up with `cargo update -p
-<crate>` in the same pull request. A newer minor version is breaking, and is
-moved to first, in a pull request of its own, before the work; it then needs
-an au-casa minor release of its own, as above.
+logbook-shared-kernel and aircraft-type-descriptions). A newer patch is taken
+up with `cargo update -p <crate>` in the same pull request. A newer minor
+version is breaking, and is moved to first, in a pull request of its own,
+before the work; it then needs an au-casa minor release of its own, as above.
+An issue can settle otherwise: au-casa#29 takes icao-shared-kernel 0.5 and
+logbook-shared-kernel 0.2 in the first pull request of its stack, which
+releases once, at its end.
 
 ## Reading Part 61 for licences and category ratings
 

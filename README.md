@@ -66,6 +66,7 @@ Known not to work:
   class, though reg 61.020(2) puts a multi-engine centre-line thrust
   aeroplane, and any prescribed under reg 61.050, in the single-engine class
   ([#13](https://github.com/Open-Aviation-Solutions/au-casa/issues/13)).
+  The same holds for `Casa::classify`, which has no override.
 
 The types serialise with serde, but that JSON is not a stored format that is
 promised: it may change between versions, as the API may. The open

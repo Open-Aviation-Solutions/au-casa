@@ -16,10 +16,14 @@
 //!   the kernel's Annex 1 titles of licence, or that CASA does not issue it;
 //!   and the national titles, the pairs Part 61 grants that Annex 1 has no
 //!   title for.
+//! - [`logbook`] — CASA's rules for a pilot's logbook ([`Casa`], through
+//!   logbook-shared-kernel's `LicensingAuthority`), and CASA's information on
+//!   an entry ([`EntryInformation`]), a stored format.
 
 pub mod aircraft;
 pub mod fstd;
 pub mod licence;
+pub mod logbook;
 
 pub use aircraft::{
     classify, resolve_classification, AircraftCategory, AircraftClassRating,
@@ -27,6 +31,7 @@ pub use aircraft::{
 };
 pub use fstd::{counts_for_part61, FstdRecognition, RecognisedForeignState};
 pub use licence::{part61_term, FlightCrewLicence, IssuedNationalTitle, NationalTitle, Part61Term};
+pub use logbook::{Casa, EntryInformation, InformationError, SupervisionRoute};
 
 // Compiles and runs the README's examples with the doc tests.
 #[cfg(doctest)]
