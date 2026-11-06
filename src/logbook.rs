@@ -39,10 +39,21 @@ pub struct Casa {
 
 impl Casa {
     pub fn new() -> Self {
-        Self {
-            id: AuthorityId::new("AU", "CASA").expect("AU is a State and CASA is not empty"),
-        }
+        Self { id: casa() }
     }
+}
+
+/// `AU-CASA`.
+fn casa() -> AuthorityId {
+    AuthorityId::new("AU", "CASA").expect("AU is a State and CASA is not empty")
+}
+
+/// CASA's information on an entry, read as it is stored; `None` when the
+/// entry has none, or has information that cannot be read.
+pub(crate) fn information(entry: &Entry) -> Option<EntryInformation> {
+    Record::Entry(entry)
+        .information_for(&casa())
+        .and_then(|information| EntryInformation::read(information).ok())
 }
 
 impl Default for Casa {
@@ -64,9 +75,7 @@ impl LicensingAuthority for Casa {
     fn counts(&self, entry: &Entry) -> bool {
         match entry.subject() {
             Subject::Flight { .. } => true,
-            Subject::Session { .. } => Record::Entry(entry)
-                .information_for(&self.id)
-                .and_then(|information| EntryInformation::read(information).ok())
+            Subject::Session { .. } => information(entry)
                 .is_some_and(|information| information.approved_fstd == Some(true)),
         }
     }
