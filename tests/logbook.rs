@@ -153,7 +153,7 @@ fn each_requirement_has_its_result_and_each_figure_its_time() {
         requirements[0].name,
         "Carrying a passenger by day in an aeroplane"
     );
-    assert_eq!(requirements[0].regulation, "reg 61.395(1)");
+    assert_eq!(requirements[0].regulation, "61.395(1)");
     let answered: Vec<_> = casa
         .currency(date!(2026 - 11 - 06), &logbook)
         .into_iter()

@@ -27,7 +27,7 @@ use logbook_shared_kernel::{
 use time::Date;
 
 use crate::aircraft::AircraftClassRating;
-use crate::logbook::Casa;
+use crate::logbook::{class_name, Casa};
 
 use flight_review::FlightReview;
 use guidance_operations::GuidanceOperations;
@@ -40,84 +40,116 @@ use passenger_day::PassengerDay;
 use passenger_night::PassengerNight;
 use single_pilot_ifr::SinglePilotIfr;
 
-/// Each requirement CASA's rules check: its id, its name in the
-/// regulation's words and the regulation that sets it, in the order they
-/// are reported. Aeroplane recency comes first, then instrument recency,
-/// then the flight reviews and the instrument proficiency check, as
-/// pilot-logbook listed them; the two guidance operations follow reg
-/// 61.870(5).
-///
-/// The ids are pilot-logbook's keys for the same requirements (its
-/// `wording.ts`): the regulation, and for a flight review its class rating
-/// too. They are stable: a host may keep them.
-const REQUIREMENTS: [(&str, &str, &str); 12] = [
-    (
-        "61.395(1)",
-        "Carrying a passenger by day in an aeroplane",
-        "reg 61.395(1)",
-    ),
-    (
-        "61.395(2)",
-        "Carrying a passenger at night in an aeroplane",
-        "reg 61.395(2)",
-    ),
-    (
-        "61.965",
-        "Recent experience for the night VFR rating in an aeroplane",
-        "reg 61.965",
-    ),
-    (
-        "61.870(2)",
-        "3 instrument approach operations",
-        "reg 61.870(2)",
-    ),
-    (
-        "61.870(4)",
-        "2D instrument approach operation",
-        "reg 61.870(4)",
-    ),
-    (
-        "61.870(5)",
-        "3D instrument approach operation",
-        "reg 61.870(5)",
-    ),
-    ("61.870(6)", "Azimuth guidance operation", "reg 61.870(6)"),
-    (
-        "61.870(7)",
-        "Course deviation indicator operation",
-        "reg 61.870(7)",
-    ),
-    (
-        "61.875",
-        "Flight or simulated flight under the IFR in a single-pilot operation",
-        "reg 61.875",
-    ),
-    (
-        "61.745|single-engine-aeroplane",
-        "Flight review for the single-engine aeroplane class rating",
-        "reg 61.745",
-    ),
-    (
-        "61.745|multi-engine-aeroplane",
-        "Flight review for the multi-engine aeroplane class rating",
-        "reg 61.745",
-    ),
-    ("61.880", "Instrument proficiency check", "reg 61.880"),
+/// A requirement CASA's rules check.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CasaRequirement {
+    PassengerDay,
+    PassengerNight,
+    NightVfr,
+    InstrumentApproaches,
+    InstrumentApproaches2D,
+    InstrumentApproaches3D,
+    AzimuthGuidance,
+    CourseDeviationIndicator,
+    SinglePilotIfr,
+    /// A flight review for this aircraft class rating.
+    FlightReview(AircraftClassRating),
+    InstrumentProficiencyCheck,
+}
+
+/// The requirements, in the order they are reported. Aeroplane recency
+/// comes first, then instrument recency, then the flight reviews and the
+/// instrument proficiency check, as pilot-logbook listed them; the two
+/// guidance operations follow reg 61.870(5).
+const REQUIREMENTS: [CasaRequirement; 12] = [
+    CasaRequirement::PassengerDay,
+    CasaRequirement::PassengerNight,
+    CasaRequirement::NightVfr,
+    CasaRequirement::InstrumentApproaches,
+    CasaRequirement::InstrumentApproaches2D,
+    CasaRequirement::InstrumentApproaches3D,
+    CasaRequirement::AzimuthGuidance,
+    CasaRequirement::CourseDeviationIndicator,
+    CasaRequirement::SinglePilotIfr,
+    CasaRequirement::FlightReview(AircraftClassRating::SingleEngineAeroplane),
+    CasaRequirement::FlightReview(AircraftClassRating::MultiEngineAeroplane),
+    CasaRequirement::InstrumentProficiencyCheck,
 ];
+
+impl CasaRequirement {
+    /// The regulation that sets it, bare (`61.395(1)`).
+    fn regulation(self) -> &'static str {
+        match self {
+            Self::PassengerDay => "61.395(1)",
+            Self::PassengerNight => "61.395(2)",
+            Self::NightVfr => "61.965",
+            Self::InstrumentApproaches => "61.870(2)",
+            Self::InstrumentApproaches2D => "61.870(4)",
+            Self::InstrumentApproaches3D => "61.870(5)",
+            Self::AzimuthGuidance => "61.870(6)",
+            Self::CourseDeviationIndicator => "61.870(7)",
+            Self::SinglePilotIfr => "61.875",
+            Self::FlightReview(_) => "61.745",
+            Self::InstrumentProficiencyCheck => "61.880",
+        }
+    }
+
+    /// Its id: pilot-logbook's key for it (its `wording.ts`), the
+    /// regulation and, for a flight review, `|` and the class rating's
+    /// stored name (`61.745|single-engine-aeroplane`). Stable: a host may
+    /// keep it.
+    fn id(self) -> RequirementId {
+        match self {
+            Self::FlightReview(class_rating) => {
+                let class = serde_json::to_value(class_rating)
+                    .expect("a class rating serialises to its name");
+                let class = class.as_str().expect("a class rating's name is a string");
+                RequirementId::new(format!("{}|{class}", self.regulation()))
+            }
+            _ => RequirementId::new(self.regulation()),
+        }
+    }
+
+    /// Its name, in its regulation's words.
+    fn name(self) -> String {
+        match self {
+            Self::PassengerDay => "Carrying a passenger by day in an aeroplane".to_owned(),
+            Self::PassengerNight => "Carrying a passenger at night in an aeroplane".to_owned(),
+            Self::NightVfr => {
+                "Recent experience for the night VFR rating in an aeroplane".to_owned()
+            }
+            Self::InstrumentApproaches => "At least 3 instrument approach operations".to_owned(),
+            Self::InstrumentApproaches2D => "2D instrument approach operation".to_owned(),
+            Self::InstrumentApproaches3D => "3D instrument approach operation".to_owned(),
+            Self::AzimuthGuidance => "Azimuth guidance operation".to_owned(),
+            Self::CourseDeviationIndicator => "Course deviation indicator operation".to_owned(),
+            Self::SinglePilotIfr => {
+                "Flight or simulated flight under the IFR in a single-pilot operation".to_owned()
+            }
+            Self::FlightReview(class_rating) => format!(
+                "Flight review for the {} class rating",
+                class_name(class_rating)
+            ),
+            Self::InstrumentProficiencyCheck => "Instrument proficiency check".to_owned(),
+        }
+    }
+}
 
 /// The requirements, in [`REQUIREMENTS`]' order.
 pub(super) fn requirements() -> Vec<Requirement> {
     REQUIREMENTS
         .iter()
-        .map(|&(id, name, regulation)| Requirement {
-            id: RequirementId::new(id),
-            name: name.to_owned(),
-            regulation,
+        .map(|&requirement| Requirement {
+            id: requirement.id(),
+            name: requirement.name(),
+            regulation: requirement.regulation(),
         })
         .collect()
 }
 
-/// Each requirement's result on `as_of`, in [`REQUIREMENTS`]' order.
+/// Each requirement's result on `as_of`, each paired with its requirement
+/// where its check is run, in [`REQUIREMENTS`]' order (a test holds the two
+/// to the same order).
 ///
 /// The checks over entries are run together, in one pass of the kernel's
 /// `run`, which applies [`Casa::counts`]. The flight reviews read an
@@ -154,11 +186,11 @@ pub(super) fn currency(
         ],
     );
 
+    let single_engine = AircraftClassRating::SingleEngineAeroplane;
+    let multi_engine = AircraftClassRating::MultiEngineAeroplane;
     let counted = || logbook.entries.iter().filter(|entry| casa.counts(entry));
-    let mut single_engine_review =
-        FlightReview::new(as_of, AircraftClassRating::SingleEngineAeroplane, counted());
-    let mut multi_engine_review =
-        FlightReview::new(as_of, AircraftClassRating::MultiEngineAeroplane, counted());
+    let mut single_engine_review = FlightReview::new(as_of, single_engine, counted());
+    let mut multi_engine_review = FlightReview::new(as_of, multi_engine, counted());
     let mut proficiency_check = InstrumentProficiencyCheck::new(as_of);
     run_assessments(
         &logbook.assessments,
@@ -169,27 +201,41 @@ pub(super) fn currency(
         ],
     );
 
-    // As long as `REQUIREMENTS`, so that a requirement added there is a
-    // compile error here until its check is.
-    let results: [CurrencyResult; REQUIREMENTS.len()] = [
-        passenger_day.result(),
-        passenger_night.result(),
-        night_vfr.result(),
-        approaches.result(),
-        approaches_2d.result(),
-        approaches_3d.result(),
-        azimuth_guidance.result(),
-        course_deviation_indicator.result(),
-        single_pilot_ifr.result(),
-        single_engine_review.result(),
-        multi_engine_review.result(),
-        proficiency_check.result(),
-    ];
-    REQUIREMENTS
-        .iter()
-        .zip(results)
-        .map(|(&(id, _, _), result)| (RequirementId::new(id), result))
-        .collect()
+    [
+        (CasaRequirement::PassengerDay, passenger_day.result()),
+        (CasaRequirement::PassengerNight, passenger_night.result()),
+        (CasaRequirement::NightVfr, night_vfr.result()),
+        (CasaRequirement::InstrumentApproaches, approaches.result()),
+        (
+            CasaRequirement::InstrumentApproaches2D,
+            approaches_2d.result(),
+        ),
+        (
+            CasaRequirement::InstrumentApproaches3D,
+            approaches_3d.result(),
+        ),
+        (CasaRequirement::AzimuthGuidance, azimuth_guidance.result()),
+        (
+            CasaRequirement::CourseDeviationIndicator,
+            course_deviation_indicator.result(),
+        ),
+        (CasaRequirement::SinglePilotIfr, single_pilot_ifr.result()),
+        (
+            CasaRequirement::FlightReview(single_engine),
+            single_engine_review.result(),
+        ),
+        (
+            CasaRequirement::FlightReview(multi_engine),
+            multi_engine_review.result(),
+        ),
+        (
+            CasaRequirement::InstrumentProficiencyCheck,
+            proficiency_check.result(),
+        ),
+    ]
+    .into_iter()
+    .map(|(requirement, result)| (requirement.id(), result))
+    .collect()
 }
 
 #[cfg(test)]
@@ -222,6 +268,9 @@ mod tests {
         )
     }
 
+    /// `currency` pairs each result with its requirement where it runs the
+    /// check, apart from `REQUIREMENTS`, so this holds the two lists to the
+    /// same requirements in the same order.
     #[test]
     fn every_requirement_is_answered_once_in_the_order_listed() {
         let ids: Vec<RequirementId> = requirements().into_iter().map(|r| r.id).collect();

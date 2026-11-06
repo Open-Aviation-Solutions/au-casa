@@ -85,12 +85,14 @@ answers one such question:
   from the table's description of its designator or, for a designator the
   table does not catalogue, from the description the entry carries, as
   pilot-logbook did; an entry with neither is not of any category.
-- **Each requirement has a stable id**, listed with its name and
-  regulation in `logbook::currency`'s `REQUIREMENTS`: the regulation, and
-  for a flight review its class rating too, as pilot-logbook keyed them. A
-  host may keep an id, so changing one is a breaking change. A new check is
-  added to that list and to `currency`, which will not compile until both
-  have it.
+- **Each requirement has a stable id**, from `logbook::currency`'s
+  `CasaRequirement`: the regulation (bare, `61.395(1)`), and for a flight
+  review `|` and its class rating's stored name, as pilot-logbook keyed
+  them. A host may keep an id, so changing one is a breaking change. A new
+  check is a `CasaRequirement` variant (a `match` on it will not compile
+  without its id, name and regulation), a row of `REQUIREMENTS`, and its
+  result paired with that variant in `currency`; a test fails until the
+  last two agree.
 - **Testing:** each check's unit tests assert its boundaries (the window's
   edge and the expiry, the category guard, an entry dated after the
   reference date), with entries built by `logbook::test_support` from the
