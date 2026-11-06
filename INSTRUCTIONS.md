@@ -50,15 +50,15 @@ answers one such question:
   check type, outcome and purpose of regs 61.745(3), (3A) and 61.880), two
   stored formats whose every key and spelling is mapped by hand, with no
   derived serde, each under a version of its own (the kernel's reserved key
-  `_version`). So far `Casa` says which entries count
-  (`counts`: a session only in an approved flight simulation training
-  device, reg 61.010), what a type counts as (`classify`), and refuses
-  information on an entry or an assessment it cannot read
-  (`problems_for`), so that the host does not stamp and save it; its questions, its other problems, its
-  requirements, currency and totals follow in the issues under au-casa#29.
-  Stored information must carry its version (`read`); only information
-  about to be saved may lack it (`read_to_save`). The
-  currency checks are in `logbook::currency`, written but not yet run by
+  `_version`). So far `Casa` says which entries count (`counts`: a session
+  only in an approved flight simulation training device, reg 61.010), what
+  a type counts as (`classify`), and refuses information on an entry or an
+  assessment it cannot read (`problems_for`), so that the host does not
+  stamp and save it; its questions, its other problems, its requirements,
+  currency and totals follow in the issues under au-casa#29. Stored
+  information must carry its version (`read`); only information about to
+  be saved may lack it (`read_to_save`). A `null` answer is no answer, as an
+  absent key is. The currency checks are in `logbook::currency`, written but not yet run by
   `currency` (au-casa#39); see "Currency checks" below.
 
 ## Currency checks
@@ -67,7 +67,9 @@ answers one such question:
   `CurrencyCheck` (or the assessment traits) over the kernel's
   `EventWindow`. Its doc comment quotes the regulation it implements.
 - **Each sees only the entries `Casa::counts` lets through**: the kernel's
-  `run` applies it once, so a check does not repeat it.
+  `run` applies it once, so a check does not repeat it. A check over
+  assessments, which `run` does not reach, is given those entries by its
+  caller (`Casa::currency`) when it is built.
 - **An assessment's aircraft is its flight's.** A check over assessments
   is given the entries, and an assessment is in the aircraft of the entry
   for the same `flight`; one whose flight has no entry is unclassified and

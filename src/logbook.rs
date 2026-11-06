@@ -19,6 +19,7 @@ mod currency;
 mod entry_information;
 #[cfg_attr(not(test), expect(dead_code))]
 mod guards;
+mod stored;
 #[cfg(test)]
 mod test_support;
 
@@ -56,18 +57,25 @@ pub(crate) fn casa() -> AuthorityId {
 /// CASA's information on an entry, read as it is stored; `None` when the
 /// entry has none, or has information that cannot be read.
 pub(crate) fn information(entry: &Entry) -> Option<EntryInformation> {
-    Record::Entry(entry)
-        .information_for(&casa())
-        .and_then(|information| EntryInformation::read(information).ok())
+    read_information(Record::Entry(entry), EntryInformation::read)
 }
 
 /// CASA's information on an assessment, read as it is stored; `None` when
 /// the assessment has none, or has information that cannot be read.
 #[cfg_attr(not(test), expect(dead_code))]
 pub(crate) fn assessment_information(assessment: &Assessment) -> Option<AssessmentInformation> {
-    Record::Assessment(assessment)
+    read_information(Record::Assessment(assessment), AssessmentInformation::read)
+}
+
+/// CASA's information on a record, read by `read`; `None` when there is
+/// none, or it cannot be read.
+fn read_information<T, E>(
+    record: Record,
+    read: fn(&AuthoritySpecificInformation) -> Result<T, E>,
+) -> Option<T> {
+    record
         .information_for(&casa())
-        .and_then(|information| AssessmentInformation::read(information).ok())
+        .and_then(|information| read(information).ok())
 }
 
 impl Default for Casa {

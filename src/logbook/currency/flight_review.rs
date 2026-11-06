@@ -43,7 +43,10 @@ pub(crate) struct FlightReview {
 
 impl FlightReview {
     /// The check for `class_rating`, finding each assessment's aircraft
-    /// among `entries`.
+    /// among `entries`. The caller passes the entries
+    /// [`Casa::counts`](crate::Casa) lets through, as the kernel's `run`
+    /// would: this check is not run over entries, so it does not apply that
+    /// gate itself.
     pub(crate) fn new<'a>(
         reference: Date,
         class_rating: AircraftClassRating,

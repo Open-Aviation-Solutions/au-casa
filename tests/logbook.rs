@@ -236,6 +236,14 @@ fn an_answer_not_given_has_no_key() {
 }
 
 #[test]
+fn a_null_answer_on_an_entry_is_no_answer() {
+    assert_eq!(
+        read(json!({"azimuth_guidance_operation": null, "route": null})),
+        Ok(EntryInformation::default())
+    );
+}
+
+#[test]
 fn a_count_is_any_whole_number_the_kernel_accepts() {
     let information = read(json!({"dme_or_gnss_arrivals": u64::MAX})).unwrap();
     assert_eq!(information.dme_or_gnss_arrivals, Some(u64::MAX));
@@ -254,7 +262,6 @@ fn the_version_is_read_when_it_is_this_formats() {
 #[case::version_as_text(json!({"_version": "1"}), InformationError::UnsupportedVersion)]
 #[case::unknown_key(json!({"notes": "x"}), InformationError::UnknownKey("notes".into()))]
 #[case::yes_no_as_text(json!({"approved_fstd": "yes"}), InformationError::InvalidAnswer("approved_fstd"))]
-#[case::null(json!({"azimuth_guidance_operation": null}), InformationError::InvalidAnswer("azimuth_guidance_operation"))]
 #[case::unknown_route(json!({"route": "pilot"}), InformationError::InvalidAnswer("route"))]
 #[case::count_as_decimal(json!({"dme_or_gnss_arrivals": 2.0}), InformationError::InvalidAnswer("dme_or_gnss_arrivals"))]
 #[case::negative_count(json!({"dme_or_gnss_arrivals": -1}), InformationError::InvalidAnswer("dme_or_gnss_arrivals"))]
@@ -396,10 +403,30 @@ fn an_assessment_answer_not_given_has_no_key() {
 #[case::unknown_key(json!({"purpose": "instrument rating"}), AssessmentInformationError::UnknownKey("purpose".into()))]
 #[case::unknown_check_type(json!({"check_type": "flight_review"}), AssessmentInformationError::InvalidAnswer("check_type"))]
 #[case::outcome_as_yes_no(json!({"outcome": true}), AssessmentInformationError::InvalidAnswer("outcome"))]
-#[case::null(json!({"check_purpose": null}), AssessmentInformationError::InvalidAnswer("check_purpose"))]
 fn what_is_not_the_assessment_format_is_refused(
     #[case] stored: Value,
     #[case] error: AssessmentInformationError,
 ) {
     assert_eq!(read_assessment(stored), Err(error));
+}
+
+/// pilot-logbook's stored assessment today (`flight_assessment_to_json`),
+/// its three keys moved as they are and versioned: a flight review has a
+/// `null` purpose.
+#[test]
+fn an_assessment_is_read_as_pilot_logbook_stores_it() {
+    let stored = json!({
+        "_version": 1,
+        "check_type": "flight review",
+        "outcome": "passed",
+        "check_purpose": null,
+    });
+    assert_eq!(
+        AssessmentInformation::read(&AuthoritySpecificInformation::new(stored)),
+        Ok(AssessmentInformation {
+            check_type: Some(CheckType::FlightReview),
+            outcome: Some(CheckOutcome::Passed),
+            check_purpose: None,
+        })
+    );
 }

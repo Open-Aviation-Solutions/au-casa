@@ -8,6 +8,8 @@ use logbook_shared_kernel::AuthoritySpecificInformation;
 use serde_json::{Map, Value};
 use thiserror::Error;
 
+use super::stored::{self, Unreadable};
+
 /// CASA's information on an assessment: what kind of check it was, its
 /// outcome and its purpose. Every answer is optional here; which are asked,
 /// and which are required, is for CASA's questions.
@@ -161,6 +163,17 @@ pub enum AssessmentInformationError {
     InvalidAnswer(&'static str),
 }
 
+impl AssessmentInformationError {
+    fn from_unreadable(unreadable: Unreadable) -> Self {
+        match unreadable {
+            Unreadable::NotAnObject => Self::NotAnObject,
+            Unreadable::UnsupportedVersion => Self::UnsupportedVersion,
+            Unreadable::UnknownKey(key) => Self::UnknownKey(key),
+            Unreadable::InvalidAnswer(key) => Self::InvalidAnswer(key),
+        }
+    }
+}
+
 const CHECK_TYPE: &str = "check_type";
 const OUTCOME: &str = "outcome";
 const CHECK_PURPOSE: &str = "check_purpose";
@@ -175,7 +188,9 @@ impl AssessmentInformation {
 
     /// Read stored information, which carries its version: it must be
     /// [`Self::VERSION`]. A key that is not this format's, or a spelling
-    /// that is not one of its key's, is refused.
+    /// that is not one of its key's, is refused; a `null` is no answer, as
+    /// an absent key is, since pilot-logbook stores an assessment with no
+    /// purpose with a `null` one.
     pub fn read(
         information: &AuthoritySpecificInformation,
     ) -> Result<Self, AssessmentInformationError> {
@@ -195,20 +210,14 @@ impl AssessmentInformation {
         information: &AuthoritySpecificInformation,
         stored: bool,
     ) -> Result<Self, AssessmentInformationError> {
-        let answers = information
-            .value()
-            .as_object()
-            .ok_or(AssessmentInformationError::NotAnObject)?;
-        let versioned = stored || answers.contains_key(AuthoritySpecificInformation::VERSION_KEY);
-        if versioned && information.version() != Some(Self::VERSION) {
-            return Err(AssessmentInformationError::UnsupportedVersion);
-        }
-        if let Some(key) = answers.keys().find(|key| {
-            key.as_str() != AuthoritySpecificInformation::VERSION_KEY
-                && !KEYS.contains(&key.as_str())
-        }) {
-            return Err(AssessmentInformationError::UnknownKey(key.clone()));
-        }
+        Self::read_answers(information, stored).map_err(AssessmentInformationError::from_unreadable)
+    }
+
+    fn read_answers(
+        information: &AuthoritySpecificInformation,
+        stored: bool,
+    ) -> Result<Self, Unreadable> {
+        let answers = stored::answers(information, Self::VERSION, &KEYS, stored)?;
         Ok(Self {
             check_type: choice(answers, CHECK_TYPE, CheckType::parse)?,
             outcome: choice(answers, OUTCOME, CheckOutcome::parse)?,
@@ -226,29 +235,19 @@ impl AssessmentInformation {
             self.outcome.map(CheckOutcome::as_str),
             self.check_purpose.map(CheckPurpose::as_str),
         ];
-        let answers: Map<String, Value> = KEYS
-            .into_iter()
-            .zip(values)
-            .filter_map(|(key, value)| Some((key.to_owned(), value?.into())))
-            .collect();
-        AuthoritySpecificInformation::new(Value::Object(answers))
+        stored::information(
+            KEYS.into_iter()
+                .zip(values.map(|value| value.map(Value::from))),
+        )
     }
 }
 
-/// The choice under `key`, if there is one, read by `parse`, which gives
-/// `None` for a spelling that is not one of the key's.
+/// The choice under `key`, read by `parse`, which gives `None` for a
+/// spelling that is not one of the key's.
 fn choice<T>(
     answers: &Map<String, Value>,
     key: &'static str,
     parse: fn(&str) -> Option<T>,
-) -> Result<Option<T>, AssessmentInformationError> {
-    answers
-        .get(key)
-        .map(|value| {
-            value
-                .as_str()
-                .and_then(parse)
-                .ok_or(AssessmentInformationError::InvalidAnswer(key))
-        })
-        .transpose()
+) -> Result<Option<T>, Unreadable> {
+    stored::answer(answers, key, |value| value.as_str().and_then(parse))
 }

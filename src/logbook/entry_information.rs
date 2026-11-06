@@ -6,8 +6,10 @@
 //! stored.
 
 use logbook_shared_kernel::AuthoritySpecificInformation;
-use serde_json::{Map, Value};
+use serde_json::Value;
 use thiserror::Error;
+
+use super::stored::{self, Unreadable};
 
 /// CASA's information on an entry: the answers the logbook's common entry
 /// cannot hold, each under its key. Every answer is optional here; which
@@ -95,6 +97,17 @@ pub enum InformationError {
     InvalidAnswer(&'static str),
 }
 
+impl InformationError {
+    fn from_unreadable(unreadable: Unreadable) -> Self {
+        match unreadable {
+            Unreadable::NotAnObject => Self::NotAnObject,
+            Unreadable::UnsupportedVersion => Self::UnsupportedVersion,
+            Unreadable::UnknownKey(key) => Self::UnknownKey(key),
+            Unreadable::InvalidAnswer(key) => Self::InvalidAnswer(key),
+        }
+    }
+}
+
 const APPROVED_FSTD: &str = "approved_fstd";
 const ROUTE: &str = "route";
 const RECEIVING_FLIGHT_TRAINING: &str = "receiving_flight_training";
@@ -120,7 +133,8 @@ impl EntryInformation {
     /// Read stored information, which carries its version: it must be
     /// [`Self::VERSION`]. A key that is not this format's, or an answer not
     /// of its key's kind, is refused, as is a count that is not a whole
-    /// number (`2.0` is not one).
+    /// number (`2.0` is not one); a `null` is no answer, as an absent key
+    /// is.
     pub fn read(information: &AuthoritySpecificInformation) -> Result<Self, InformationError> {
         Self::read_with(information, true)
     }
@@ -138,30 +152,24 @@ impl EntryInformation {
         information: &AuthoritySpecificInformation,
         stored: bool,
     ) -> Result<Self, InformationError> {
-        let answers = information
-            .value()
-            .as_object()
-            .ok_or(InformationError::NotAnObject)?;
-        let versioned = stored || answers.contains_key(AuthoritySpecificInformation::VERSION_KEY);
-        if versioned && information.version() != Some(Self::VERSION) {
-            return Err(InformationError::UnsupportedVersion);
-        }
-        if let Some(key) = answers.keys().find(|key| {
-            key.as_str() != AuthoritySpecificInformation::VERSION_KEY
-                && !KEYS.contains(&key.as_str())
-        }) {
-            return Err(InformationError::UnknownKey(key.clone()));
-        }
-        let yes_no = |key| read(answers, key, Value::as_bool);
+        Self::read_answers(information, stored).map_err(InformationError::from_unreadable)
+    }
+
+    fn read_answers(
+        information: &AuthoritySpecificInformation,
+        stored: bool,
+    ) -> Result<Self, Unreadable> {
+        let answers = stored::answers(information, Self::VERSION, &KEYS, stored)?;
+        let yes_no = |key| stored::answer(answers, key, Value::as_bool);
         Ok(Self {
             approved_fstd: yes_no(APPROVED_FSTD)?,
-            route: read(answers, ROUTE, |value| {
+            route: stored::answer(answers, ROUTE, |value| {
                 value.as_str().and_then(SupervisionRoute::parse)
             })?,
             receiving_flight_training: yes_no(RECEIVING_FLIGHT_TRAINING)?,
             azimuth_guidance_operation: yes_no(AZIMUTH_GUIDANCE_OPERATION)?,
             course_deviation_indicator_operation: yes_no(COURSE_DEVIATION_INDICATOR_OPERATION)?,
-            dme_or_gnss_arrivals: read(answers, DME_OR_GNSS_ARRIVALS, Value::as_u64)?,
+            dme_or_gnss_arrivals: stored::answer(answers, DME_OR_GNSS_ARRIVALS, Value::as_u64)?,
         })
     }
 
@@ -178,24 +186,6 @@ impl EntryInformation {
             self.course_deviation_indicator_operation.map(Value::from),
             self.dme_or_gnss_arrivals.map(Value::from),
         ];
-        let answers: Map<String, Value> = KEYS
-            .into_iter()
-            .zip(values)
-            .filter_map(|(key, value)| Some((key.to_owned(), value?)))
-            .collect();
-        AuthoritySpecificInformation::new(Value::Object(answers))
+        stored::information(KEYS.into_iter().zip(values))
     }
-}
-
-/// The answer under `key`, if there is one, read by `answer`, which gives
-/// `None` for a value that is not an answer of the key's kind.
-fn read<T>(
-    answers: &Map<String, Value>,
-    key: &'static str,
-    answer: impl Fn(&Value) -> Option<T>,
-) -> Result<Option<T>, InformationError> {
-    answers
-        .get(key)
-        .map(|value| answer(value).ok_or(InformationError::InvalidAnswer(key)))
-        .transpose()
 }
