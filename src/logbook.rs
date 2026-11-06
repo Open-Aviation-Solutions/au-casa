@@ -28,9 +28,9 @@ pub use assessment_information::{
 pub use entry_information::{EntryInformation, InformationError, SupervisionRoute};
 
 use logbook_shared_kernel::{
-    AircraftDescription, AuthorityId, AuthoritySpecificInformation, Classification, CurrencyResult,
-    DateRange, Entry, Figure, LicensingAuthority, Logbook, Problem, ProblemAt, ProblemKind,
-    Questions, Record, Requirement, RequirementId, Subject,
+    AircraftDescription, Assessment, AuthorityId, AuthoritySpecificInformation, Classification,
+    CurrencyResult, DateRange, Entry, Figure, LicensingAuthority, Logbook, Problem, ProblemAt,
+    ProblemKind, Questions, Record, Requirement, RequirementId, Subject,
 };
 use time::Date;
 
@@ -59,6 +59,15 @@ pub(crate) fn information(entry: &Entry) -> Option<EntryInformation> {
     Record::Entry(entry)
         .information_for(&casa())
         .and_then(|information| EntryInformation::read(information).ok())
+}
+
+/// CASA's information on an assessment, read as it is stored; `None` when
+/// the assessment has none, or has information that cannot be read.
+#[cfg_attr(not(test), expect(dead_code))]
+pub(crate) fn assessment_information(assessment: &Assessment) -> Option<AssessmentInformation> {
+    Record::Assessment(assessment)
+        .information_for(&casa())
+        .and_then(|information| AssessmentInformation::read(information).ok())
 }
 
 impl Default for Casa {

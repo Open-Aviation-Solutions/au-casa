@@ -68,6 +68,10 @@ answers one such question:
   `EventWindow`. Its doc comment quotes the regulation it implements.
 - **Each sees only the entries `Casa::counts` lets through**: the kernel's
   `run` applies it once, so a check does not repeat it.
+- **An assessment's aircraft is its flight's.** A check over assessments
+  is given the entries, and an assessment is in the aircraft of the entry
+  for the same `flight`; one whose flight has no entry is unclassified and
+  does not count.
 - **An unknown type does not count.** A check that requires a category
   (`guards::is_category`) needs positive evidence. The type is classified
   from the table's description of its designator or, for a designator the

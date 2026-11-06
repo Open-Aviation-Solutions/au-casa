@@ -15,7 +15,7 @@
 use aircraft_type_descriptions::DesignatorTable;
 use logbook_shared_kernel::{AircraftDescription, Entry, Subject};
 
-use crate::aircraft::{classify, AircraftCategory};
+use crate::aircraft::{classify, AircraftCategory, AircraftClassRating};
 
 /// The description of the type the entry was flown in, or that its session
 /// represented: the table's, else the entry's; `None` when neither has one,
@@ -46,6 +46,13 @@ pub(crate) fn tabled(designator: &str) -> Option<AircraftDescription> {
 /// 61.007(2) for a registered sailplane).
 pub(crate) fn is_category(entry: &Entry, category: AircraftCategory) -> bool {
     description(entry).is_some_and(|description| classify(description).0 == category)
+}
+
+/// Whether the type is *known* to be of this class (reg 61.020). Also false
+/// when the category is known but has no class: reg 61.020 lists no
+/// multi-engine helicopter or gyroplane class.
+pub(crate) fn is_class_rating(entry: &Entry, class_rating: AircraftClassRating) -> bool {
+    description(entry).is_some_and(|description| classify(description).1 == Some(class_rating))
 }
 
 #[cfg(test)]

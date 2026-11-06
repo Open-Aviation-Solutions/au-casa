@@ -16,14 +16,14 @@ use icao_shared_kernel::{
     NationalityMark,
 };
 use logbook_shared_kernel::{
-    Approach, ApproachType, DayNight, Entry, EntryId, EntryParts, InstrumentTime, Questions,
-    Subject,
+    Approach, ApproachType, Assessment, AssessmentId, DayNight, Entry, EntryId, EntryParts,
+    InstrumentTime, Questions, Subject,
 };
 use time::Date;
 use uuid::Uuid;
 
 use crate::logbook::guards::tabled;
-use crate::logbook::{casa, EntryInformation};
+use crate::logbook::{casa, AssessmentInformation, EntryInformation};
 
 /// The entry these parts make.
 pub(crate) fn entry(parts: EntryParts) -> Entry {
@@ -148,4 +148,30 @@ pub(crate) fn informed(information: EntryInformation, mut parts: EntryParts) -> 
     Questions::new(EntryInformation::VERSION, Vec::new()).stamp(&mut information);
     parts.authority_information.insert(casa(), information);
     parts
+}
+
+/// The parts of a flight, as flight `flight`.
+pub(crate) fn on_flight(flight: u128, mut parts: EntryParts) -> EntryParts {
+    if let Subject::Flight { flight: id, .. } = &mut parts.subject {
+        *id = Uuid::from_u128(flight);
+    }
+    parts
+}
+
+/// An assessment on flight `flight`, with this as CASA's information,
+/// stamped with its version as the host stores it.
+pub(crate) fn assessed(
+    id: &str,
+    on: Date,
+    flight: u128,
+    information: AssessmentInformation,
+) -> Assessment {
+    let mut information = information.to_information();
+    Questions::new(AssessmentInformation::VERSION, Vec::new()).stamp(&mut information);
+    Assessment {
+        id: AssessmentId::new(id),
+        date: on,
+        flight: Uuid::from_u128(flight),
+        authority_information: BTreeMap::from([(casa(), information)]),
+    }
 }
