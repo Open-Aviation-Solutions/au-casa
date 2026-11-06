@@ -46,10 +46,13 @@ struct Logged {
     co_pilot: bool,
     /// Its duration: the flight time of all its entries.
     minutes: i64,
-    /// The entry it is reported by, and its date: of those recording an
-    /// approach, the one with the lowest id, so that it does not depend on
-    /// the order entries arrive in.
-    with_approach: Option<(EntryId, Date)>,
+    /// Its date: the latest of its entries' dates, by which all of it had
+    /// been flown.
+    on: Date,
+    /// The entry it is reported by: of those recording an approach, the one
+    /// with the lowest id, so that it does not depend on the order entries
+    /// arrive in.
+    with_approach: Option<EntryId>,
 }
 
 /// Reg 61.875(1): "a flight or simulated flight under the IFR in a
@@ -71,7 +74,9 @@ struct Logged {
 /// - **an approach**: recorded on one of those entries.
 ///
 /// Each is decided for the flight or session, grouped by its id, once all
-/// its entries are in. In any capacity but co-pilot, and in any category of
+/// its entries are in, and it is dated by the latest of them. An entry dated
+/// after the reference date has not happened yet, so it is left out before
+/// grouping: it neither adds to a flight nor disqualifies one. In any capacity but co-pilot, and in any category of
 /// aircraft: reg 61.875 names none.
 pub(crate) struct SinglePilotIfr {
     reference: Date,
@@ -89,10 +94,14 @@ impl SinglePilotIfr {
 
 impl EntryAccumulator for SinglePilotIfr {
     fn accept_entry(&mut self, entry: &Entry) {
+        if entry.date() > self.reference {
+            return;
+        }
         let logged = self.logged.entry(Logs::of(entry)).or_insert(Logged {
             ifr: true,
             co_pilot: false,
             minutes: 0,
+            on: entry.date(),
             with_approach: None,
         });
         logged.ifr &= entry.flight_rules() == Some(FlightRules::Ifr);
@@ -100,12 +109,13 @@ impl EntryAccumulator for SinglePilotIfr {
         logged.minutes = logged
             .minutes
             .saturating_add(entry.flight_time().total_minutes());
+        logged.on = logged.on.max(entry.date());
         let reports = logged
             .with_approach
             .as_ref()
-            .is_none_or(|(other, _)| entry.id() < other);
+            .is_none_or(|other| entry.id() < other);
         if reports && !entry.approaches().is_empty() {
-            logged.with_approach = Some((entry.id().clone(), entry.date()));
+            logged.with_approach = Some(entry.id().clone());
         }
     }
 }
@@ -117,8 +127,8 @@ impl CurrencyCheck for SinglePilotIfr {
             if !logged.ifr || logged.co_pilot || logged.minutes < MIN_DURATION_MINUTES {
                 continue;
             }
-            if let Some((entry, on)) = &logged.with_approach {
-                window.record_on(entry, *on, 1);
+            if let Some(entry) = &logged.with_approach {
+                window.record_on(entry, logged.on, 1);
             }
         }
         window.result()
@@ -185,6 +195,17 @@ mod tests {
     }
 
     #[test]
+    fn the_windows_edge_is_6_calendar_months_before_the_reference_date() {
+        let inside = result(&[qualifying("a", date!(2026 - 03 - 29), 1)]);
+        assert!(inside.is_current());
+        assert_eq!(inside.found, 1);
+
+        let outside = result(&[qualifying("a", date!(2026 - 03 - 28), 1)]);
+        assert!(!outside.is_current());
+        assert_eq!(outside.found, 0);
+    }
+
+    #[test]
     fn only_a_flight_recorded_as_ifr_throughout_counts() {
         for rules in [
             None,
@@ -236,7 +257,8 @@ mod tests {
             flight_rules: None,
             ..co_pilot
         };
-        assert!(!result(&[pic, unrecorded]).is_current());
+        assert!(!result(&[pic.clone(), unrecorded.clone()]).is_current());
+        assert!(!result(&[unrecorded, pic]).is_current());
     }
 
     #[test]
@@ -285,12 +307,18 @@ mod tests {
             ..also_logging(&supervised, "b")
         };
         assert!(!result(std::slice::from_ref(&supervised)).is_current());
-        let r = result(&[in_command.clone(), supervised.clone()]);
-        assert!(r.is_current());
-        // The flight is one event, reported by the entry with the approach.
-        assert_eq!(r.found, 1);
-        assert_eq!(r.qualifying.len(), 1);
-        assert_eq!(r.qualifying[0].entry.as_str(), "a");
+        // Whichever order they arrive in.
+        for entries in [
+            [in_command.clone(), supervised.clone()],
+            [supervised.clone(), in_command.clone()],
+        ] {
+            let r = result(&entries);
+            assert!(r.is_current());
+            // The flight is one event, reported by the entry with the approach.
+            assert_eq!(r.found, 1);
+            assert_eq!(r.qualifying.len(), 1);
+            assert_eq!(r.qualifying[0].entry.as_str(), "a");
+        }
 
         // With an approach on both, by the lower id, whichever order they
         // arrive in.
@@ -300,6 +328,57 @@ mod tests {
         };
         for entries in [[supervised.clone(), both.clone()], [both, supervised]] {
             assert_eq!(result(&entries).qualifying[0].entry.as_str(), "a");
+        }
+    }
+
+    #[test]
+    fn a_flight_is_dated_by_its_latest_entry_whichever_reports_it() {
+        // A flight across midnight, logged in two entries.
+        let before = EntryParts {
+            flight_time: minutes(30),
+            ..qualifying("a", date!(2026 - 03 - 28), 1)
+        };
+        let after = EntryParts {
+            date: date!(2026 - 03 - 29),
+            ..also_logging(&before, "b")
+        };
+        for entries in [[before.clone(), after.clone()], [after, before]] {
+            let r = result(&entries);
+            assert!(r.is_current());
+            assert_eq!(r.current_through(), Some(date!(2026 - 09 - 28)));
+            assert_eq!(r.qualifying[0].entry.as_str(), "a");
+        }
+    }
+
+    #[test]
+    fn an_entry_dated_after_the_reference_is_left_out_of_its_flight() {
+        let in_window = qualifying("b", ON, 1);
+        let future = |parts: EntryParts| EntryParts {
+            id: logbook_shared_kernel::EntryId::new("a"),
+            date: REFERENCE + time::Duration::days(1),
+            ..parts
+        };
+        // It neither reports the flight, though its id is the lowest,
+        let reporting = future(in_window.clone());
+        // nor disqualifies it, as co-pilot or under the VFR.
+        let co_pilot = future(EntryParts {
+            capacity: Capacity::CoPilot,
+            ..in_window.clone()
+        });
+        let vfr = future(EntryParts {
+            flight_rules: Some(FlightRules::Vfr),
+            ..in_window.clone()
+        });
+        for other in [reporting, co_pilot, vfr] {
+            for entries in [
+                [in_window.clone(), other.clone()],
+                [other, in_window.clone()],
+            ] {
+                let r = result(&entries);
+                assert!(r.is_current());
+                assert_eq!(r.qualifying[0].entry.as_str(), "b");
+                assert_eq!(r.current_through(), Some(date!(2026 - 11 - 30)));
+            }
         }
     }
 
