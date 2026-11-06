@@ -7,13 +7,14 @@
 //! only the entries [`Casa::counts`](crate::Casa) lets through, so none
 //! repeats that gate. A check over assessments
 //! ([`AssessmentCurrencyCheck`](logbook_shared_kernel::AssessmentCurrencyCheck))
-//! is given the entries it reads their aircraft from.
+//! that reads their aircraft is given the entries it reads it from.
 
 mod flight_review;
 mod guidance_operations;
 mod instrument_approaches;
 mod instrument_approaches_2d;
 mod instrument_approaches_3d;
+mod instrument_proficiency_check;
 mod night_vfr;
 mod passenger_day;
 mod passenger_night;
