@@ -31,7 +31,10 @@ pub use aircraft::{
 };
 pub use fstd::{counts_for_part61, FstdRecognition, RecognisedForeignState};
 pub use licence::{part61_term, FlightCrewLicence, IssuedNationalTitle, NationalTitle, Part61Term};
-pub use logbook::{Casa, EntryInformation, InformationError, SupervisionRoute};
+pub use logbook::{
+    AssessmentInformation, AssessmentInformationError, Casa, CheckOutcome, CheckPurpose, CheckType,
+    EntryInformation, InformationError, SupervisionRoute,
+};
 
 // Compiles and runs the README's examples with the doc tests.
 #[cfg(doctest)]

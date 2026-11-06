@@ -46,16 +46,18 @@ answers one such question:
 - `logbook` (au-casa#29, in progress): CASA's rules for a pilot's logbook,
   as `Casa`, which implements logbook-shared-kernel's `LicensingAuthority`
   for `AU-CASA`; and CASA's authority-specific information on an entry
-  (`EntryInformation`), a stored format whose every key and spelling is
-  mapped by hand, with no derived serde, under a version of its own (the
-  kernel's reserved key `_version`). So far `Casa` says which entries count
+  (`EntryInformation`) and on an assessment (`AssessmentInformation`: the
+  check type, outcome and purpose of regs 61.745(3), (3A) and 61.880), two
+  stored formats whose every key and spelling is mapped by hand, with no
+  derived serde, each under a version of its own (the kernel's reserved key
+  `_version`). So far `Casa` says which entries count
   (`counts`: a session only in an approved flight simulation training
   device, reg 61.010), what a type counts as (`classify`), and refuses
-  information on an entry it cannot read (`problems_for`), so that the host
-  does not stamp and save it; its questions, its other problems, its
+  information on an entry or an assessment it cannot read
+  (`problems_for`), so that the host does not stamp and save it; its questions, its other problems, its
   requirements, currency and totals follow in the issues under au-casa#29.
-  Stored information must carry its version (`EntryInformation::read`);
-  only information about to be saved may lack it (`read_to_save`). The
+  Stored information must carry its version (`read`); only information
+  about to be saved may lack it (`read_to_save`). The
   currency checks are in `logbook::currency`, written but not yet run by
   `currency` (au-casa#39); see "Currency checks" below.
 
