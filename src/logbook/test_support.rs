@@ -99,14 +99,11 @@ pub(crate) fn sailplane(id: &str, on: Date) -> EntryParts {
     flown(id, on, "AS21")
 }
 
-/// A flight in a type with no description: no known category, so a check
-/// that requires one must not count it.
+/// A flight in a type with no description, which the table does not
+/// catalogue either (`ZZZZ`, no type designator assigned): no known
+/// category, so a check that requires one must not count it.
 pub(crate) fn unclassified(id: &str, on: Date) -> EntryParts {
-    let mut parts = aeroplane(id, on);
-    if let Subject::Flight { description, .. } = &mut parts.subject {
-        *description = None;
-    }
-    parts
+    flown(id, on, "ZZZZ")
 }
 
 /// A session in a device that represented a type, described by the table.
