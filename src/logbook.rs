@@ -6,22 +6,19 @@
 //! [`LicensingAuthority`], and CASA's information on an entry and on an
 //! assessment.
 //!
-//! So far it says which entries count and what an aircraft type counts as.
-//! It asks no questions and checks no requirements yet, and has no totals
-//! of its own; of the problems, it finds only information it cannot read.
-//! Some of its currency checks are written, but `currency` does not run
-//! them yet. The rest follow (au-casa#29).
+//! So far it says which entries count, what an aircraft type counts as,
+//! which requirements it checks and the pilot's currency against them, and
+//! CASA's own totals. It asks no questions yet; of the problems, it finds
+//! only information it cannot read. The rest follow (au-casa#40).
 
-// Run by `currency` once the requirements are named (au-casa#39).
 mod assessment_information;
-#[cfg_attr(not(test), expect(dead_code))]
 mod currency;
 mod entry_information;
-#[cfg_attr(not(test), expect(dead_code))]
 mod guards;
 mod stored;
 #[cfg(test)]
 mod test_support;
+mod totals;
 
 pub use assessment_information::{
     AssessmentInformation, AssessmentInformationError, CheckOutcome, CheckPurpose, CheckType,
@@ -62,7 +59,6 @@ pub(crate) fn information(entry: &Entry) -> Option<EntryInformation> {
 
 /// CASA's information on an assessment, read as it is stored; `None` when
 /// the assessment has none, or has information that cannot be read.
-#[cfg_attr(not(test), expect(dead_code))]
 pub(crate) fn assessment_information(assessment: &Assessment) -> Option<AssessmentInformation> {
     read_information(Record::Assessment(assessment), AssessmentInformation::read)
 }
@@ -115,16 +111,30 @@ impl LicensingAuthority for Casa {
         })
     }
 
+    /// Twelve: carrying a passenger by day and at night (reg 61.395(1),
+    /// (2)), night VFR recency (reg 61.965), instrument recency (reg
+    /// 61.870(2), (4) to (7), and reg 61.875), a flight review for each
+    /// aeroplane class rating (reg 61.745) and the instrument proficiency
+    /// check (reg 61.880). Each has a stable id and a name in its
+    /// regulation's words.
     fn requirements(&self) -> Vec<Requirement> {
-        Vec::new()
+        currency::requirements()
     }
 
-    fn currency(&self, _as_of: Date, _logbook: &Logbook) -> Vec<(RequirementId, CurrencyResult)> {
-        Vec::new()
+    /// Each of [`requirements`](LicensingAuthority::requirements)' results
+    /// on `as_of`, in the same order, through the kernel's `run` and
+    /// `run_assessments`.
+    fn currency(&self, as_of: Date, logbook: &Logbook) -> Vec<(RequirementId, CurrencyResult)> {
+        currency::currency(self, as_of, logbook)
     }
 
-    fn totals(&self, _logbook: &Logbook, _range: DateRange) -> Vec<Figure> {
-        Vec::new()
+    /// Aeroplane time, single-engine and multi-engine aeroplane time,
+    /// registered sailplane time, simulated flight time and solo flight
+    /// time, of the entries that count. Solo flight time is the flights
+    /// whose pilot was the sole occupant; no rule makes it count as pilot in
+    /// command.
+    fn totals(&self, logbook: &Logbook, range: DateRange) -> Vec<Figure> {
+        totals::totals(self, logbook, range)
     }
 
     /// None yet, at the version of CASA's information on the kind of
