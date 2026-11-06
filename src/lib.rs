@@ -18,7 +18,8 @@
 //!   title for.
 //! - [`logbook`] — CASA's rules for a pilot's logbook ([`Casa`], through
 //!   logbook-shared-kernel's `LicensingAuthority`), and CASA's information on
-//!   an entry ([`EntryInformation`]), a stored format.
+//!   an entry ([`EntryInformation`]) and on an assessment
+//!   ([`AssessmentInformation`]), two stored formats.
 
 pub mod aircraft;
 pub mod fstd;

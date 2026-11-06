@@ -4,10 +4,10 @@
 
 [package]
 name = "au-casa"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 license = "MPL-2.0"
-description = "CASA (Australia) Part 61 rules that the ICAO-universal icao-shared-kernel leaves out: aircraft classification, simulator recognition and titles of licence."
+description = "CASA (Australia) Part 61 rules that the ICAO-universal icao-shared-kernel leaves out: aircraft classification, simulator recognition, titles of licence and the rules for a pilot's logbook."
 repository = "https://github.com/Open-Aviation-Solutions/au-casa"
 readme = "README.md"
 include = ["/src", "/tests", "/README.md", "/LICENSE"]
