@@ -13,12 +13,13 @@ use au_casa::{
     EntryInformation, InformationError, SupervisionRoute,
 };
 use icao_shared_kernel::{
-    Aircraft, AircraftRegistration, AircraftType, Capacity, FlightDuration, NationalityMark,
+    Aircraft, AircraftRegistration, AircraftType, Capacity, FlightDuration, FlightRules,
+    LocationIndicator, NationalityMark,
 };
 use logbook_shared_kernel::{
-    Assessment, AssessmentId, AuthorityId, AuthoritySpecificInformation, DateRange, DayNight,
-    Entry, EntryId, EntryParts, InstrumentTime, LicensingAuthority, Logbook, ProblemAt,
-    ProblemKind, Record, Subject,
+    Answer, Approach, ApproachType, Assessment, AssessmentId, AuthorityId,
+    AuthoritySpecificInformation, DateRange, DayNight, Entry, EntryId, EntryParts, InstrumentTime,
+    LicensingAuthority, Logbook, ProblemAt, ProblemKind, Question, Record, Subject,
 };
 use rstest::rstest;
 use serde_json::{json, Value};
@@ -126,18 +127,223 @@ fn a_type_counts_as_its_category_and_class(
     assert!(classification.cautions.is_empty());
 }
 
+/// The keys of the questions about `record`, and of those shown for it
+/// given `answers`.
+fn asked_and_shown(record: Record, answers: Value) -> (Vec<&'static str>, Vec<&'static str>) {
+    let questions = Casa::new().questions_for(record);
+    let information = AuthoritySpecificInformation::new(answers);
+    let keys = |questions: Vec<&Question>| questions.iter().map(|q| q.key).collect();
+    (
+        keys(questions.iter().collect()),
+        keys(questions.shown_for(record, Some(&information))),
+    )
+}
+
 #[test]
-fn nothing_is_asked_or_found_yet() {
-    let casa = Casa::new();
+fn a_flight_is_asked_only_what_applies_to_it() {
     let entry = Entry::new(flight_parts()).unwrap();
+    let questions = Casa::new().questions_for(Record::Entry(&entry));
+    assert_eq!(questions.version(), EntryInformation::VERSION);
+    let (asked, shown) = asked_and_shown(Record::Entry(&entry), json!({}));
+    assert_eq!(asked, ["route", "receiving_flight_training"]);
+    assert!(shown.is_empty());
+}
+
+#[test]
+fn a_session_is_asked_whether_its_device_was_approved() {
+    let entry = session("CASA", None);
+    let (asked, shown) = asked_and_shown(Record::Entry(&entry), json!({}));
+    assert_eq!(asked[0], "approved_fstd");
+    assert_eq!(shown, ["approved_fstd"]);
+}
+
+/// Reg 61.870(6) and (7), and Table 61.935 item 20, "under the IFR".
+#[rstest]
+#[case::vfr(Some(FlightRules::Vfr), false)]
+#[case::unknown(None, false)]
+#[case::ifr(Some(FlightRules::Ifr), true)]
+#[case::initially_ifr(Some(FlightRules::InitiallyIfr), true)]
+#[case::initially_vfr(Some(FlightRules::InitiallyVfr), true)]
+fn approaches_are_asked_about_and_arrivals_under_the_ifr(
+    #[case] flight_rules: Option<FlightRules>,
+    #[case] arrivals: bool,
+) {
+    let entry = Entry::new(EntryParts {
+        flight_rules,
+        approaches: vec![Approach::new(
+            ApproachType::Vor,
+            LocationIndicator::parse("YBAF").unwrap(),
+            false,
+        )],
+        ..flight_parts()
+    })
+    .unwrap();
+    let (_, shown) = asked_and_shown(Record::Entry(&entry), json!({}));
+    let mut expected = vec![
+        "azimuth_guidance_operation",
+        "course_deviation_indicator_operation",
+    ];
+    if arrivals {
+        expected.push("dme_or_gnss_arrivals");
+    }
+    assert_eq!(shown, expected);
+}
+
+/// Reg 61.095(1)(c), (2) and (3).
+#[rstest]
+#[case::unanswered(json!({}), &["route"])]
+#[case::operator(json!({"route": "operator"}), &["route"])]
+#[case::instructor(json!({"route": "instructor"}), &["route", "receiving_flight_training"])]
+fn a_pilot_in_command_under_supervision_is_asked_the_route(
+    #[case] answers: Value,
+    #[case] expected: &[&str],
+) {
+    let entry = Entry::new(EntryParts {
+        capacity: Capacity::PilotInCommandUnderSupervision,
+        ..flight_parts()
+    })
+    .unwrap();
+    let (_, shown) = asked_and_shown(Record::Entry(&entry), answers);
+    assert_eq!(shown, expected);
+    let questions = Casa::new().questions_for(Record::Entry(&entry));
+    let unanswered: Vec<_> = questions
+        .required_unanswered_for(
+            Record::Entry(&entry),
+            Some(&AuthoritySpecificInformation::new(
+                json!({"route": "instructor"}),
+            )),
+        )
+        .into_iter()
+        .map(|q| q.key)
+        .collect();
+    assert_eq!(unanswered, ["receiving_flight_training"]);
+}
+
+/// An answer each question accepts, of its kind.
+fn an_answer(question: &Question) -> Value {
+    match &question.answer {
+        Answer::Choice(choices) => choices[0].value.into(),
+        Answer::YesNo => false.into(),
+        Answer::Count => 2.into(),
+        other => panic!("CASA asks no {other:?}"),
+    }
+}
+
+#[test]
+fn every_question_is_a_key_of_its_format() {
+    let casa = Casa::new();
+    let entry = Entry::new(EntryParts {
+        subject: session("CASA", None).subject().clone(),
+        flight_rules: Some(FlightRules::Ifr),
+        approaches: vec![Approach::new(
+            ApproachType::Ils,
+            LocationIndicator::parse("YBAF").unwrap(),
+            false,
+        )],
+        ..flight_parts()
+    })
+    .unwrap();
     let assessment = an_assessment();
-    let information = AuthoritySpecificInformation::new(json!({}));
     for record in [Record::Entry(&entry), Record::Assessment(&assessment)] {
         let questions = casa.questions_for(record);
-        assert!(questions.is_empty());
-        assert_eq!(questions.version(), 1);
-        assert!(casa.problems_for(record, &information).is_empty());
+        let mut answers = serde_json::Map::new();
+        for question in &questions {
+            answers.insert(question.key.into(), an_answer(question));
+            if let Answer::Choice(choices) = &question.answer {
+                for choice in choices {
+                    let one = json!({ question.key: choice.value });
+                    assert!(casa
+                        .problems_for(record, &AuthoritySpecificInformation::new(one))
+                        .is_empty());
+                }
+            }
+        }
+        assert_eq!(answers.len(), questions.iter().count());
+        assert!(casa
+            .problems_for(record, &AuthoritySpecificInformation::new(answers.into()))
+            .is_empty());
     }
+}
+
+#[test]
+fn an_assessment_is_asked_its_check_outcome_and_a_flight_tests_purpose() {
+    let assessment = an_assessment();
+    let record = Record::Assessment(&assessment);
+    let questions = Casa::new().questions_for(record);
+    assert_eq!(questions.version(), AssessmentInformation::VERSION);
+    let (asked, shown) = asked_and_shown(record, json!({"check_type": "flight review"}));
+    assert_eq!(asked, ["check_type", "outcome", "check_purpose"]);
+    assert_eq!(shown, ["check_type", "outcome"]);
+    let (_, shown) = asked_and_shown(record, json!({"check_type": "flight test"}));
+    assert_eq!(shown, ["check_type", "outcome", "check_purpose"]);
+    let required: Vec<_> = questions
+        .required_unanswered_for(record, None)
+        .into_iter()
+        .map(|q| q.key)
+        .collect();
+    assert_eq!(required, ["check_type", "outcome"]);
+}
+
+/// Reg 61.095(3)(b): "the person is not receiving flight training".
+#[test]
+fn receiving_flight_training_on_the_instructors_route_is_refused() {
+    let casa = Casa::new();
+    let entry = Entry::new(EntryParts {
+        capacity: Capacity::PilotInCommandUnderSupervision,
+        ..flight_parts()
+    })
+    .unwrap();
+    let problems = |receiving: bool| {
+        casa.problems_for(
+            Record::Entry(&entry),
+            &AuthoritySpecificInformation::new(
+                json!({"route": "instructor", "receiving_flight_training": receiving}),
+            ),
+        )
+    };
+    assert!(problems(false).is_empty());
+    let refused = problems(true);
+    assert_eq!(refused.len(), 1);
+    assert_eq!(
+        refused[0].at,
+        ProblemAt::Question("receiving_flight_training")
+    );
+    assert_eq!(refused[0].kind, ProblemKind::Refusal);
+    assert_eq!(refused[0].regulation, "61.095(3)(b)");
+}
+
+/// Only information not saved yet may lack its version: the record's
+/// stored information had one.
+#[test]
+fn information_already_stored_must_carry_its_version() {
+    let casa = Casa::new();
+    let stored = session("CASA", Some(json!({"_version": 1, "approved_fstd": true})));
+    let new = session("CASA", None);
+    let unversioned = AuthoritySpecificInformation::new(json!({"approved_fstd": true}));
+    assert!(casa
+        .problems_for(Record::Entry(&new), &unversioned)
+        .is_empty());
+    let refused = casa.problems_for(Record::Entry(&stored), &unversioned);
+    assert_eq!(refused.len(), 1);
+    assert_eq!(refused[0].at, ProblemAt::Information);
+    assert_eq!(refused[0].kind, ProblemKind::Refusal);
+    let versioned =
+        AuthoritySpecificInformation::new(json!({"_version": 1, "approved_fstd": true}));
+    assert!(casa
+        .problems_for(Record::Entry(&stored), &versioned)
+        .is_empty());
+
+    let mut assessment = an_assessment();
+    assessment.authority_information.insert(
+        AuthorityId::new("AU", "CASA").unwrap(),
+        AuthoritySpecificInformation::new(json!({"_version": 1, "outcome": "passed"})),
+    );
+    let refused = casa.problems_for(
+        Record::Assessment(&assessment),
+        &AuthoritySpecificInformation::new(json!({"outcome": "passed"})),
+    );
+    assert_eq!(refused.len(), 1);
+    assert_eq!(refused[0].at, ProblemAt::Information);
 }
 
 #[test]

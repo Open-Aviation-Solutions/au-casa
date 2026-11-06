@@ -6,15 +6,16 @@
 //! [`LicensingAuthority`], and CASA's information on an entry and on an
 //! assessment.
 //!
-//! So far it says which entries count, what an aircraft type counts as,
-//! which requirements it checks and the pilot's currency against them, and
-//! CASA's own totals. It asks no questions yet; of the problems, it finds
-//! only information it cannot read. The rest follow (au-casa#40).
+//! It says which entries count, what an aircraft type counts as, which
+//! requirements it checks and the pilot's currency against them, CASA's own
+//! totals, the questions CASA asks about an entry and an assessment, and
+//! the problems with the answers.
 
 mod assessment_information;
 mod currency;
 mod entry_information;
 mod guards;
+mod questions;
 mod stored;
 #[cfg(test)]
 mod test_support;
@@ -137,46 +138,85 @@ impl LicensingAuthority for Casa {
         totals::totals(self, logbook, range)
     }
 
-    /// None yet, at the version of CASA's information on the kind of
-    /// record: [`EntryInformation::VERSION`] or
-    /// [`AssessmentInformation::VERSION`].
+    /// The questions for CASA's information on an entry, each key of
+    /// [`EntryInformation`], or on an assessment, each key of
+    /// [`AssessmentInformation`], at that format's version. Of an entry, the
+    /// question whether the device was an approved flight simulation
+    /// training device is asked only of a session, the two guidance
+    /// operations only of an entry with approaches, and the DME or GNSS
+    /// arrivals only of an entry with some part under the IFR; the route is
+    /// shown for a pilot in command under supervision, and whether the
+    /// person was receiving flight training on the instructor's route.
     fn questions_for(&self, record: Record) -> Questions {
-        let version = match record {
-            Record::Entry(_) => EntryInformation::VERSION,
-            Record::Assessment(_) => AssessmentInformation::VERSION,
-        };
-        Questions::new(version, Vec::new())
+        match record {
+            Record::Entry(entry) => questions::for_entry(entry),
+            Record::Assessment(_) => questions::for_assessment(),
+        }
     }
 
-    /// So far, only that CASA's information on an entry or an assessment
-    /// cannot be read ([`EntryInformation::read_to_save`],
-    /// [`AssessmentInformation::read_to_save`]): a refusal, at the
-    /// information as a whole, so that the host does not stamp it as this
-    /// version and save it. Its answers are checked against each other later
-    /// (au-casa#40).
+    /// A refusal at the information as a whole when it cannot be read, so
+    /// that the host does not stamp it as this version and save it: one that
+    /// is not this format's, of another version, or of none on a record that
+    /// already has CASA's information stored (only information not saved
+    /// yet may lack its version: [`EntryInformation::read`] and
+    /// [`EntryInformation::read_to_save`], and the same for an assessment).
+    /// And a refusal at `receiving_flight_training` when its answer is yes:
+    /// on the route of reg 61.095(3), where it is asked, "the person is not
+    /// receiving flight training" (reg 61.095(3)(b)).
     fn problems_for(
         &self,
         record: Record,
         information: &AuthoritySpecificInformation,
     ) -> Vec<Problem> {
-        let unreadable = match record {
-            Record::Entry(_) => EntryInformation::read_to_save(information)
-                .err()
-                .map(|error| error.to_string()),
-            Record::Assessment(_) => AssessmentInformation::read_to_save(information)
-                .err()
-                .map(|error| error.to_string()),
-        };
-        unreadable
-            .map(|text| Problem {
-                at: ProblemAt::Information,
-                kind: ProblemKind::Refusal,
-                text,
-                // A stored format's rule, not a regulation's.
-                regulation: "",
-            })
-            .into_iter()
-            .collect()
+        let stored = record.information_for(&self.id).is_some();
+        match record {
+            Record::Entry(_) => {
+                let read = if stored {
+                    EntryInformation::read
+                } else {
+                    EntryInformation::read_to_save
+                };
+                match read(information) {
+                    Err(error) => vec![unreadable(error.to_string())],
+                    Ok(information) if information.receiving_flight_training == Some(true) => {
+                        vec![Problem {
+                            at: ProblemAt::Question(entry_information::RECEIVING_FLIGHT_TRAINING),
+                            kind: ProblemKind::Refusal,
+                            text: "Supervised by a flight instructor or flight examiner, the \
+                                   flight is time as pilot in command under supervision only \
+                                   if \"the person is not receiving flight training\""
+                                .into(),
+                            regulation: "61.095(3)(b)",
+                        }]
+                    }
+                    Ok(_) => Vec::new(),
+                }
+            }
+            Record::Assessment(_) => {
+                let read = if stored {
+                    AssessmentInformation::read
+                } else {
+                    AssessmentInformation::read_to_save
+                };
+                read(information)
+                    .err()
+                    .map(|error| unreadable(error.to_string()))
+                    .into_iter()
+                    .collect()
+            }
+        }
+    }
+}
+
+/// A refusal of information that cannot be read, at the information as a
+/// whole.
+fn unreadable(text: String) -> Problem {
+    Problem {
+        at: ProblemAt::Information,
+        kind: ProblemKind::Refusal,
+        text,
+        // A stored format's rule, not a regulation's.
+        regulation: "",
     }
 }
 

@@ -174,9 +174,9 @@ impl AssessmentInformationError {
     }
 }
 
-const CHECK_TYPE: &str = "check_type";
-const OUTCOME: &str = "outcome";
-const CHECK_PURPOSE: &str = "check_purpose";
+pub(super) const CHECK_TYPE: &str = "check_type";
+pub(super) const OUTCOME: &str = "outcome";
+pub(super) const CHECK_PURPOSE: &str = "check_purpose";
 
 /// Every key of the format, in the order
 /// [`AssessmentInformation::to_information`] writes them.
