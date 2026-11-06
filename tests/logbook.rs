@@ -162,8 +162,8 @@ fn a_session_is_asked_whether_its_device_was_approved() {
 #[case::vfr(Some(FlightRules::Vfr), false)]
 #[case::unknown(None, false)]
 #[case::ifr(Some(FlightRules::Ifr), true)]
-#[case::initially_ifr(Some(FlightRules::InitiallyIfr), true)]
-#[case::initially_vfr(Some(FlightRules::InitiallyVfr), true)]
+#[case::initially_ifr(Some(FlightRules::InitiallyIfr), false)]
+#[case::initially_vfr(Some(FlightRules::InitiallyVfr), false)]
 fn approaches_are_asked_about_and_arrivals_under_the_ifr(
     #[case] flight_rules: Option<FlightRules>,
     #[case] arrivals: bool,
@@ -312,38 +312,55 @@ fn receiving_flight_training_on_the_instructors_route_is_refused() {
     assert_eq!(refused[0].regulation, "61.095(3)(b)");
 }
 
-/// Only information not saved yet may lack its version: the record's
-/// stored information had one.
+/// Information with no version is information not saved yet, whether the
+/// host passes the record with it already inside or without it; stored
+/// information that has lost its version is refused where it is read.
 #[test]
-fn information_already_stored_must_carry_its_version() {
+fn information_with_no_version_is_information_not_saved_yet() {
     let casa = Casa::new();
-    let stored = session("CASA", Some(json!({"_version": 1, "approved_fstd": true})));
-    let new = session("CASA", None);
-    let unversioned = AuthoritySpecificInformation::new(json!({"approved_fstd": true}));
-    assert!(casa
-        .problems_for(Record::Entry(&new), &unversioned)
-        .is_empty());
-    let refused = casa.problems_for(Record::Entry(&stored), &unversioned);
-    assert_eq!(refused.len(), 1);
-    assert_eq!(refused[0].at, ProblemAt::Information);
-    assert_eq!(refused[0].kind, ProblemKind::Refusal);
-    let versioned =
-        AuthoritySpecificInformation::new(json!({"_version": 1, "approved_fstd": true}));
-    assert!(casa
-        .problems_for(Record::Entry(&stored), &versioned)
-        .is_empty());
-
-    let mut assessment = an_assessment();
-    assessment.authority_information.insert(
-        AuthorityId::new("AU", "CASA").unwrap(),
-        AuthoritySpecificInformation::new(json!({"_version": 1, "outcome": "passed"})),
+    let answers = json!({"approved_fstd": true});
+    let unversioned = AuthoritySpecificInformation::new(answers.clone());
+    let with_it = session("CASA", Some(answers));
+    let without_it = session("CASA", None);
+    for entry in [&with_it, &without_it] {
+        assert!(casa
+            .problems_for(Record::Entry(entry), &unversioned)
+            .is_empty());
+    }
+    assert!(!casa.counts(&with_it));
+    assert_eq!(
+        EntryInformation::read(&unversioned),
+        Err(InformationError::UnsupportedVersion)
     );
     let refused = casa.problems_for(
-        Record::Assessment(&assessment),
-        &AuthoritySpecificInformation::new(json!({"outcome": "passed"})),
+        Record::Entry(&without_it),
+        &AuthoritySpecificInformation::new(json!({"_version": 2, "approved_fstd": true})),
     );
     assert_eq!(refused.len(), 1);
     assert_eq!(refused[0].at, ProblemAt::Information);
+}
+
+/// An answer left from when the entry was logged as pilot in command under
+/// supervision is not the person's training on reg 61.095(3)'s route.
+#[test]
+fn receiving_flight_training_is_refused_only_where_it_is_asked() {
+    let casa = Casa::new();
+    let entry = Entry::new(flight_parts()).unwrap();
+    let left = AuthoritySpecificInformation::new(
+        json!({"route": "instructor", "receiving_flight_training": true}),
+    );
+    assert!(casa.problems_for(Record::Entry(&entry), &left).is_empty());
+    let supervised = Entry::new(EntryParts {
+        capacity: Capacity::PilotInCommandUnderSupervision,
+        ..flight_parts()
+    })
+    .unwrap();
+    let operator = AuthoritySpecificInformation::new(
+        json!({"route": "operator", "receiving_flight_training": true}),
+    );
+    assert!(casa
+        .problems_for(Record::Entry(&supervised), &operator)
+        .is_empty());
 }
 
 #[test]

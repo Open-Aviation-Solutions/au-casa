@@ -144,7 +144,7 @@ impl LicensingAuthority for Casa {
     /// question whether the device was an approved flight simulation
     /// training device is asked only of a session, the two guidance
     /// operations only of an entry with approaches, and the DME or GNSS
-    /// arrivals only of an entry with some part under the IFR; the route is
+    /// arrivals only of an entry under the IFR; the route is
     /// shown for a pilot in command under supervision, and whether the
     /// person was receiving flight training on the instructor's route.
     fn questions_for(&self, record: Record) -> Questions {
@@ -154,56 +154,53 @@ impl LicensingAuthority for Casa {
         }
     }
 
-    /// A refusal at the information as a whole when it cannot be read, so
-    /// that the host does not stamp it as this version and save it: one that
-    /// is not this format's, of another version, or of none on a record that
-    /// already has CASA's information stored (only information not saved
-    /// yet may lack its version: [`EntryInformation::read`] and
-    /// [`EntryInformation::read_to_save`], and the same for an assessment).
-    /// And a refusal at `receiving_flight_training` when its answer is yes:
-    /// on the route of reg 61.095(3), where it is asked, "the person is not
-    /// receiving flight training" (reg 61.095(3)(b)).
+    /// A refusal at the information as a whole when it cannot be read
+    /// ([`EntryInformation::read_to_save`],
+    /// [`AssessmentInformation::read_to_save`]), so that the host does not
+    /// stamp it as this version and save it: one that is not this format's,
+    /// or of another version. Information with no version is information not
+    /// saved yet, which the host then stamps; stored information that has
+    /// lost its version is refused where it is read
+    /// ([`EntryInformation::read`]), and so counts for nothing.
+    ///
+    /// And a refusal at `receiving_flight_training` when its answer is yes
+    /// where the question is shown, on the route of reg 61.095(3) for a pilot
+    /// in command under supervision: "the person is not receiving flight
+    /// training" (reg 61.095(3)(b)).
     fn problems_for(
         &self,
         record: Record,
         information: &AuthoritySpecificInformation,
     ) -> Vec<Problem> {
-        let stored = record.information_for(&self.id).is_some();
         match record {
-            Record::Entry(_) => {
-                let read = if stored {
-                    EntryInformation::read
-                } else {
-                    EntryInformation::read_to_save
-                };
-                match read(information) {
-                    Err(error) => vec![unreadable(error.to_string())],
-                    Ok(information) if information.receiving_flight_training == Some(true) => {
-                        vec![Problem {
-                            at: ProblemAt::Question(entry_information::RECEIVING_FLIGHT_TRAINING),
-                            kind: ProblemKind::Refusal,
-                            text: "Supervised by a flight instructor or flight examiner, the \
-                                   flight is time as pilot in command under supervision only \
-                                   if \"the person is not receiving flight training\""
-                                .into(),
-                            regulation: "61.095(3)(b)",
-                        }]
-                    }
-                    Ok(_) => Vec::new(),
+            Record::Entry(entry) => match EntryInformation::read_to_save(information) {
+                Err(error) => vec![unreadable(error.to_string())],
+                Ok(answers)
+                    if answers.receiving_flight_training == Some(true)
+                        && questions::for_entry(entry)
+                            .shown_for(record, Some(information))
+                            .iter()
+                            .any(|question| {
+                                question.key == entry_information::RECEIVING_FLIGHT_TRAINING
+                            }) =>
+                {
+                    vec![Problem {
+                        at: ProblemAt::Question(entry_information::RECEIVING_FLIGHT_TRAINING),
+                        kind: ProblemKind::Refusal,
+                        text: "Supervised by a flight instructor or flight examiner, the flight \
+                               is time as pilot in command under supervision only if \"the \
+                               person is not receiving flight training\""
+                            .into(),
+                        regulation: "61.095(3)(b)",
+                    }]
                 }
-            }
-            Record::Assessment(_) => {
-                let read = if stored {
-                    AssessmentInformation::read
-                } else {
-                    AssessmentInformation::read_to_save
-                };
-                read(information)
-                    .err()
-                    .map(|error| unreadable(error.to_string()))
-                    .into_iter()
-                    .collect()
-            }
+                Ok(_) => Vec::new(),
+            },
+            Record::Assessment(_) => AssessmentInformation::read_to_save(information)
+                .err()
+                .map(|error| unreadable(error.to_string()))
+                .into_iter()
+                .collect(),
         }
     }
 }

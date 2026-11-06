@@ -63,9 +63,9 @@ answers one such question:
   rules asked only of an entry it applies to); and the problems with the
   answers (`problems_for`): information it cannot read, so that the host
   does not stamp and save it, and reg 61.095(3)(b)'s "the person is not
-  receiving flight training". Stored information must carry its version
-  (`read`); only information about to be saved, on a record with none of
-  CASA's stored, may lack it (`read_to_save`). A `null` answer is no answer, as an
+  receiving flight training", where that question is shown. Stored information must carry its version
+  (`read`); only information about to be saved may lack it
+  (`read_to_save`), which is how `problems_for` reads what it is given. A `null` answer is no answer, as an
   absent key is. The currency checks are in `logbook::currency`, which
   also lists the requirements and runs them; see "Currency checks" below.
 
@@ -218,7 +218,7 @@ compatible one the patch, as the kernel's do (decided on au-casa#24).
 Breaking includes a change to the API and a change to the Part 61 reading
 that changes an existing designator's category, class or design features, or
 a title of licence's Part 61 term. Consumers take au-casa by a caret range
-on the current minor (such as `^0.2.0`), so a `cargo update` takes up patches but not a breaking release,
+on the current minor (such as `^0.3.0`), so a `cargo update` takes up patches but not a breaking release,
 which they move to on purpose.
 
 ## Commands

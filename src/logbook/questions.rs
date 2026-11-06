@@ -25,11 +25,8 @@ use super::{
 pub(super) fn for_entry(entry: &Entry) -> Questions {
     let session = matches!(entry.subject(), Subject::Session { .. });
     let approaches = !entry.approaches().is_empty();
-    // Some part of the flight under the IFR.
-    let ifr = matches!(
-        entry.flight_rules(),
-        Some(FlightRules::Ifr | FlightRules::InitiallyIfr | FlightRules::InitiallyVfr)
-    );
+    // Under the IFR throughout, as the single-pilot IFR check reads it.
+    let ifr = entry.flight_rules() == Some(FlightRules::Ifr);
     let mut questions = Vec::new();
     if session {
         questions.push(Question {
@@ -146,13 +143,14 @@ pub(super) fn for_assessment() -> Questions {
         },
         Question {
             key: OUTCOME,
-            label: "Did the pilot pass it?".into(),
+            label: "What was its outcome?".into(),
             regulation: "61.745(3)",
-            answer: Answer::Choice(
-                [CheckOutcome::Passed, CheckOutcome::Failed]
-                    .map(|outcome| choice(outcome.as_str(), "61.745(3)"))
-                    .into(),
-            ),
+            answer: Answer::Choice(vec![
+                choice(CheckOutcome::Passed.as_str(), "61.745(3)"),
+                // Reg 61.745(3) speaks only of passing; no one regulation
+                // speaks of failing every kind of check.
+                choice(CheckOutcome::Failed.as_str(), ""),
+            ]),
             shown_when: None,
             required: true,
         },

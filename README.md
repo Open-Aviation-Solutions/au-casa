@@ -108,8 +108,11 @@ and what they fly.
 
 Add it from crates.io, with the kernel at a version it accepts. au-casa takes
 the kernel at a matching `0.x` minor (au-casa `0.1.x` with kernel `0.1.x`,
-`0.2.x` with `0.2.x`, `0.3.x` with `0.5.x`); mixing them builds two copies of `LicenceTitle`. The
-published pair is:
+`0.2.x` with `0.2.x`, `0.3.x` with `0.5.x`); mixing them builds two copies of `LicenceTitle`. From `0.3`, `Casa`
+implements logbook-shared-kernel's `LicensingAuthority`, so a consumer takes
+that crate at the minor au-casa takes too (`0.2` for au-casa `0.3`): with another,
+`Casa` implements a different trait from the one the consumer names. The
+published set is:
 
 ```toml
 [dependencies]
