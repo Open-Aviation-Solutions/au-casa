@@ -10,8 +10,8 @@ use time::Date;
 use crate::aircraft::AircraftCategory;
 use crate::logbook::guards::is_category;
 
-/// "Within the previous 6 months", taken as a conservative 183 days (6 ×
-/// 30.5), as pilot-logbook took it.
+/// "Within the previous 6 months", as pilot-logbook's 183 days (6 × 30.5),
+/// kept for the move.
 const WINDOW_DAYS: u32 = 183;
 const REQUIRED: usize = 1;
 
@@ -39,8 +39,9 @@ impl EntryAccumulator for NightVfr {
             return;
         }
         let pairs = entry.take_offs().night.min(entry.landings().night);
-        self.window
-            .record(entry, usize::try_from(pairs).unwrap_or(usize::MAX));
+        // One entry supplies at most the events the check needs.
+        let pairs = usize::try_from(pairs).map_or(REQUIRED, |pairs| pairs.min(REQUIRED));
+        self.window.record(entry, pairs);
     }
 }
 
@@ -108,6 +109,16 @@ mod tests {
     fn an_unclassified_type_does_not_count() {
         let r = result(&[at_night(unclassified("a", date!(2024 - 06 - 01)))]);
         assert!(!r.is_current());
+    }
+
+    #[test]
+    fn the_windows_edge_is_183_days_counting_the_reference_date() {
+        let inside = result(&[at_night(aeroplane("a", REFERENCE - Duration::days(182)))]);
+        assert!(inside.is_current());
+
+        let outside = result(&[at_night(aeroplane("a", REFERENCE - Duration::days(183)))]);
+        assert!(!outside.is_current());
+        assert_eq!(outside.found, 0);
     }
 
     #[test]

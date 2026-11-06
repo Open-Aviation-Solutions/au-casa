@@ -11,15 +11,14 @@
 
 use std::collections::BTreeMap;
 
-use aircraft_type_descriptions::DesignatorTable;
 use icao_shared_kernel::{
     Aircraft, AircraftRegistration, AircraftType, Capacity, FlightDuration, NationalityMark,
 };
-use logbook_shared_kernel::{
-    AircraftDescription, DayNight, Entry, EntryId, EntryParts, InstrumentTime, Subject,
-};
+use logbook_shared_kernel::{DayNight, Entry, EntryId, EntryParts, InstrumentTime, Subject};
 use time::Date;
 use uuid::Uuid;
+
+use crate::logbook::guards::tabled;
 
 /// The entry these parts make.
 pub(crate) fn entry(parts: EntryParts) -> Entry {
@@ -40,13 +39,6 @@ pub(crate) fn night(count: u32) -> DayNight<u32> {
         day: 0,
         night: count,
     }
-}
-
-/// The description the table has for a designator, if it has one.
-fn described(designator: &str) -> Option<AircraftDescription> {
-    DesignatorTable::packaged()
-        .lookup(designator)
-        .map(|facts| facts.description)
 }
 
 /// An hour's flight as pilot in command, in an aircraft of `subject`, with
@@ -83,7 +75,7 @@ pub(crate) fn flown(id: &str, on: Date, designator: &str) -> EntryParts {
                 AircraftType::parse(designator).unwrap(),
                 AircraftRegistration::new(NationalityMark::parse("VH").unwrap(), "ABC").unwrap(),
             ),
-            description: described(designator),
+            description: tabled(designator),
             sole_occupant: false,
         },
     )
@@ -117,10 +109,7 @@ pub(crate) fn simulated(id: &str, on: Date, designator: &str) -> EntryParts {
         Subject::Session {
             session: Uuid::nil(),
             device: Uuid::nil(),
-            simulated: Some((
-                AircraftType::parse(designator).unwrap(),
-                described(designator),
-            )),
+            simulated: Some((AircraftType::parse(designator).unwrap(), tabled(designator))),
         },
     )
 }

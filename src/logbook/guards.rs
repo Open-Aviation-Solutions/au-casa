@@ -4,23 +4,22 @@
 
 //! The classification guards CASA's checks share.
 //!
-//! An entry's aircraft is classified by [`classify`], from the description
-//! of its type that the entry carries (the flight's aircraft, or the type a
-//! session's device represented), or, when it carries none, from the table's
-//! description of its type designator. Where a guard *requires* a category,
-//! an entry with neither does not have it: a currency claim needs positive
-//! evidence, and "the type could not be described" is not evidence that it
-//! was an aeroplane.
+//! An entry's aircraft is classified by [`classify`], as pilot-logbook
+//! classified it: from the table's description of its type designator (the
+//! flight's aircraft, or the type a session's device represented) or, for a
+//! designator the table does not catalogue, from the description the entry
+//! carries. Where a guard *requires* a category, an entry with neither does
+//! not have it: a currency claim needs positive evidence, and "the type
+//! could not be described" is not evidence that it was an aeroplane.
 
 use aircraft_type_descriptions::DesignatorTable;
-use icao_shared_kernel::AircraftType;
 use logbook_shared_kernel::{AircraftDescription, Entry, Subject};
 
 use crate::aircraft::{classify, AircraftCategory};
 
 /// The description of the type the entry was flown in, or that its session
-/// represented; `None` when it carries none and the table has none, or a
-/// session's type was not recorded.
+/// represented: the table's, else the entry's; `None` when neither has one,
+/// or a session's type was not recorded.
 fn description(entry: &Entry) -> Option<AircraftDescription> {
     let (designator, description) = match entry.subject() {
         Subject::Flight {
@@ -33,13 +32,13 @@ fn description(entry: &Entry) -> Option<AircraftDescription> {
             (designator, *description)
         }
     };
-    description.or_else(|| tabled(designator))
+    tabled(designator.as_str()).or(description)
 }
 
 /// The table's description of a type designator.
-fn tabled(designator: &AircraftType) -> Option<AircraftDescription> {
+pub(crate) fn tabled(designator: &str) -> Option<AircraftDescription> {
     DesignatorTable::packaged()
-        .lookup(designator.as_str())
+        .lookup(designator)
         .map(|facts| facts.description)
 }
 
@@ -60,26 +59,42 @@ mod tests {
 
     const ON: time::Date = date!(2024 - 08 - 20);
 
-    #[test]
-    fn with_no_description_the_tables_description_of_the_designator_is_used() {
-        let mut parts = aeroplane("a", ON);
+    /// The parts, with `description` as the flight's description.
+    fn describing(
+        mut parts: logbook_shared_kernel::EntryParts,
+        with: Option<AircraftDescription>,
+    ) -> Entry {
         if let Subject::Flight { description, .. } = &mut parts.subject {
-            *description = None;
+            *description = with;
         }
-        assert!(is_category(&entry(parts), AircraftCategory::Aeroplane));
+        entry(parts)
+    }
+
+    fn helicopter() -> Option<AircraftDescription> {
+        Some(AircraftDescription::new(
+            AirframeKind::Helicopter,
+            1,
+            EngineType::Piston,
+        ))
     }
 
     #[test]
-    fn the_entrys_description_is_used_over_the_tables() {
-        let mut parts = unclassified("a", ON);
-        if let Subject::Flight { description, .. } = &mut parts.subject {
-            *description = Some(AircraftDescription::new(
-                AirframeKind::Helicopter,
-                1,
-                EngineType::Piston,
-            ));
-        }
-        let entry = entry(parts);
+    fn with_no_description_the_tables_description_of_the_designator_is_used() {
+        let entry = describing(aeroplane("a", ON), None);
+        assert!(is_category(&entry, AircraftCategory::Aeroplane));
+    }
+
+    #[test]
+    fn the_tables_description_is_used_over_the_entrys() {
+        // A C172, which the table catalogues, described as a helicopter.
+        let entry = describing(aeroplane("a", ON), helicopter());
+        assert!(is_category(&entry, AircraftCategory::Aeroplane));
+        assert!(!is_category(&entry, AircraftCategory::Helicopter));
+    }
+
+    #[test]
+    fn for_an_uncatalogued_designator_the_entrys_description_is_used() {
+        let entry = describing(unclassified("a", ON), helicopter());
         assert!(is_category(&entry, AircraftCategory::Helicopter));
         assert!(!is_category(&entry, AircraftCategory::Aeroplane));
     }

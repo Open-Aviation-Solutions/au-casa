@@ -38,8 +38,9 @@ impl EntryAccumulator for PassengerNight {
             return;
         }
         let pairs = entry.take_offs().night.min(entry.landings().night);
-        self.window
-            .record(entry, usize::try_from(pairs).unwrap_or(usize::MAX));
+        // One entry supplies at most the events the check needs.
+        let pairs = usize::try_from(pairs).map_or(REQUIRED, |pairs| pairs.min(REQUIRED));
+        self.window.record(entry, pairs);
     }
 }
 
@@ -109,6 +110,16 @@ mod tests {
     fn an_unclassified_type_does_not_count() {
         let r = result(&[at_night(3, unclassified("a", date!(2024 - 08 - 20)))]);
         assert!(!r.is_current());
+    }
+
+    #[test]
+    fn the_windows_edge_is_90_days_counting_the_reference_date() {
+        let inside = result(&[at_night(3, aeroplane("a", REFERENCE - Duration::days(89)))]);
+        assert!(inside.is_current());
+
+        let outside = result(&[at_night(3, aeroplane("a", REFERENCE - Duration::days(90)))]);
+        assert!(!outside.is_current());
+        assert_eq!(outside.found, 0);
     }
 
     #[test]

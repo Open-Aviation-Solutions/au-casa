@@ -68,9 +68,9 @@ answers one such question:
   `run` applies it once, so a check does not repeat it.
 - **An unknown type does not count.** A check that requires a category
   (`guards::is_category`) needs positive evidence. The type is classified
-  from the description the entry carries or, when it carries none, from the
-  table's description of its designator; an entry with neither is not of
-  any category.
+  from the table's description of its designator or, for a designator the
+  table does not catalogue, from the description the entry carries, as
+  pilot-logbook did; an entry with neither is not of any category.
 - **Testing:** each check's unit tests assert its boundaries (the window's
   edge and the expiry, the category guard, an entry dated after the
   reference date), with entries built by `logbook::test_support` from the

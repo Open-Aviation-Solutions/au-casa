@@ -38,8 +38,9 @@ impl EntryAccumulator for PassengerDay {
             return;
         }
         let pairs = entry.take_offs().total().min(entry.landings().total());
-        self.window
-            .record(entry, usize::try_from(pairs).unwrap_or(usize::MAX));
+        // One entry supplies at most the events the check needs.
+        let pairs = usize::try_from(pairs).map_or(REQUIRED, |pairs| pairs.min(REQUIRED));
+        self.window.record(entry, pairs);
     }
 }
 
@@ -170,6 +171,32 @@ mod tests {
             ..aeroplane("a", date!(2024 - 08 - 20))
         });
         assert!(result(&[e]).is_current());
+    }
+
+    /// "Within the previous 90 days": the 90th day back from the reference
+    /// is the last inside the window.
+    #[test]
+    fn the_windows_edge_is_90_days_counting_the_reference_date() {
+        let inside = result(&[by_day(3, aeroplane("a", REFERENCE - Duration::days(89)))]);
+        assert!(inside.is_current());
+        assert_eq!(inside.found, 3);
+
+        let outside = result(&[by_day(3, aeroplane("a", REFERENCE - Duration::days(90)))]);
+        assert!(!outside.is_current());
+        assert_eq!(outside.found, 0);
+        assert_eq!(outside.expiry_date, Some(REFERENCE));
+    }
+
+    #[test]
+    fn an_entry_supplies_at_most_the_three_pairs_needed() {
+        let e = entry(EntryParts {
+            take_offs: day(u32::MAX),
+            landings: night(u32::MAX),
+            ..aeroplane("a", date!(2024 - 08 - 20))
+        });
+        let r = result(&[e]);
+        assert!(r.is_current());
+        assert_eq!(r.found, 3);
     }
 
     #[test]
