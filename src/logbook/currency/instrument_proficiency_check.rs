@@ -16,8 +16,8 @@ use time::{Date, Duration};
 use crate::logbook::{assessment_information, CheckOutcome, CheckPurpose, CheckType};
 
 const REQUIRED: usize = 1;
-/// The look-back for the assessments reported as supporting evidence: 12
-/// months and a month's early renewal, as pilot-logbook had it.
+/// The look-back for the assessments reported as supporting evidence:
+/// pilot-logbook's, a year and a 30-day buffer. It is not the regulation's.
 const DISPLAY_WINDOW_DAYS: i64 = 395;
 /// The look-back for counting qualifying events, as pilot-logbook had it.
 const FOUND_WINDOW_DAYS: i64 = 365;
@@ -67,9 +67,12 @@ struct Passed {
 ///
 /// (d), an operator's training and checking system, is not recorded. A
 /// renewal "within 3 months before the validity of the existing check
-/// expires" runs from that expiry (reg 61.880(3)(f)). A failed instrument
-/// proficiency check after the latest qualifying pass ends the validity
-/// (reg 61.880(4)); a failed check of another kind does not.
+/// expires" runs from that expiry (reg 61.880(3)(f)), the 3 months before
+/// the day after its last valid day. After a failed instrument proficiency
+/// check the holder "is no longer taken to have a valid instrument
+/// proficiency check" (reg 61.880(4)), so nothing passed before it counts
+/// or is renewed by a pass after it; a pass on the same day as the failure
+/// is taken as after it. A failed check of another kind ends nothing.
 ///
 /// What a check was, its outcome and its purpose are CASA's information on
 /// the assessment: one with none, or with information that cannot be read,
@@ -174,38 +177,40 @@ impl AssessmentCurrencyCheck for InstrumentProficiencyCheck {
             .filter(|passed| passed.basis == Basis::RatingTest)
             .map(|passed| passed.on)
             .collect();
+        // Nothing passed before the latest failure counts after it.
+        let failed_on = self.failed.iter().max();
         let mut events: Vec<&Passed> = self
             .passed
             .iter()
+            .filter(|passed| failed_on.is_none_or(|failed| passed.on >= *failed))
             .filter(|passed| Self::qualifies(passed, &rating_tests))
             .collect();
         events.sort_by(|a, b| a.on.cmp(&b.on).then_with(|| a.id.cmp(&b.id)));
-
-        let Some(latest) = events.last() else {
-            return self.none();
-        };
-        if self.failed.iter().any(|failed| *failed > latest.on) {
+        if events.is_empty() {
             return self.none();
         }
 
-        // The last day each pass is valid to, chaining an early renewal
-        // from the expiry it renews.
-        let mut valid_to: Option<Date> = None;
+        // The last day it is valid to, and the pass that made it so,
+        // chaining an early renewal from the expiry it renews.
+        let mut valid: Option<(Date, &Passed)> = None;
         for event in &events {
-            let natural = end_of_nth_month_after(event.on, VALID_MONTHS).unwrap_or(Date::MAX);
-            let renewed = valid_to.filter(|existing| {
-                let window_opens =
-                    add_months_clamped(*existing, -EARLY_RENEWAL_MONTHS).unwrap_or(Date::MIN);
+            let renewed = valid.map(|(to, _)| to).filter(|existing| {
+                // "Within 3 months before the validity ... expires": the
+                // validity ends with its last day, so the 3 months run back
+                // from the day after.
+                let window_opens = existing
+                    .next_day()
+                    .and_then(|expires| add_months_clamped(expires, -EARLY_RENEWAL_MONTHS))
+                    .unwrap_or(Date::MIN);
                 window_opens <= event.on && event.on <= *existing
             });
-            let to = match renewed {
-                Some(existing) => {
-                    end_of_nth_month_after(existing, VALID_MONTHS).unwrap_or(Date::MAX)
-                }
-                None => natural,
-            };
-            valid_to = Some(valid_to.map_or(to, |existing| existing.max(to)));
+            let to = end_of_nth_month_after(renewed.unwrap_or(event.on), VALID_MONTHS)
+                .unwrap_or(Date::MAX);
+            if valid.is_none_or(|(existing, _)| to >= existing) {
+                valid = Some((to, event));
+            }
         }
+        let valid_to = valid.map(|(to, _)| to);
 
         let dates: Vec<Date> = events.iter().map(|event| event.on).collect();
         let shown_after = self
@@ -220,9 +225,11 @@ impl AssessmentCurrencyCheck for InstrumentProficiencyCheck {
             .map(|event| event.id.clone())
             .collect();
         // An early renewal can keep the pilot current for up to 15 months
-        // after it, past the display window: still show what does.
-        if shown.is_empty() && valid_to.is_some_and(|to| to >= self.reference) {
-            shown.push(latest.id.clone());
+        // after it, past the display window: still show the pass that does.
+        if let Some((to, giving)) = valid.filter(|_| shown.is_empty()) {
+            if to >= self.reference {
+                shown.push(giving.id.clone());
+            }
         }
         CurrencyResult {
             // The first day it is not valid.
@@ -342,6 +349,35 @@ mod tests {
             ipc("p", date!(2024 - 08 - 02), CheckOutcome::Passed),
         ]);
         assert!(fail_then_pass.is_current());
+
+        let fail_alone = result(&[ipc("f", date!(2024 - 08 - 22), CheckOutcome::Failed)]);
+        assert!(!fail_alone.is_current());
+        assert_eq!(fail_alone.expiry_date, None);
+    }
+
+    #[test]
+    fn a_pass_after_a_failed_ipc_renews_nothing_before_it() {
+        // Valid to 2024-06-30, but failed on 2024-03-01: the pass on
+        // 2024-04-15 is not an early renewal, and runs from its own month.
+        let r = result(&[
+            ipc("a", date!(2023 - 06 - 01), CheckOutcome::Passed),
+            ipc("f", date!(2024 - 03 - 01), CheckOutcome::Failed),
+            ipc("b", date!(2024 - 04 - 15), CheckOutcome::Passed),
+        ]);
+        assert_eq!(r.current_through(), Some(date!(2025 - 04 - 30)));
+        assert_eq!(ids(&r), ["b"]);
+
+        // Renewed to 2025-06-30, then failed: a pass after the failure is
+        // valid to its own end, not the renewal's.
+        let r = result(&[
+            ipc("a", date!(2023 - 06 - 01), CheckOutcome::Passed),
+            ipc("b", date!(2024 - 04 - 15), CheckOutcome::Passed),
+            ipc("f", date!(2024 - 05 - 01), CheckOutcome::Failed),
+            ipc("c", date!(2024 - 05 - 10), CheckOutcome::Passed),
+        ]);
+        assert_eq!(r.current_through(), Some(date!(2025 - 05 - 31)));
+        assert_eq!(r.found, 1);
+        assert_eq!(ids(&r), ["c"]);
     }
 
     #[test]
@@ -388,7 +424,15 @@ mod tests {
             );
         }
 
-        // A failed check of another kind does not end the validity.
+        // A failed check of another kind is not a pass, and does not end
+        // the validity.
+        let failed_test = checked(
+            "failed test",
+            on,
+            CheckType::FlightTest,
+            CheckOutcome::Failed,
+            Some(CheckPurpose::InstrumentRating),
+        );
         let failed_operator = checked(
             "failed opc",
             date!(2024 - 08 - 22),
@@ -396,6 +440,13 @@ mod tests {
             CheckOutcome::Failed,
             None,
         );
+        for assessment in [failed_test, failed_operator.clone()] {
+            assert!(
+                !result(std::slice::from_ref(&assessment)).is_current(),
+                "{}",
+                assessment.id.as_str()
+            );
+        }
         assert!(result(&[ipc("ipc", on, CheckOutcome::Passed), failed_operator]).is_current());
     }
 
@@ -467,12 +518,50 @@ mod tests {
         ]);
         assert_eq!(chained.current_through(), Some(date!(2025 - 06 - 30)));
 
-        // 2024-02-01 is before 2024-03-30, so it runs from its own month.
+        // 2024-02-01 is before 2024-04-01, so it runs from its own month.
         let natural = result(&[
             ipc("a", date!(2023 - 06 - 01), CheckOutcome::Passed),
             ipc("b", date!(2024 - 02 - 01), CheckOutcome::Passed),
         ]);
         assert_eq!(natural.current_through(), Some(date!(2025 - 02 - 28)));
+    }
+
+    #[test]
+    fn the_renewal_window_is_the_3_months_before_the_day_after_the_expiry() {
+        let renewed_on = |first: Date, second: Date| {
+            result(&[
+                ipc("a", first, CheckOutcome::Passed),
+                ipc("b", second, CheckOutcome::Passed),
+            ])
+            .current_through()
+        };
+        // Valid to 2024-06-30: the window opens on 2024-04-01.
+        let june = date!(2023 - 06 - 01);
+        assert_eq!(
+            renewed_on(june, date!(2024 - 03 - 31)),
+            Some(date!(2025 - 03 - 31))
+        );
+        assert_eq!(
+            renewed_on(june, date!(2024 - 04 - 01)),
+            Some(date!(2025 - 06 - 30))
+        );
+        // Valid to 2024-02-29: the window opens on 2023-12-01.
+        let february = date!(2023 - 02 - 10);
+        assert_eq!(
+            renewed_on(february, date!(2023 - 11 - 30)),
+            Some(date!(2024 - 11 - 30))
+        );
+        assert_eq!(
+            renewed_on(february, date!(2023 - 12 - 01)),
+            Some(date!(2025 - 02 - 28))
+        );
+    }
+
+    #[test]
+    fn found_counts_the_passes_of_the_previous_365_days() {
+        let on = |days| ipc("a", REFERENCE - Duration::days(days), CheckOutcome::Passed);
+        assert_eq!(result(&[on(364)]).found, 1);
+        assert_eq!(result(&[on(365)]).found, 0);
     }
 
     #[test]
@@ -487,6 +576,19 @@ mod tests {
             ],
         );
         assert!(r.is_current());
+        assert_eq!(ids(&r), ["b"]);
+
+        // A later pass valid to an earlier day is not what keeps them
+        // current.
+        let r = result_on(
+            date!(2025 - 06 - 15),
+            &[
+                ipc("a", date!(2023 - 06 - 01), CheckOutcome::Passed),
+                ipc("b", date!(2024 - 04 - 15), CheckOutcome::Passed),
+                ipc("c", date!(2024 - 05 - 01), CheckOutcome::Passed),
+            ],
+        );
+        assert_eq!(r.current_through(), Some(date!(2025 - 06 - 30)));
         assert_eq!(ids(&r), ["b"]);
     }
 
