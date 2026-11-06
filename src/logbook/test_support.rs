@@ -12,13 +12,18 @@
 use std::collections::BTreeMap;
 
 use icao_shared_kernel::{
-    Aircraft, AircraftRegistration, AircraftType, Capacity, FlightDuration, NationalityMark,
+    Aircraft, AircraftRegistration, AircraftType, Capacity, FlightDuration, LocationIndicator,
+    NationalityMark,
 };
-use logbook_shared_kernel::{DayNight, Entry, EntryId, EntryParts, InstrumentTime, Subject};
+use logbook_shared_kernel::{
+    Approach, ApproachType, DayNight, Entry, EntryId, EntryParts, InstrumentTime, Questions,
+    Subject,
+};
 use time::Date;
 use uuid::Uuid;
 
 use crate::logbook::guards::tabled;
+use crate::logbook::{casa, EntryInformation};
 
 /// The entry these parts make.
 pub(crate) fn entry(parts: EntryParts) -> Entry {
@@ -112,4 +117,27 @@ pub(crate) fn simulated(id: &str, on: Date, designator: &str) -> EntryParts {
             simulated: Some((AircraftType::parse(designator).unwrap(), tabled(designator))),
         },
     )
+}
+
+/// An approach of this procedure, flown straight in (not circled).
+pub(crate) fn approach(procedure: ApproachType) -> Approach {
+    Approach::new(procedure, LocationIndicator::parse("YBAF").unwrap(), false)
+}
+
+/// An approach of this procedure that ended in a circling manoeuvre.
+pub(crate) fn circled(procedure: ApproachType) -> Approach {
+    Approach::new(procedure, LocationIndicator::parse("YBAF").unwrap(), true)
+}
+
+/// The parts, with CASA's information recording `count` DME or GNSS
+/// arrivals, stamped with its version as the host stores it.
+pub(crate) fn arrivals(count: u64, mut parts: EntryParts) -> EntryParts {
+    let mut information = EntryInformation {
+        dme_or_gnss_arrivals: Some(count),
+        ..EntryInformation::default()
+    }
+    .to_information();
+    Questions::new(EntryInformation::VERSION, Vec::new()).stamp(&mut information);
+    parts.authority_information.insert(casa(), information);
+    parts
 }

@@ -7,6 +7,9 @@
 //! only the entries [`Casa::counts`](crate::Casa) lets through, so none
 //! repeats that gate.
 
+mod instrument_approaches;
+mod instrument_approaches_2d;
+mod instrument_approaches_3d;
 mod night_vfr;
 mod passenger_day;
 mod passenger_night;
