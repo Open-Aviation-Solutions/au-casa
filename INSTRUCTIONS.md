@@ -43,25 +43,29 @@ answers one such question:
   by its identity, and the kernel stays the source for what Annex 1 can say.
   `FlightCrewLicence::is_pilot_licence` says which licences are pilot
   licences (reg 61.010), so no caller matches on the licences' names for it.
-- `logbook` (au-casa#29, in progress): CASA's rules for a pilot's logbook,
+- `logbook` (au-casa#29): CASA's rules for a pilot's logbook,
   as `Casa`, which implements logbook-shared-kernel's `LicensingAuthority`
   for `AU-CASA`; and CASA's authority-specific information on an entry
   (`EntryInformation`) and on an assessment (`AssessmentInformation`: the
   check type, outcome and purpose of regs 61.745(3), (3A) and 61.880), two
   stored formats whose every key and spelling is mapped by hand, with no
   derived serde, each under a version of its own (the kernel's reserved key
-  `_version`). So far `Casa` says which entries count (`counts`: a session
+  `_version`). `Casa` says which entries count (`counts`: a session
   only in an approved flight simulation training device, reg 61.010), what
   a type counts as (`classify`), which requirements it checks, each with a
   stable id and a name in its regulation's words (`requirements`), the
   pilot's currency against them (`currency`), and CASA's own totals
   (`totals`, over the entries that count; solo flight time is the flights
   whose `sole_occupant` is true, and no rule makes solo count as pilot in
-  command); and it refuses information on an entry or an assessment it
-  cannot read (`problems_for`), so that the host does not stamp and save
-  it. Its questions and its other problems follow in au-casa#40. Stored
-  information must carry its version (`read`); only information about to
-  be saved may lack it (`read_to_save`). A `null` answer is no answer, as an
+  command); the questions it asks for its information on an entry and on
+  an assessment (`questions_for`, in `logbook::questions`: one for each key
+  of the format, a question about an entry's subject, approaches or flight
+  rules asked only of an entry it applies to); and the problems with the
+  answers (`problems_for`): information it cannot read, so that the host
+  does not stamp and save it, and reg 61.095(3)(b)'s "the person is not
+  receiving flight training", where that question is shown. Stored information must carry its version
+  (`read`); only information about to be saved may lack it
+  (`read_to_save`), which is how `problems_for` reads what it is given. A `null` answer is no answer, as an
   absent key is. The currency checks are in `logbook::currency`, which
   also lists the requirements and runs them; see "Currency checks" below.
 
@@ -202,12 +206,19 @@ which GitHub allows only on `main`, and crates.io's trusted publisher accepts
 only that environment; `main` changes only through a pull request with CI
 passing.
 
+CASA's information on an entry and on an assessment (`EntryInformation`,
+`AssessmentInformation`) are stored formats: a host stores them in its
+records. A change to either, to a key, a spelling, or what an answer means,
+is breaking: it bumps that format's `VERSION`, is released as a breaking
+release, and ships with a migration of the data repository's stored
+information, merged with it.
+
 While on `0.x`, a breaking release bumps the minor version (`0.2.0`) and a
 compatible one the patch, as the kernel's do (decided on au-casa#24).
 Breaking includes a change to the API and a change to the Part 61 reading
 that changes an existing designator's category, class or design features, or
 a title of licence's Part 61 term. Consumers take au-casa by a caret range
-on the current minor (such as `^0.2.0`), so a `cargo update` takes up patches but not a breaking release,
+on the current minor (such as `^0.3.0`), so a `cargo update` takes up patches but not a breaking release,
 which they move to on purpose.
 
 ## Commands

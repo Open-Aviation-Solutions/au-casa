@@ -108,12 +108,13 @@ impl InformationError {
     }
 }
 
-const APPROVED_FSTD: &str = "approved_fstd";
-const ROUTE: &str = "route";
-const RECEIVING_FLIGHT_TRAINING: &str = "receiving_flight_training";
-const AZIMUTH_GUIDANCE_OPERATION: &str = "azimuth_guidance_operation";
-const COURSE_DEVIATION_INDICATOR_OPERATION: &str = "course_deviation_indicator_operation";
-const DME_OR_GNSS_ARRIVALS: &str = "dme_or_gnss_arrivals";
+pub(super) const APPROVED_FSTD: &str = "approved_fstd";
+pub(super) const ROUTE: &str = "route";
+pub(super) const RECEIVING_FLIGHT_TRAINING: &str = "receiving_flight_training";
+pub(super) const AZIMUTH_GUIDANCE_OPERATION: &str = "azimuth_guidance_operation";
+pub(super) const COURSE_DEVIATION_INDICATOR_OPERATION: &str =
+    "course_deviation_indicator_operation";
+pub(super) const DME_OR_GNSS_ARRIVALS: &str = "dme_or_gnss_arrivals";
 
 /// Every key of the format, in the order [`EntryInformation::to_information`]
 /// writes them: the one list both reading and writing go by.

@@ -5,7 +5,8 @@ A Rust library of the rules of Australia's Civil Aviation Safety Authority
 Regulations 1998 (CASR): the category, class and design features of an
 aircraft type, whether a flight simulation training device is recognised, and
 the Part 61 licence and category rating for each title of licence that ICAO's
-Annex 1 defines.
+Annex 1 defines, and CASA's rules for a pilot's logbook (its currency checks,
+totals and questions).
 
 It is for developers of aviation software, such as logbooks and training
 records, who need Part 61's terms and classifications in one place, with the
@@ -16,13 +17,16 @@ that are Australia's alone are kept here.
 
 ## Status
 
-Early: a `0.x` release. Take it by a caret range on its minor version (such as `"0.2"`): until `1.0`
+Early: a `0.x` release. Take it by a caret range on its minor version (such as `"0.3"`): until `1.0`
 a breaking release is a minor version (0.2 stopped re-exporting the aircraft
-description types), as
+description types; 0.3 moved to `icao-shared-kernel` 0.5), as
 [`INSTRUCTIONS.md`, "Releasing"](INSTRUCTIONS.md#releasing) sets out. It takes `icao-shared-kernel` and
 [aircraft-type-descriptions](https://github.com/Open-Aviation-Solutions/aircraft-type-descriptions)
 by caret range; `0.1.0` pinned them exactly (`=0.1.3` and `=0.1.0`), `0.1.1`
-takes `^0.1.3` and `^0.1.0`, and `0.2.0` takes `^0.2.0` and `^0.1.0`.
+takes `^0.1.3` and `^0.1.0`, `0.2.0` takes `^0.2.0` and `^0.1.0`, and `0.3.0`
+takes `^0.5` and `^0.1.0`, with
+[logbook-shared-kernel](https://github.com/Open-Aviation-Solutions/logbook-shared-kernel)
+at `^0.2`.
 
 What is covered:
 
@@ -48,10 +52,20 @@ What is covered:
   category rating pairs Part 61 grants and Annex 1 has no title for, the
   recreational pilot licence and the gyroplane category rating, with what is
   cited for each and the licence's minimum age.
+- **A pilot's logbook** (`Casa`): logbook-shared-kernel's `LicensingAuthority`
+  for CASA. It says which entries count (a session only in an approved flight
+  simulation training device, reg 61.010), what a type counts as, the
+  recency and currency requirements of regs 61.395, 61.745, 61.870, 61.875,
+  61.880 and 61.965 and the pilot's currency against them, CASA's own totals,
+  and the questions CASA asks about an entry and an assessment, with the
+  problems with their answers (such as reg 61.095(3)(b)'s "not receiving
+  flight training"). CASA's answers are kept as its information on an entry
+  (`EntryInformation`) and on an assessment (`AssessmentInformation`).
 
 What is not:
 
-- Storage: no repositories, databases or file formats. Those belong to the
+- Storage: no repositories or databases, and no file formats beyond CASA's
+  information on an entry and on an assessment (below). Those belong to the
   application using the crate.
 - Bindings for other languages, or a WebAssembly interface.
 
@@ -69,7 +83,13 @@ Known not to work:
   The same holds for `Casa::classify`, which has no override.
 
 The types serialise with serde, but that JSON is not a stored format that is
-promised: it may change between versions, as the API may. The open
+promised: it may change between versions, as the API may. CASA's information
+on an entry and on an assessment is the exception. From 0.3.0 each is a stored
+format: a JSON object whose every key and spelling is mapped by hand, with the
+version of its format under `_version` (each has its own,
+`EntryInformation::VERSION` and `AssessmentInformation::VERSION`). A change to
+either is a breaking release, and a consumer that stores them migrates its
+stored information with it. The open
 [issues](https://github.com/Open-Aviation-Solutions/au-casa/issues) are the
 work still to do.
 
@@ -88,14 +108,18 @@ and what they fly.
 
 Add it from crates.io, with the kernel at a version it accepts. au-casa takes
 the kernel at a matching `0.x` minor (au-casa `0.1.x` with kernel `0.1.x`,
-`0.2.x` with `0.2.x`); mixing them builds two copies of `LicenceTitle`. The
-published pair is:
+`0.2.x` with `0.2.x`, `0.3.x` with `0.5.x`); mixing them builds two copies of `LicenceTitle`. From `0.3`, `Casa`
+implements logbook-shared-kernel's `LicensingAuthority`, so a consumer takes
+that crate at the minor au-casa takes too (`0.2` for au-casa `0.3`): with another,
+`Casa` implements a different trait from the one the consumer names. The
+published set is:
 
 ```toml
 [dependencies]
-au-casa = "0.2"
+au-casa = "0.3"
 aircraft-type-descriptions = "0.1.0"
-icao-shared-kernel = "0.2.0"
+icao-shared-kernel = "0.5"
+logbook-shared-kernel = "0.2"
 ```
 
 The aircraft description types (`AircraftDescription`, `AirframeKind`,
