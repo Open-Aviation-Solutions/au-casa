@@ -130,13 +130,21 @@ pub(crate) fn circled(procedure: ApproachType) -> Approach {
 }
 
 /// The parts, with CASA's information recording `count` DME or GNSS
-/// arrivals, stamped with its version as the host stores it.
-pub(crate) fn arrivals(count: u64, mut parts: EntryParts) -> EntryParts {
-    let mut information = EntryInformation {
-        dme_or_gnss_arrivals: Some(count),
-        ..EntryInformation::default()
-    }
-    .to_information();
+/// arrivals.
+pub(crate) fn arrivals(count: u64, parts: EntryParts) -> EntryParts {
+    informed(
+        EntryInformation {
+            dme_or_gnss_arrivals: Some(count),
+            ..EntryInformation::default()
+        },
+        parts,
+    )
+}
+
+/// The parts, with this as CASA's information, stamped with its version as
+/// the host stores it.
+pub(crate) fn informed(information: EntryInformation, mut parts: EntryParts) -> EntryParts {
+    let mut information = information.to_information();
     Questions::new(EntryInformation::VERSION, Vec::new()).stamp(&mut information);
     parts.authority_information.insert(casa(), information);
     parts
