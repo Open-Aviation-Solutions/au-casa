@@ -8,9 +8,17 @@
 //! So far it says which entries count and what an aircraft type counts as.
 //! It asks no questions and checks no requirements yet, and has no totals
 //! of its own; of the problems, it finds only information it cannot read.
-//! The rest follow (au-casa#29).
+//! Some of its currency checks are written, but `currency` does not run
+//! them yet. The rest follow (au-casa#29).
 
+// Run by `currency` once the requirements are named (au-casa#39).
+#[cfg_attr(not(test), expect(dead_code))]
+mod currency;
 mod entry_information;
+#[cfg_attr(not(test), expect(dead_code))]
+mod guards;
+#[cfg(test)]
+mod test_support;
 
 pub use entry_information::{EntryInformation, InformationError, SupervisionRoute};
 

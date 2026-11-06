@@ -55,7 +55,27 @@ answers one such question:
   does not stamp and save it; its questions, its other problems, its
   requirements, currency and totals follow in the issues under au-casa#29.
   Stored information must carry its version (`EntryInformation::read`);
-  only information about to be saved may lack it (`read_to_save`).
+  only information about to be saved may lack it (`read_to_save`). The
+  currency checks are in `logbook::currency`, written but not yet run by
+  `currency` (au-casa#39); see "Currency checks" below.
+
+## Currency checks
+
+- **One module for each regulation**, an `EntryAccumulator` and
+  `CurrencyCheck` (or the assessment traits) over the kernel's
+  `EventWindow`. Its doc comment quotes the regulation it implements.
+- **Each sees only the entries `Casa::counts` lets through**: the kernel's
+  `run` applies it once, so a check does not repeat it.
+- **An unknown type does not count.** A check that requires a category
+  (`guards::is_category`) needs positive evidence: an entry with no
+  description of its type is not of any category.
+- **Testing:** each check's unit tests assert its boundaries (the window's
+  edge and the expiry, the category guard, an entry dated after the
+  reference date), with entries built by `logbook::test_support` from the
+  real table of types. A check over `EventWindow` does not depend on the
+  order entries arrive in, by construction (it sorts and filters the whole
+  set). A check that decides over the whole set itself, such as one that
+  groups a flight's entries, asserts the same result for both orders.
 
 `icao-shared-kernel`, logbook-shared-kernel and aircraft-type-descriptions
 are taken by a caret range (`^0.5`, `^0.2` and `^0.1.0`), not pinned exactly
