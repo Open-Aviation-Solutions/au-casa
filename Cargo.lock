@@ -13,9 +13,9 @@ dependencies = [
 
 [[package]]
 name = "aircraft-type-descriptions"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "58649d204954f03cfc10ba14ab8d02f101179e1887716d4b8070d6caf5006f7e"
+checksum = "54a93f37983d962650938c7614477a14e7e1327edbfc3579312c075265478c7a"
 dependencies = [
  "serde",
  "toml",
@@ -33,11 +33,13 @@ version = "0.2.0"
 dependencies = [
  "aircraft-type-descriptions",
  "icao-shared-kernel",
+ "logbook-shared-kernel",
  "rstest",
  "serde",
  "serde_json",
  "thiserror",
  "time",
+ "uuid",
 ]
 
 [[package]]
@@ -251,9 +253,9 @@ checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 
 [[package]]
 name = "icao-shared-kernel"
-version = "0.2.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c78ba3e442d9a9f8c1920bc649442f1b18027d368dda0d461281154028de5a1"
+checksum = "156c31f97021d8edd07cf70954aec4f86eaa521b6407f8c8e9044825c61cefa1"
 dependencies = [
  "rust_decimal",
  "serde",
@@ -295,6 +297,19 @@ name = "libc"
 version = "0.2.191"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a"
+
+[[package]]
+name = "logbook-shared-kernel"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "10dd44fd8101afc4389201667c49ac33e51fa294de7b514ae755e935b25d1985"
+dependencies = [
+ "aircraft-type-descriptions",
+ "icao-shared-kernel",
+ "serde_json",
+ "time",
+ "uuid",
+]
 
 [[package]]
 name = "memchr"

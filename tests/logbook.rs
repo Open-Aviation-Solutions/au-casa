@@ -1,0 +1,219 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+//! CASA's rules for a pilot's logbook, and CASA's information on an entry.
+
+use std::collections::BTreeMap;
+
+use aircraft_type_descriptions::{AircraftDescription, AirframeKind, EngineType};
+use au_casa::{Casa, EntryInformation, InformationError, SupervisionRoute};
+use icao_shared_kernel::{
+    Aircraft, AircraftRegistration, AircraftType, Capacity, FlightDuration, NationalityMark,
+};
+use logbook_shared_kernel::{
+    Assessment, AssessmentId, AuthorityId, AuthoritySpecificInformation, DateRange, DayNight,
+    Entry, EntryId, EntryParts, InstrumentTime, LicensingAuthority, Logbook, Record, Subject,
+};
+use rstest::rstest;
+use serde_json::{json, Value};
+use time::macros::date;
+use uuid::Uuid;
+
+fn flight_parts() -> EntryParts {
+    EntryParts {
+        id: EntryId::new("e1"),
+        date: date!(2026 - 11 - 06),
+        subject: Subject::Flight {
+            flight: Uuid::nil(),
+            aircraft: Aircraft::new(
+                AircraftType::parse("C172").unwrap(),
+                AircraftRegistration::new(NationalityMark::parse("VH").unwrap(), "ABC").unwrap(),
+            ),
+            description: None,
+            sole_occupant: false,
+        },
+        route: None,
+        flight_rules: None,
+        flight_time: FlightDuration::new(60).unwrap(),
+        night: FlightDuration::new(0).unwrap(),
+        capacity: Capacity::PilotInCommand,
+        pilot_in_command: None,
+        flight_crew: Vec::new(),
+        instrument: InstrumentTime::default(),
+        approaches: Vec::new(),
+        take_offs: DayNight::default(),
+        landings: DayNight::default(),
+        authority_information: BTreeMap::new(),
+    }
+}
+
+/// A session, with `information` as the information of `authority`.
+fn session(authority: &str, information: Option<Value>) -> Entry {
+    let mut parts = EntryParts {
+        subject: Subject::Session {
+            session: Uuid::nil(),
+            device: Uuid::nil(),
+            simulated: None,
+        },
+        ..flight_parts()
+    };
+    if let Some(information) = information {
+        parts.authority_information.insert(
+            AuthorityId::new("AU", authority).unwrap(),
+            AuthoritySpecificInformation::new(information),
+        );
+    }
+    Entry::new(parts).unwrap()
+}
+
+#[test]
+fn casa_is_au_casa() {
+    assert_eq!(Casa::new().id().to_string(), "AU-CASA");
+}
+
+#[test]
+fn a_flight_counts() {
+    assert!(Casa::new().counts(&Entry::new(flight_parts()).unwrap()));
+}
+
+/// Reg 61.010, "approved flight simulation training device".
+#[rstest]
+#[case::approved(Some(json!({"approved_fstd": true})), true)]
+#[case::not_approved(Some(json!({"approved_fstd": false})), false)]
+#[case::unanswered(Some(json!({})), false)]
+#[case::no_information(None, false)]
+#[case::unreadable(Some(json!({"approved_fstd": "yes"})), false)]
+fn a_session_counts_only_in_an_approved_device(
+    #[case] information: Option<Value>,
+    #[case] counts: bool,
+) {
+    assert_eq!(Casa::new().counts(&session("CASA", information)), counts);
+}
+
+#[test]
+fn another_authoritys_information_does_not_make_a_session_count() {
+    let entry = session("OTHER", Some(json!({"approved_fstd": true})));
+    assert!(!Casa::new().counts(&entry));
+}
+
+/// Regs 61.015 and 61.020, and 61.007(2) for a registered sailplane.
+#[rstest]
+#[case(AirframeKind::LandPlane, 1, EngineType::Piston, &["aeroplane", "single-engine aeroplane"])]
+#[case(AirframeKind::SeaPlane, 2, EngineType::TurboProp, &["aeroplane", "multi-engine aeroplane"])]
+#[case(AirframeKind::Helicopter, 1, EngineType::TurboProp, &["helicopter", "single-engine helicopter"])]
+#[case(AirframeKind::Helicopter, 2, EngineType::TurboProp, &["helicopter"])]
+#[case(AirframeKind::Gyrocopter, 1, EngineType::Piston, &["gyroplane", "single-engine gyroplane"])]
+#[case(AirframeKind::TiltRotor, 2, EngineType::TurboProp, &["powered-lift aircraft", "powered-lift aircraft"])]
+#[case(AirframeKind::Airship, 2, EngineType::Piston, &["airship", "airship"])]
+#[case(AirframeKind::Glider, 0, EngineType::None, &["registered sailplane"])]
+fn a_type_counts_as_its_category_and_class(
+    #[case] airframe: AirframeKind,
+    #[case] engines: u8,
+    #[case] engine_type: EngineType,
+    #[case] counts_as: &[&str],
+) {
+    let classification = Casa::new()
+        .classify(&AircraftDescription::new(airframe, engines, engine_type))
+        .unwrap();
+    assert_eq!(classification.counts_as, counts_as);
+    assert!(classification.cautions.is_empty());
+}
+
+#[test]
+fn nothing_is_asked_found_or_checked_yet() {
+    let casa = Casa::new();
+    let entry = Entry::new(flight_parts()).unwrap();
+    let assessment = Assessment {
+        id: AssessmentId::new("a1"),
+        date: date!(2026 - 11 - 06),
+        flight: Uuid::nil(),
+        authority_information: BTreeMap::new(),
+    };
+    let logbook = Logbook {
+        entries: vec![entry.clone()],
+        assessments: vec![assessment.clone()],
+    };
+    let information = AuthoritySpecificInformation::new(json!({}));
+    for record in [Record::Entry(&entry), Record::Assessment(&assessment)] {
+        let questions = casa.questions_for(record);
+        assert!(questions.is_empty());
+        assert_eq!(questions.version(), 1);
+        assert!(casa.problems_for(record, &information).is_empty());
+    }
+    assert!(casa.requirements().is_empty());
+    assert!(casa.currency(date!(2026 - 11 - 06), &logbook).is_empty());
+    assert!(casa.totals(&logbook, DateRange::default()).is_empty());
+}
+
+fn read(value: Value) -> Result<EntryInformation, InformationError> {
+    EntryInformation::read(&AuthoritySpecificInformation::new(value))
+}
+
+#[test]
+fn every_answer_has_its_spelling() {
+    let information = EntryInformation {
+        approved_fstd: Some(true),
+        route: Some(SupervisionRoute::Instructor),
+        receiving_flight_training: Some(false),
+        azimuth_guidance_operation: Some(true),
+        course_deviation_indicator_operation: Some(false),
+        dme_or_gnss_arrivals: Some(2),
+    };
+    let stored = json!({
+        "approved_fstd": true,
+        "route": "instructor",
+        "receiving_flight_training": false,
+        "azimuth_guidance_operation": true,
+        "course_deviation_indicator_operation": false,
+        "dme_or_gnss_arrivals": 2,
+    });
+    assert_eq!(information.to_information().into_value(), stored);
+    assert_eq!(read(stored), Ok(information));
+}
+
+#[rstest]
+#[case(SupervisionRoute::Operator, "operator")] // reg 61.095(2)
+#[case(SupervisionRoute::Instructor, "instructor")] // reg 61.095(3)
+fn every_route_has_its_spelling(#[case] route: SupervisionRoute, #[case] spelt: &str) {
+    let information = EntryInformation {
+        route: Some(route),
+        ..EntryInformation::default()
+    };
+    assert_eq!(
+        information.to_information().into_value(),
+        json!({"route": spelt})
+    );
+    assert_eq!(read(json!({"route": spelt})), Ok(information));
+}
+
+#[test]
+fn an_answer_not_given_has_no_key() {
+    assert_eq!(
+        EntryInformation::default().to_information().into_value(),
+        json!({})
+    );
+    assert_eq!(read(json!({})), Ok(EntryInformation::default()));
+}
+
+#[test]
+fn the_version_is_read_when_it_is_this_formats() {
+    assert_eq!(EntryInformation::VERSION, 1);
+    let information = read(json!({"_version": 1, "approved_fstd": true})).unwrap();
+    assert_eq!(information.approved_fstd, Some(true));
+}
+
+#[rstest]
+#[case::not_an_object(json!([]), InformationError::NotAnObject)]
+#[case::another_version(json!({"_version": 2}), InformationError::UnsupportedVersion)]
+#[case::no_version(json!({"_version": "1"}), InformationError::UnsupportedVersion)]
+#[case::unknown_key(json!({"notes": "x"}), InformationError::UnknownKey("notes".into()))]
+#[case::yes_no_as_text(json!({"approved_fstd": "yes"}), InformationError::InvalidAnswer("approved_fstd"))]
+#[case::null(json!({"azimuth_guidance_operation": null}), InformationError::InvalidAnswer("azimuth_guidance_operation"))]
+#[case::unknown_route(json!({"route": "pilot"}), InformationError::InvalidAnswer("route"))]
+#[case::count_as_decimal(json!({"dme_or_gnss_arrivals": 2.0}), InformationError::InvalidAnswer("dme_or_gnss_arrivals"))]
+#[case::negative_count(json!({"dme_or_gnss_arrivals": -1}), InformationError::InvalidAnswer("dme_or_gnss_arrivals"))]
+#[case::count_too_large(json!({"dme_or_gnss_arrivals": 4_294_967_296_u64}), InformationError::InvalidAnswer("dme_or_gnss_arrivals"))]
+fn what_is_not_this_format_is_refused(#[case] stored: Value, #[case] error: InformationError) {
+    assert_eq!(read(stored), Err(error));
+}

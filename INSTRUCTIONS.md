@@ -18,10 +18,10 @@ answers one such question:
 - `aircraft` (implemented, task `0001`): CASA category/class/design-feature
   classification, derived from an aircraft type designator, with the
   table of types in aircraft-type-descriptions.
-- Simulator classification (ready, task `0002`): recognition of a flight
-  simulation training device under reg 61.010, and whether a session counts
-  for Part 61 currency. Builds on the `FlightSimulationTrainingDevice` /
-  `FstdSession` aggregates in `icao-shared-kernel`.
+- `fstd` (implemented, task `0002`): recognition of a flight simulation
+  training device under reg 61.010, and whether a session counts for Part 61
+  currency. Builds on the `FlightSimulationTrainingDevice` / `FstdSession`
+  aggregates in `icao-shared-kernel`.
 - `licence` (issue #14): for each of the kernel's Annex 1 titles of licence
   (`icao_shared_kernel::LicenceTitle`), whether CASA issues it and, if so, its
   Part 61 term (the flight crew licence and aircraft category rating), with
@@ -36,11 +36,21 @@ answers one such question:
   by its identity, and the kernel stays the source for what Annex 1 can say.
   `FlightCrewLicence::is_pilot_licence` says which licences are pilot
   licences (reg 61.010), so no caller matches on the licences' names for it.
+- `logbook` (au-casa#29, in progress): CASA's rules for a pilot's logbook,
+  as `Casa`, which implements logbook-shared-kernel's `LicensingAuthority`
+  for `AU-CASA`; and CASA's authority-specific information on an entry
+  (`EntryInformation`), a stored format whose every key and spelling is
+  mapped by hand, with no derived serde, under a version of its own (the
+  kernel's reserved key `_version`). So far `Casa` says which entries count
+  (`counts`: a session only in an approved flight simulation training
+  device, reg 61.010) and what a type counts as (`classify`); its questions,
+  problems, requirements, currency and totals follow in the issues under
+  au-casa#29.
 
-`icao-shared-kernel` and aircraft-type-descriptions are taken by a caret
-range (`^0.2.0` and `^0.1.0`), not pinned exactly (au-casa#24): sibling
-country crates (nz-caa and the like) depend on them too, and a consumer such
-as a logbook imports several at once. Exact pins on different patches cannot
+`icao-shared-kernel`, logbook-shared-kernel and aircraft-type-descriptions
+are taken by a caret range (`^0.5`, `^0.2` and `^0.1.0`), not pinned exactly
+(au-casa#24): sibling country crates (nz-caa and the like) depend on them
+too, and a consumer such as a logbook imports several at once. Exact pins on different patches cannot
 be resolved together; with caret ranges Cargo builds one copy of each, so the
 kernel's `LicenceTitle` and the table's `AirframeKind` are the same types in
 every crate. A caret range takes up patches but not a minor version, and each
