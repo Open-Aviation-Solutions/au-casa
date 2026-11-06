@@ -52,14 +52,18 @@ answers one such question:
   derived serde, each under a version of its own (the kernel's reserved key
   `_version`). So far `Casa` says which entries count (`counts`: a session
   only in an approved flight simulation training device, reg 61.010), what
-  a type counts as (`classify`), and refuses information on an entry or an
-  assessment it cannot read (`problems_for`), so that the host does not
-  stamp and save it; its questions, its other problems, its requirements,
-  currency and totals follow in the issues under au-casa#29. Stored
+  a type counts as (`classify`), which requirements it checks, each with a
+  stable id and a name in its regulation's words (`requirements`), the
+  pilot's currency against them (`currency`), and CASA's own totals
+  (`totals`, over the entries that count; solo flight time is the flights
+  whose `sole_occupant` is true, and no rule makes solo count as pilot in
+  command); and it refuses information on an entry or an assessment it
+  cannot read (`problems_for`), so that the host does not stamp and save
+  it. Its questions and its other problems follow in au-casa#40. Stored
   information must carry its version (`read`); only information about to
   be saved may lack it (`read_to_save`). A `null` answer is no answer, as an
-  absent key is. The currency checks are in `logbook::currency`, written but not yet run by
-  `currency` (au-casa#39); see "Currency checks" below.
+  absent key is. The currency checks are in `logbook::currency`, which
+  also lists the requirements and runs them; see "Currency checks" below.
 
 ## Currency checks
 
@@ -81,6 +85,12 @@ answers one such question:
   from the table's description of its designator or, for a designator the
   table does not catalogue, from the description the entry carries, as
   pilot-logbook did; an entry with neither is not of any category.
+- **Each requirement has a stable id**, listed with its name and
+  regulation in `logbook::currency`'s `REQUIREMENTS`: the regulation, and
+  for a flight review its class rating too, as pilot-logbook keyed them. A
+  host may keep an id, so changing one is a breaking change. A new check is
+  added to that list and to `currency`, which will not compile until both
+  have it.
 - **Testing:** each check's unit tests assert its boundaries (the window's
   edge and the expiry, the category guard, an entry dated after the
   reference date), with entries built by `logbook::test_support` from the

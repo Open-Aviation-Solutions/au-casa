@@ -127,14 +127,10 @@ fn a_type_counts_as_its_category_and_class(
 }
 
 #[test]
-fn nothing_is_asked_found_or_checked_yet() {
+fn nothing_is_asked_or_found_yet() {
     let casa = Casa::new();
     let entry = Entry::new(flight_parts()).unwrap();
     let assessment = an_assessment();
-    let logbook = Logbook {
-        entries: vec![entry.clone()],
-        assessments: vec![assessment.clone()],
-    };
     let information = AuthoritySpecificInformation::new(json!({}));
     for record in [Record::Entry(&entry), Record::Assessment(&assessment)] {
         let questions = casa.questions_for(record);
@@ -142,9 +138,37 @@ fn nothing_is_asked_found_or_checked_yet() {
         assert_eq!(questions.version(), 1);
         assert!(casa.problems_for(record, &information).is_empty());
     }
-    assert!(casa.requirements().is_empty());
-    assert!(casa.currency(date!(2026 - 11 - 06), &logbook).is_empty());
-    assert!(casa.totals(&logbook, DateRange::default()).is_empty());
+}
+
+#[test]
+fn each_requirement_has_its_result_and_each_figure_its_time() {
+    let casa = Casa::new();
+    let logbook = Logbook {
+        entries: vec![Entry::new(flight_parts()).unwrap()],
+        assessments: vec![an_assessment()],
+    };
+    let requirements = casa.requirements();
+    assert_eq!(requirements.len(), 12);
+    assert_eq!(
+        requirements[0].name,
+        "Carrying a passenger by day in an aeroplane"
+    );
+    assert_eq!(requirements[0].regulation, "reg 61.395(1)");
+    let answered: Vec<_> = casa
+        .currency(date!(2026 - 11 - 06), &logbook)
+        .into_iter()
+        .map(|(id, _)| id)
+        .collect();
+    let ids: Vec<_> = requirements.into_iter().map(|r| r.id).collect();
+    assert_eq!(answered, ids);
+    // The hour in a C172.
+    let figures: Vec<_> = casa
+        .totals(&logbook, DateRange::default())
+        .into_iter()
+        .map(|figure| (figure.name, figure.time.total_minutes()))
+        .collect();
+    assert_eq!(figures[0], ("Aeroplane".to_owned(), 60));
+    assert_eq!(figures.len(), 6);
 }
 
 /// Read as information about to be saved, which may have no version yet.
