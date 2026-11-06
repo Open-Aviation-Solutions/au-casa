@@ -44,7 +44,7 @@ impl Casa {
 }
 
 /// `AU-CASA`.
-fn casa() -> AuthorityId {
+pub(crate) fn casa() -> AuthorityId {
     AuthorityId::new("AU", "CASA").expect("AU is a State and CASA is not empty")
 }
 

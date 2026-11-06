@@ -32,17 +32,21 @@ pub(super) fn is_3d(approach: &Approach) -> bool {
 /// The DME or GNSS arrivals an entry records in CASA's information, each "an
 /// instrument approach operation under the IFR using distance measuring
 /// equipment or a global navigation satellite system" (Table 61.935, item
-/// 20): none when it records no count, or has information that cannot be
-/// read.
-pub(super) fn dme_or_gnss_arrivals(entry: &Entry) -> usize {
+/// 20), at most `required` of them: none when it records no count, or has
+/// information that cannot be read.
+pub(super) fn dme_or_gnss_arrivals(entry: &Entry, required: usize) -> usize {
     information(entry)
         .and_then(|information| information.dme_or_gnss_arrivals)
-        .map_or(0, |count| usize::try_from(count).unwrap_or(usize::MAX))
+        .map_or(0, |count| {
+            usize::try_from(count).map_or(required, |count| count.min(required))
+        })
 }
 
 /// Reg 61.870(2): "at least 3 instrument approach operations within the
 /// previous 90 days in an aircraft or an approved flight simulation
-/// training device for the purpose", in an aeroplane.
+/// training device for the purpose".
+///
+/// Only in an aeroplane: pilot-logbook's reading, kept for the move.
 ///
 /// Each entry supplies its approaches and its DME or GNSS arrivals.
 pub(crate) struct InstrumentApproaches {
@@ -62,10 +66,7 @@ impl EntryAccumulator for InstrumentApproaches {
         if !is_category(entry, AircraftCategory::Aeroplane) {
             return;
         }
-        let operations = entry
-            .approaches()
-            .len()
-            .saturating_add(dme_or_gnss_arrivals(entry));
+        let operations = entry.approaches().len() + dme_or_gnss_arrivals(entry, REQUIRED);
         // One entry supplies at most the operations the check needs.
         self.window.record(entry, operations.min(REQUIRED));
     }

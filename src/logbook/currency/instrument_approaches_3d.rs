@@ -15,7 +15,9 @@ const REQUIRED: usize = 1;
 
 /// Reg 61.870(5): "a 3D instrument approach operation within the previous
 /// 90 days in an aircraft or an approved flight simulation training device
-/// for the purpose", in an aeroplane.
+/// for the purpose".
+///
+/// Only in an aeroplane: pilot-logbook's reading, kept for the move.
 ///
 /// Each entry supplies its approaches that were 3D operations.
 pub(crate) struct InstrumentApproaches3D {
@@ -58,7 +60,9 @@ mod tests {
     use time::Duration;
 
     use super::*;
-    use crate::logbook::test_support::{aeroplane, approach, arrivals, circled, entry};
+    use crate::logbook::test_support::{
+        aeroplane, approach, arrivals, circled, entry, simulated, unclassified,
+    };
 
     const REFERENCE: Date = date!(2024 - 09 - 01);
     const ON: Date = date!(2024 - 08 - 20);
@@ -126,6 +130,29 @@ mod tests {
     #[test]
     fn a_dme_or_gnss_arrival_is_not_a_3d_operation() {
         assert!(!result(&[entry(arrivals(1, aeroplane("a", ON)))]).is_current());
+    }
+
+    /// "Or an approved flight simulation training device": whether the
+    /// device was approved is `Casa::counts`'.
+    #[test]
+    fn a_session_representing_an_aeroplane_counts() {
+        let session = |designator| {
+            entry(EntryParts {
+                approaches: vec![approach(ApproachType::Ils)],
+                ..simulated("a", ON, designator)
+            })
+        };
+        assert!(result(&[session("C172")]).is_current());
+        assert!(!result(&[session("R44")]).is_current());
+    }
+
+    #[test]
+    fn an_unclassified_type_does_not_count() {
+        let e = entry(EntryParts {
+            approaches: vec![approach(ApproachType::Ils)],
+            ..unclassified("a", ON)
+        });
+        assert!(!result(&[e]).is_current());
     }
 
     #[test]

@@ -16,14 +16,14 @@ use icao_shared_kernel::{
     NationalityMark,
 };
 use logbook_shared_kernel::{
-    Approach, ApproachType, AuthorityId, DayNight, Entry, EntryId, EntryParts, InstrumentTime,
-    Questions, Subject,
+    Approach, ApproachType, DayNight, Entry, EntryId, EntryParts, InstrumentTime, Questions,
+    Subject,
 };
 use time::Date;
 use uuid::Uuid;
 
 use crate::logbook::guards::tabled;
-use crate::logbook::EntryInformation;
+use crate::logbook::{casa, EntryInformation};
 
 /// The entry these parts make.
 pub(crate) fn entry(parts: EntryParts) -> Entry {
@@ -138,8 +138,6 @@ pub(crate) fn arrivals(count: u64, mut parts: EntryParts) -> EntryParts {
     }
     .to_information();
     Questions::new(EntryInformation::VERSION, Vec::new()).stamp(&mut information);
-    parts
-        .authority_information
-        .insert(AuthorityId::new("AU", "CASA").unwrap(), information);
+    parts.authority_information.insert(casa(), information);
     parts
 }
