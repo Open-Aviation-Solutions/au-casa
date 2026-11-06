@@ -13,7 +13,8 @@ use icao_shared_kernel::{
 };
 use logbook_shared_kernel::{
     Assessment, AssessmentId, AuthorityId, AuthoritySpecificInformation, DateRange, DayNight,
-    Entry, EntryId, EntryParts, InstrumentTime, LicensingAuthority, Logbook, Record, Subject,
+    Entry, EntryId, EntryParts, InstrumentTime, LicensingAuthority, Logbook, ProblemAt,
+    ProblemKind, Record, Subject,
 };
 use rstest::rstest;
 use serde_json::{json, Value};
@@ -79,11 +80,12 @@ fn a_flight_counts() {
 
 /// Reg 61.010, "approved flight simulation training device".
 #[rstest]
-#[case::approved(Some(json!({"approved_fstd": true})), true)]
-#[case::not_approved(Some(json!({"approved_fstd": false})), false)]
-#[case::unanswered(Some(json!({})), false)]
+#[case::approved(Some(json!({"_version": 1, "approved_fstd": true})), true)]
+#[case::not_approved(Some(json!({"_version": 1, "approved_fstd": false})), false)]
+#[case::unanswered(Some(json!({"_version": 1})), false)]
 #[case::no_information(None, false)]
-#[case::unreadable(Some(json!({"approved_fstd": "yes"})), false)]
+#[case::unreadable(Some(json!({"_version": 1, "approved_fstd": "yes"})), false)]
+#[case::unversioned(Some(json!({"approved_fstd": true})), false)]
 fn a_session_counts_only_in_an_approved_device(
     #[case] information: Option<Value>,
     #[case] counts: bool,
@@ -93,7 +95,7 @@ fn a_session_counts_only_in_an_approved_device(
 
 #[test]
 fn another_authoritys_information_does_not_make_a_session_count() {
-    let entry = session("OTHER", Some(json!({"approved_fstd": true})));
+    let entry = session("OTHER", Some(json!({"_version": 1, "approved_fstd": true})));
     assert!(!Casa::new().counts(&entry));
 }
 
@@ -146,8 +148,46 @@ fn nothing_is_asked_found_or_checked_yet() {
     assert!(casa.totals(&logbook, DateRange::default()).is_empty());
 }
 
+/// Read as information about to be saved, which may have no version yet.
 fn read(value: Value) -> Result<EntryInformation, InformationError> {
-    EntryInformation::read(&AuthoritySpecificInformation::new(value))
+    EntryInformation::read_to_save(&AuthoritySpecificInformation::new(value))
+}
+
+#[test]
+fn stored_information_must_carry_its_version() {
+    let stored = |value| EntryInformation::read(&AuthoritySpecificInformation::new(value));
+    assert_eq!(
+        stored(json!({"approved_fstd": true})),
+        Err(InformationError::UnsupportedVersion)
+    );
+    assert_eq!(
+        read(json!({"approved_fstd": true})).unwrap().approved_fstd,
+        Some(true)
+    );
+    assert_eq!(
+        stored(json!({"_version": 1, "approved_fstd": true}))
+            .unwrap()
+            .approved_fstd,
+        Some(true)
+    );
+}
+
+#[test]
+fn information_that_cannot_be_read_is_refused_before_it_is_saved() {
+    let casa = Casa::new();
+    let entry = Entry::new(flight_parts()).unwrap();
+    let problems = |value| {
+        casa.problems_for(
+            Record::Entry(&entry),
+            &AuthoritySpecificInformation::new(value),
+        )
+    };
+    assert!(problems(json!({"route": "operator"})).is_empty());
+    assert!(problems(json!({"_version": 1, "route": "operator"})).is_empty());
+    let refused = problems(json!({"_version": 2}));
+    assert_eq!(refused.len(), 1);
+    assert_eq!(refused[0].at, ProblemAt::Information);
+    assert_eq!(refused[0].kind, ProblemKind::Refusal);
 }
 
 #[test]
@@ -197,6 +237,12 @@ fn an_answer_not_given_has_no_key() {
 }
 
 #[test]
+fn a_count_is_any_whole_number_the_kernel_accepts() {
+    let information = read(json!({"dme_or_gnss_arrivals": u64::MAX})).unwrap();
+    assert_eq!(information.dme_or_gnss_arrivals, Some(u64::MAX));
+}
+
+#[test]
 fn the_version_is_read_when_it_is_this_formats() {
     assert_eq!(EntryInformation::VERSION, 1);
     let information = read(json!({"_version": 1, "approved_fstd": true})).unwrap();
@@ -206,14 +252,13 @@ fn the_version_is_read_when_it_is_this_formats() {
 #[rstest]
 #[case::not_an_object(json!([]), InformationError::NotAnObject)]
 #[case::another_version(json!({"_version": 2}), InformationError::UnsupportedVersion)]
-#[case::no_version(json!({"_version": "1"}), InformationError::UnsupportedVersion)]
+#[case::version_as_text(json!({"_version": "1"}), InformationError::UnsupportedVersion)]
 #[case::unknown_key(json!({"notes": "x"}), InformationError::UnknownKey("notes".into()))]
 #[case::yes_no_as_text(json!({"approved_fstd": "yes"}), InformationError::InvalidAnswer("approved_fstd"))]
 #[case::null(json!({"azimuth_guidance_operation": null}), InformationError::InvalidAnswer("azimuth_guidance_operation"))]
 #[case::unknown_route(json!({"route": "pilot"}), InformationError::InvalidAnswer("route"))]
 #[case::count_as_decimal(json!({"dme_or_gnss_arrivals": 2.0}), InformationError::InvalidAnswer("dme_or_gnss_arrivals"))]
 #[case::negative_count(json!({"dme_or_gnss_arrivals": -1}), InformationError::InvalidAnswer("dme_or_gnss_arrivals"))]
-#[case::count_too_large(json!({"dme_or_gnss_arrivals": 4_294_967_296_u64}), InformationError::InvalidAnswer("dme_or_gnss_arrivals"))]
 fn what_is_not_this_format_is_refused(#[case] stored: Value, #[case] error: InformationError) {
     assert_eq!(read(stored), Err(error));
 }

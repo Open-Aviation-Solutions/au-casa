@@ -41,8 +41,9 @@ pub struct EntryInformation {
     /// `dme_or_gnss_arrivals`: how many instrument approach operations were
     /// conducted "using distance measuring equipment or a global navigation
     /// satellite system" (Table 61.935, item 20, "Approach – DME or GNSS
-    /// arrival procedure"). Stored as a JSON integer.
-    pub dme_or_gnss_arrivals: Option<u32>,
+    /// arrival procedure"). Stored as a JSON integer, as the kernel's
+    /// `Answer::Count` is.
+    pub dme_or_gnss_arrivals: Option<u64>,
 }
 
 /// Which subregulation makes a flight time as pilot in command under
@@ -101,35 +102,53 @@ const AZIMUTH_GUIDANCE_OPERATION: &str = "azimuth_guidance_operation";
 const COURSE_DEVIATION_INDICATOR_OPERATION: &str = "course_deviation_indicator_operation";
 const DME_OR_GNSS_ARRIVALS: &str = "dme_or_gnss_arrivals";
 
+/// Every key of the format, in the order [`EntryInformation::to_information`]
+/// writes them: the one list both reading and writing go by.
+const KEYS: [&str; 6] = [
+    APPROVED_FSTD,
+    ROUTE,
+    RECEIVING_FLIGHT_TRAINING,
+    AZIMUTH_GUIDANCE_OPERATION,
+    COURSE_DEVIATION_INDICATOR_OPERATION,
+    DME_OR_GNSS_ARRIVALS,
+];
+
 impl EntryInformation {
     /// The version of this format.
     pub const VERSION: u32 = 1;
 
-    /// Read stored information. Its version must be [`Self::VERSION`], or
-    /// absent, as it is on information not saved yet. A key that is not
-    /// this format's, or an answer not of its key's kind, is refused, as is
-    /// a count that is not a whole number (`2.0` is not one).
+    /// Read stored information, which carries its version: it must be
+    /// [`Self::VERSION`]. A key that is not this format's, or an answer not
+    /// of its key's kind, is refused, as is a count that is not a whole
+    /// number (`2.0` is not one).
     pub fn read(information: &AuthoritySpecificInformation) -> Result<Self, InformationError> {
+        Self::read_with(information, true)
+    }
+
+    /// Read information about to be saved, as [`Self::read`] does, except
+    /// that its version may be absent, as it is on information not saved
+    /// yet (the host stamps it after checking it).
+    pub fn read_to_save(
+        information: &AuthoritySpecificInformation,
+    ) -> Result<Self, InformationError> {
+        Self::read_with(information, false)
+    }
+
+    fn read_with(
+        information: &AuthoritySpecificInformation,
+        stored: bool,
+    ) -> Result<Self, InformationError> {
         let answers = information
             .value()
             .as_object()
             .ok_or(InformationError::NotAnObject)?;
-        if answers.contains_key(AuthoritySpecificInformation::VERSION_KEY)
-            && information.version() != Some(Self::VERSION)
-        {
+        let versioned = stored || answers.contains_key(AuthoritySpecificInformation::VERSION_KEY);
+        if versioned && information.version() != Some(Self::VERSION) {
             return Err(InformationError::UnsupportedVersion);
         }
         if let Some(key) = answers.keys().find(|key| {
-            ![
-                AuthoritySpecificInformation::VERSION_KEY,
-                APPROVED_FSTD,
-                ROUTE,
-                RECEIVING_FLIGHT_TRAINING,
-                AZIMUTH_GUIDANCE_OPERATION,
-                COURSE_DEVIATION_INDICATOR_OPERATION,
-                DME_OR_GNSS_ARRIVALS,
-            ]
-            .contains(&key.as_str())
+            key.as_str() != AuthoritySpecificInformation::VERSION_KEY
+                && !KEYS.contains(&key.as_str())
         }) {
             return Err(InformationError::UnknownKey(key.clone()));
         }
@@ -142,9 +161,7 @@ impl EntryInformation {
             receiving_flight_training: yes_no(RECEIVING_FLIGHT_TRAINING)?,
             azimuth_guidance_operation: yes_no(AZIMUTH_GUIDANCE_OPERATION)?,
             course_deviation_indicator_operation: yes_no(COURSE_DEVIATION_INDICATOR_OPERATION)?,
-            dme_or_gnss_arrivals: read(answers, DME_OR_GNSS_ARRIVALS, |value| {
-                value.as_u64().and_then(|count| u32::try_from(count).ok())
-            })?,
+            dme_or_gnss_arrivals: read(answers, DME_OR_GNSS_ARRIVALS, Value::as_u64)?,
         })
     }
 
@@ -152,30 +169,20 @@ impl EntryInformation {
     /// that ([`Questions::stamp`](logbook_shared_kernel::Questions::stamp)).
     /// An answer not given has no key.
     pub fn to_information(&self) -> AuthoritySpecificInformation {
-        let mut answers = Map::new();
-        let mut write = |key: &str, value: Option<Value>| {
-            if let Some(value) = value {
-                answers.insert(key.into(), value);
-            }
-        };
-        write(APPROVED_FSTD, self.approved_fstd.map(Value::from));
-        write(ROUTE, self.route.map(|route| route.as_str().into()));
-        write(
-            RECEIVING_FLIGHT_TRAINING,
+        // In the order of `KEYS`.
+        let values: [Option<Value>; KEYS.len()] = [
+            self.approved_fstd.map(Value::from),
+            self.route.map(|route| route.as_str().into()),
             self.receiving_flight_training.map(Value::from),
-        );
-        write(
-            AZIMUTH_GUIDANCE_OPERATION,
             self.azimuth_guidance_operation.map(Value::from),
-        );
-        write(
-            COURSE_DEVIATION_INDICATOR_OPERATION,
             self.course_deviation_indicator_operation.map(Value::from),
-        );
-        write(
-            DME_OR_GNSS_ARRIVALS,
             self.dme_or_gnss_arrivals.map(Value::from),
-        );
+        ];
+        let answers: Map<String, Value> = KEYS
+            .into_iter()
+            .zip(values)
+            .filter_map(|(key, value)| Some((key.to_owned(), value?)))
+            .collect();
         AuthoritySpecificInformation::new(Value::Object(answers))
     }
 }

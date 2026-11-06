@@ -6,8 +6,9 @@
 //! [`LicensingAuthority`], and CASA's information on an entry.
 //!
 //! So far it says which entries count and what an aircraft type counts as.
-//! It asks no questions, finds no problems and checks no requirements yet,
-//! and has no totals of its own: those follow (au-casa#29).
+//! It asks no questions and checks no requirements yet, and has no totals
+//! of its own; of the problems, it finds only information it cannot read.
+//! The rest follow (au-casa#29).
 
 mod entry_information;
 
@@ -15,8 +16,8 @@ pub use entry_information::{EntryInformation, InformationError, SupervisionRoute
 
 use logbook_shared_kernel::{
     AircraftDescription, AuthorityId, AuthoritySpecificInformation, Classification, CurrencyResult,
-    DateRange, Entry, Figure, LicensingAuthority, Logbook, Problem, Questions, Record, Requirement,
-    RequirementId, Subject,
+    DateRange, Entry, Figure, LicensingAuthority, Logbook, Problem, ProblemAt, ProblemKind,
+    Questions, Record, Requirement, RequirementId, Subject,
 };
 use time::Date;
 
@@ -55,9 +56,8 @@ impl LicensingAuthority for Casa {
     fn counts(&self, entry: &Entry) -> bool {
         match entry.subject() {
             Subject::Flight { .. } => true,
-            Subject::Session { .. } => entry
-                .authority_information()
-                .get(&self.id)
+            Subject::Session { .. } => Record::Entry(entry)
+                .information_for(&self.id)
                 .and_then(|information| EntryInformation::read(information).ok())
                 .is_some_and(|information| information.approved_fstd == Some(true)),
         }
@@ -98,12 +98,30 @@ impl LicensingAuthority for Casa {
         Questions::new(version, Vec::new())
     }
 
+    /// So far, only that CASA's information on an entry cannot be read
+    /// ([`EntryInformation::read_to_save`]): a refusal, at the information
+    /// as a whole, so that the host does not stamp it as this version and
+    /// save it. Its answers are checked against each other later
+    /// (au-casa#40).
     fn problems_for(
         &self,
-        _record: Record,
-        _information: &AuthoritySpecificInformation,
+        record: Record,
+        information: &AuthoritySpecificInformation,
     ) -> Vec<Problem> {
-        Vec::new()
+        match record {
+            Record::Entry(_) => EntryInformation::read_to_save(information)
+                .err()
+                .map(|error| Problem {
+                    at: ProblemAt::Information,
+                    kind: ProblemKind::Refusal,
+                    text: error.to_string(),
+                    // A stored format's rule, not a regulation's.
+                    regulation: "",
+                })
+                .into_iter()
+                .collect(),
+            Record::Assessment(_) => Vec::new(),
+        }
     }
 }
 
