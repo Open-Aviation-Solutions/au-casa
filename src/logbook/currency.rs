@@ -5,8 +5,11 @@
 //! CASA's currency checks, one module for each regulation, written over the
 //! kernel's [`EventWindow`](logbook_shared_kernel::EventWindow). Each sees
 //! only the entries [`Casa::counts`](crate::Casa) lets through, so none
-//! repeats that gate.
+//! repeats that gate. A check over assessments
+//! ([`AssessmentCurrencyCheck`](logbook_shared_kernel::AssessmentCurrencyCheck))
+//! is given the entries it reads their aircraft from.
 
+mod flight_review;
 mod guidance_operations;
 mod instrument_approaches;
 mod instrument_approaches_2d;

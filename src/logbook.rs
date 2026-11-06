@@ -3,7 +3,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //! CASA's rules for a pilot's logbook, through logbook-shared-kernel's
-//! [`LicensingAuthority`], and CASA's information on an entry.
+//! [`LicensingAuthority`], and CASA's information on an entry and on an
+//! assessment.
 //!
 //! So far it says which entries count and what an aircraft type counts as.
 //! It asks no questions and checks no requirements yet, and has no totals
@@ -12,20 +13,25 @@
 //! them yet. The rest follow (au-casa#29).
 
 // Run by `currency` once the requirements are named (au-casa#39).
+mod assessment_information;
 #[cfg_attr(not(test), expect(dead_code))]
 mod currency;
 mod entry_information;
 #[cfg_attr(not(test), expect(dead_code))]
 mod guards;
+mod stored;
 #[cfg(test)]
 mod test_support;
 
+pub use assessment_information::{
+    AssessmentInformation, AssessmentInformationError, CheckOutcome, CheckPurpose, CheckType,
+};
 pub use entry_information::{EntryInformation, InformationError, SupervisionRoute};
 
 use logbook_shared_kernel::{
-    AircraftDescription, AuthorityId, AuthoritySpecificInformation, Classification, CurrencyResult,
-    DateRange, Entry, Figure, LicensingAuthority, Logbook, Problem, ProblemAt, ProblemKind,
-    Questions, Record, Requirement, RequirementId, Subject,
+    AircraftDescription, Assessment, AuthorityId, AuthoritySpecificInformation, Classification,
+    CurrencyResult, DateRange, Entry, Figure, LicensingAuthority, Logbook, Problem, ProblemAt,
+    ProblemKind, Questions, Record, Requirement, RequirementId, Subject,
 };
 use time::Date;
 
@@ -51,9 +57,25 @@ pub(crate) fn casa() -> AuthorityId {
 /// CASA's information on an entry, read as it is stored; `None` when the
 /// entry has none, or has information that cannot be read.
 pub(crate) fn information(entry: &Entry) -> Option<EntryInformation> {
-    Record::Entry(entry)
+    read_information(Record::Entry(entry), EntryInformation::read)
+}
+
+/// CASA's information on an assessment, read as it is stored; `None` when
+/// the assessment has none, or has information that cannot be read.
+#[cfg_attr(not(test), expect(dead_code))]
+pub(crate) fn assessment_information(assessment: &Assessment) -> Option<AssessmentInformation> {
+    read_information(Record::Assessment(assessment), AssessmentInformation::read)
+}
+
+/// CASA's information on a record, read by `read`; `None` when there is
+/// none, or it cannot be read.
+fn read_information<T, E>(
+    record: Record,
+    read: fn(&AuthoritySpecificInformation) -> Result<T, E>,
+) -> Option<T> {
+    record
         .information_for(&casa())
-        .and_then(|information| EntryInformation::read(information).ok())
+        .and_then(|information| read(information).ok())
 }
 
 impl Default for Casa {
@@ -105,40 +127,46 @@ impl LicensingAuthority for Casa {
         Vec::new()
     }
 
-    /// None yet, at version 1 of CASA's information on either kind of
-    /// record.
+    /// None yet, at the version of CASA's information on the kind of
+    /// record: [`EntryInformation::VERSION`] or
+    /// [`AssessmentInformation::VERSION`].
     fn questions_for(&self, record: Record) -> Questions {
         let version = match record {
             Record::Entry(_) => EntryInformation::VERSION,
-            Record::Assessment(_) => 1,
+            Record::Assessment(_) => AssessmentInformation::VERSION,
         };
         Questions::new(version, Vec::new())
     }
 
-    /// So far, only that CASA's information on an entry cannot be read
-    /// ([`EntryInformation::read_to_save`]): a refusal, at the information
-    /// as a whole, so that the host does not stamp it as this version and
-    /// save it. Its answers are checked against each other later
+    /// So far, only that CASA's information on an entry or an assessment
+    /// cannot be read ([`EntryInformation::read_to_save`],
+    /// [`AssessmentInformation::read_to_save`]): a refusal, at the
+    /// information as a whole, so that the host does not stamp it as this
+    /// version and save it. Its answers are checked against each other later
     /// (au-casa#40).
     fn problems_for(
         &self,
         record: Record,
         information: &AuthoritySpecificInformation,
     ) -> Vec<Problem> {
-        match record {
+        let unreadable = match record {
             Record::Entry(_) => EntryInformation::read_to_save(information)
                 .err()
-                .map(|error| Problem {
-                    at: ProblemAt::Information,
-                    kind: ProblemKind::Refusal,
-                    text: error.to_string(),
-                    // A stored format's rule, not a regulation's.
-                    regulation: "",
-                })
-                .into_iter()
-                .collect(),
-            Record::Assessment(_) => Vec::new(),
-        }
+                .map(|error| error.to_string()),
+            Record::Assessment(_) => AssessmentInformation::read_to_save(information)
+                .err()
+                .map(|error| error.to_string()),
+        };
+        unreadable
+            .map(|text| Problem {
+                at: ProblemAt::Information,
+                kind: ProblemKind::Refusal,
+                text,
+                // A stored format's rule, not a regulation's.
+                regulation: "",
+            })
+            .into_iter()
+            .collect()
     }
 }
 
