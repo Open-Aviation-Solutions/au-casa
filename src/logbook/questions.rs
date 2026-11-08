@@ -5,6 +5,8 @@
 //! CASA's questions, for its information on an entry and on an assessment:
 //! one question for each key of the two formats.
 
+use std::sync::LazyLock;
+
 use icao_shared_kernel::Capacity;
 use logbook_shared_kernel::{Answer, Choice, Condition, Question, Questions};
 
@@ -17,6 +19,9 @@ use super::{
     AssessmentInformation, CheckOutcome, CheckPurpose, CheckType, EntryInformation,
     SupervisionRoute,
 };
+
+/// [`for_entry`], built once, for reading the entries' stored answers.
+pub(super) static ENTRY: LazyLock<Questions> = LazyLock::new(for_entry);
 
 /// The questions about an entry. Each is in the list whatever the entry,
 /// and one that applies only to some entries is shown on a kernel

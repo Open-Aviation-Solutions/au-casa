@@ -55,29 +55,32 @@ pub(crate) fn casa() -> AuthorityId {
 /// CASA's information on an entry, read as it is stored, without the
 /// answers to questions not shown for the entry, so that no check counts an
 /// answer the pilot can no longer see, however the record was saved; `None`
-/// when the entry has none, or has information that cannot be read.
+/// when the entry has none, or has information that cannot be read as
+/// stored, hidden answers and all.
 pub(crate) fn information(entry: &Entry) -> Option<EntryInformation> {
     let record = Record::Entry(entry);
-    let mut shown = record.information_for(&casa())?.clone();
-    questions::for_entry().drop_hidden_answers_for(record, &mut shown);
-    EntryInformation::read(&shown).ok()
+    let stored = record.information_for(&casa())?;
+    let information = EntryInformation::read(stored).ok()?;
+    let questions = &*questions::ENTRY;
+    let shown = questions.shown_for(record, Some(stored));
+    let hidden_answered = questions.iter().any(|question| {
+        stored.value().get(question.key).is_some()
+            && !shown.iter().any(|shown| shown.key == question.key)
+    });
+    if !hidden_answered {
+        return Some(information);
+    }
+    let mut without_hidden = stored.clone();
+    questions.drop_hidden_answers_for(record, &mut without_hidden);
+    EntryInformation::read(&without_hidden).ok()
 }
 
 /// CASA's information on an assessment, read as it is stored; `None` when
 /// the assessment has none, or has information that cannot be read.
 pub(crate) fn assessment_information(assessment: &Assessment) -> Option<AssessmentInformation> {
-    read_information(Record::Assessment(assessment), AssessmentInformation::read)
-}
-
-/// CASA's information on a record, read by `read`; `None` when there is
-/// none, or it cannot be read.
-fn read_information<T, E>(
-    record: Record,
-    read: fn(&AuthoritySpecificInformation) -> Result<T, E>,
-) -> Option<T> {
-    record
+    Record::Assessment(assessment)
         .information_for(&casa())
-        .and_then(|information| read(information).ok())
+        .and_then(|information| AssessmentInformation::read(information).ok())
 }
 
 impl Default for Casa {

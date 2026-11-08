@@ -98,6 +98,17 @@ fn a_session_counts_only_in_an_approved_device(
     assert_eq!(Casa::new().counts(&session("CASA", information)), counts);
 }
 
+/// An answer that cannot be read makes the information unreadable as
+/// stored, even under a question not shown for the entry.
+#[test]
+fn a_badly_typed_hidden_answer_still_makes_the_information_unreadable() {
+    let entry = session(
+        "CASA",
+        Some(json!({"_version": 1, "approved_fstd": true, "route": 42})),
+    );
+    assert!(!Casa::new().counts(&entry));
+}
+
 #[test]
 fn another_authoritys_information_does_not_make_a_session_count() {
     let entry = session("OTHER", Some(json!({"_version": 1, "approved_fstd": true})));
