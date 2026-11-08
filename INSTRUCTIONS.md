@@ -65,8 +65,12 @@ answers one such question:
   answer when it saves a record it no longer applies to; the checks read an
   entry's information through `information`, which removes those answers
   too, so an answer already stored to a question that does not apply counts
-  for nothing; the DME or GNSS arrivals
-  are asked whatever the flight rules); and the problems with the
+  for nothing; the DME or GNSS arrivals are asked whatever the flight
+  rules, and before the azimuth guidance and course deviation indicator
+  operations, which apply to an entry that records an approach or a DME or
+  GNSS arrival (`Condition::Any` of `AnyApproach` and a `CountAtLeast` of
+  one on the arrivals), as an arrival is an instrument approach operation
+  too); and the problems with the
   answers (`problems_for`): information it cannot read, so that the host
   does not stamp and save it, and reg 61.095(3)(b)'s "the person is not
   receiving flight training", where that question applies. Stored information must carry its version

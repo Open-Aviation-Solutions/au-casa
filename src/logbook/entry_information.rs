@@ -33,12 +33,13 @@ pub struct EntryInformation {
     /// `receiving_flight_training`: whether the person was "receiving flight
     /// training" on the instructor's route (reg 61.095(3)(b)).
     pub receiving_flight_training: Option<bool>,
-    /// `azimuth_guidance_operation`: whether one of the entry's approaches
-    /// was an "azimuth guidance operation" (reg 61.010; reg 61.870(6)).
+    /// `azimuth_guidance_operation`: whether one of the entry's approaches,
+    /// or DME or GNSS arrivals, was an "azimuth guidance operation" (reg
+    /// 61.010; reg 61.870(6)).
     pub azimuth_guidance_operation: Option<bool>,
     /// `course_deviation_indicator_operation`: whether one of the entry's
-    /// approaches was a "course deviation indicator operation" (reg 61.010;
-    /// reg 61.870(7)).
+    /// approaches, or DME or GNSS arrivals, was a "course deviation
+    /// indicator operation" (reg 61.010; reg 61.870(7)).
     pub course_deviation_indicator_operation: Option<bool>,
     /// `dme_or_gnss_arrivals`: how many instrument approach operations were
     /// conducted "using distance measuring equipment or a global navigation

@@ -145,11 +145,13 @@ impl LicensingAuthority for Casa {
     /// asked the same questions, each with the condition on which it
     /// applies, so that the host removes an answer to one that no longer
     /// does: whether the device was an approved flight simulation training
-    /// device applies to a session, the two guidance operations for an entry with approaches,
-    /// the route for a pilot in command under supervision, and whether the
-    /// person was receiving flight training on the instructor's route. The
-    /// DME or GNSS arrivals are asked whatever the flight rules, as reg
-    /// 61.870 counts an instrument approach operation.
+    /// device applies to a session, the two guidance operations to an entry
+    /// with an approach or a DME or GNSS arrival, the route to a pilot in
+    /// command under supervision, and whether the person was receiving
+    /// flight training on the instructor's route. The DME or GNSS arrivals
+    /// are asked whatever the flight rules, as reg 61.870 counts an
+    /// instrument approach operation, and before the guidance operations,
+    /// whose condition reads their answer.
     fn questions_for(&self, record: Record) -> Questions {
         match record {
             Record::Entry(_) => questions::ENTRY.clone(),
