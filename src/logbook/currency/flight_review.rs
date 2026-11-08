@@ -8,10 +8,9 @@ use std::collections::BTreeSet;
 
 use logbook_shared_kernel::{
     Assessment, AssessmentAccumulator, AssessmentCurrencyCheck, CurrencyResult, Entry, EventWindow,
-    Subject,
+    SubjectId,
 };
 use time::Date;
-use uuid::Uuid;
 
 use crate::aircraft::AircraftClassRating;
 use crate::logbook::guards::is_class_rating;
@@ -37,8 +36,10 @@ const REQUIRED: usize = 1;
 /// not end a valid review.
 pub(crate) struct FlightReview {
     window: EventWindow,
-    /// The flights an entry records in an aircraft of the class.
-    flights: BTreeSet<Uuid>,
+    /// What the entries in an aircraft of the class log. An assessment's
+    /// flight is looked up among them as a flight, so a session never
+    /// matches one.
+    logged: BTreeSet<SubjectId>,
 }
 
 impl FlightReview {
@@ -52,17 +53,14 @@ impl FlightReview {
         class_rating: AircraftClassRating,
         entries: impl IntoIterator<Item = &'a Entry>,
     ) -> Self {
-        let flights = entries
+        let logged = entries
             .into_iter()
             .filter(|entry| is_class_rating(entry, class_rating))
-            .filter_map(|entry| match entry.subject() {
-                Subject::Flight { flight, .. } => Some(*flight),
-                Subject::Session { .. } => None,
-            })
+            .map(|entry| entry.subject().id())
             .collect();
         Self {
             window: EventWindow::new(reference, WINDOW_DAYS, REQUIRED),
-            flights,
+            logged,
         }
     }
 }
@@ -85,7 +83,7 @@ fn satisfies_flight_review(check_type: CheckType) -> bool {
 
 impl AssessmentAccumulator for FlightReview {
     fn accept_assessment(&mut self, assessment: &Assessment) {
-        if !self.flights.contains(&assessment.flight) {
+        if !self.logged.contains(&SubjectId::Flight(assessment.flight)) {
             return;
         }
         let Some(information) = assessment_information(assessment) else {

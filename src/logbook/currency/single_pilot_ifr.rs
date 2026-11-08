@@ -9,33 +9,15 @@ use std::collections::BTreeMap;
 
 use icao_shared_kernel::{Capacity, FlightRules};
 use logbook_shared_kernel::{
-    CurrencyCheck, CurrencyResult, Entry, EntryAccumulator, EntryId, EventWindow, Subject,
+    CurrencyCheck, CurrencyResult, Entry, EntryAccumulator, EntryId, EventWindow, SubjectId,
 };
 use time::Date;
-use uuid::Uuid;
 
 /// "Within the previous 6 months" (reg 61.875(1)), in calendar months.
 const WINDOW_MONTHS: u32 = 6;
 const REQUIRED: usize = 1;
 /// "A duration of at least one hour" (reg 61.875(2)(a)), in minutes.
 const MIN_DURATION_MINUTES: i64 = 60;
-
-/// What a pilot's entries log: one flight, or one session. A flight logged
-/// in two capacities has two entries for it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum Logs {
-    Flight(Uuid),
-    Session(Uuid),
-}
-
-impl Logs {
-    fn of(entry: &Entry) -> Self {
-        match entry.subject() {
-            Subject::Flight { flight, .. } => Self::Flight(*flight),
-            Subject::Session { session, .. } => Self::Session(*session),
-        }
-    }
-}
 
 /// One flight or session, from every entry the pilot logged it in.
 #[derive(Debug)]
@@ -73,14 +55,15 @@ struct Logged {
 ///   it, since one flown in two capacities has two;
 /// - **an approach**: recorded on one of those entries.
 ///
-/// Each is decided for the flight or session, grouped by its id, once all
-/// its entries are in, and it is dated by the latest of them. An entry dated
+/// Each is decided for the flight or session, grouped by the kernel's
+/// `SubjectId` (which keeps a flight and a session of the same id apart),
+/// once all its entries are in, and it is dated by the latest of them. An entry dated
 /// after the reference date has not happened yet, so it is left out before
 /// grouping: it neither adds to a flight nor disqualifies one. In any capacity but co-pilot, and in any category of
 /// aircraft: reg 61.875 names none.
 pub(crate) struct SinglePilotIfr {
     reference: Date,
-    logged: BTreeMap<Logs, Logged>,
+    logged: BTreeMap<SubjectId, Logged>,
 }
 
 impl SinglePilotIfr {
@@ -97,7 +80,7 @@ impl EntryAccumulator for SinglePilotIfr {
         if entry.date() > self.reference {
             return;
         }
-        let logged = self.logged.entry(Logs::of(entry)).or_insert(Logged {
+        let logged = self.logged.entry(entry.subject().id()).or_insert(Logged {
             ifr: true,
             co_pilot: false,
             minutes: 0,
@@ -138,8 +121,9 @@ impl CurrencyCheck for SinglePilotIfr {
 #[cfg(test)]
 mod tests {
     use icao_shared_kernel::FlightDuration;
-    use logbook_shared_kernel::{ApproachType, EntryParts};
+    use logbook_shared_kernel::{ApproachType, EntryParts, Subject};
     use time::macros::date;
+    use uuid::Uuid;
 
     use super::*;
     use crate::logbook::test_support::{aeroplane, approach, entry, sailplane, simulated};
