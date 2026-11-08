@@ -20,7 +20,7 @@ use super::{
     SupervisionRoute,
 };
 
-/// [`for_entry`], built once, for reading the entries' stored answers.
+/// The questions about an entry, built once.
 pub(super) static ENTRY: LazyLock<Questions> = LazyLock::new(for_entry);
 
 /// The questions about an entry. Each is in the list whatever the entry,
@@ -29,7 +29,7 @@ pub(super) static ENTRY: LazyLock<Questions> = LazyLock::new(for_entry);
 /// meets it: whether the device was approved for a session, the guidance
 /// operations for an entry with approaches, the route for a pilot in command
 /// under supervision, and its follow-up on the route's answer.
-pub(super) fn for_entry() -> Questions {
+fn for_entry() -> Questions {
     let questions = vec![
         Question {
             key: APPROVED_FSTD,

@@ -60,19 +60,12 @@ pub(crate) fn casa() -> AuthorityId {
 pub(crate) fn information(entry: &Entry) -> Option<EntryInformation> {
     let record = Record::Entry(entry);
     let stored = record.information_for(&casa())?;
-    let information = EntryInformation::read(stored).ok()?;
-    let questions = &*questions::ENTRY;
-    let shown = questions.shown_for(record, Some(stored));
-    let hidden_answered = questions.iter().any(|question| {
-        stored.value().get(question.key).is_some()
-            && !shown.iter().any(|shown| shown.key == question.key)
-    });
-    if !hidden_answered {
-        return Some(information);
-    }
-    let mut without_hidden = stored.clone();
-    questions.drop_hidden_answers_for(record, &mut without_hidden);
-    EntryInformation::read(&without_hidden).ok()
+    EntryInformation::read(stored).ok()?;
+    let mut shown = stored.clone();
+    questions::ENTRY.drop_hidden_answers_for(record, &mut shown);
+    // Removing answers from information that reads leaves information that
+    // reads.
+    EntryInformation::read(&shown).ok()
 }
 
 /// CASA's information on an assessment, read as it is stored; `None` when
@@ -159,7 +152,7 @@ impl LicensingAuthority for Casa {
     /// 61.870 counts an instrument approach operation.
     fn questions_for(&self, record: Record) -> Questions {
         match record {
-            Record::Entry(_) => questions::for_entry(),
+            Record::Entry(_) => questions::ENTRY.clone(),
             Record::Assessment(_) => questions::for_assessment(),
         }
     }
@@ -187,8 +180,7 @@ impl LicensingAuthority for Casa {
                 Err(error) => vec![unreadable(error.to_string())],
                 Ok(answers)
                     if answers.receiving_flight_training == Some(true)
-                        && self
-                            .questions_for(record)
+                        && questions::ENTRY
                             .shown_for(record, Some(information))
                             .iter()
                             .any(|question| {

@@ -102,10 +102,10 @@ fn a_session_counts_only_in_an_approved_device(
 /// stored, even under a question not shown for the entry.
 #[test]
 fn a_badly_typed_hidden_answer_still_makes_the_information_unreadable() {
-    let entry = session(
-        "CASA",
-        Some(json!({"_version": 1, "approved_fstd": true, "route": 42})),
-    );
+    let answers = json!({"_version": 1, "approved_fstd": true, "route": 42});
+    let entry = session("CASA", Some(answers.clone()));
+    let (_, shown) = asked_and_shown(Record::Entry(&entry), answers);
+    assert!(!shown.contains(&"route"));
     assert!(!Casa::new().counts(&entry));
 }
 
