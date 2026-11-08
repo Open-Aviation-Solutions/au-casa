@@ -199,25 +199,40 @@ fn approaches_are_asked_about_and_arrivals_whatever_the_flight_rules(
     );
 }
 
-/// An answer to a question that no longer applies to the entry is dropped
-/// by the host, so that no check counts it.
+/// The host drops an answer to a question that no longer applies to the
+/// entry, and keeps one to a question that still does.
 #[test]
-fn the_host_drops_an_answer_that_no_longer_applies() {
-    let entry = Entry::new(flight_parts()).unwrap();
-    let mut information = AuthoritySpecificInformation::new(json!({
+fn the_host_drops_only_the_answers_that_no_longer_apply() {
+    let answers = json!({
         "_version": 1,
         "approved_fstd": true,
         "azimuth_guidance_operation": true,
         "course_deviation_indicator_operation": true,
         "dme_or_gnss_arrivals": 2,
-    }));
-    Casa::new()
-        .questions_for(Record::Entry(&entry))
-        .drop_hidden_answers_for(Record::Entry(&entry), &mut information);
+    });
+    let kept = |entry: &Entry| {
+        let mut information = AuthoritySpecificInformation::new(answers.clone());
+        Casa::new()
+            .questions_for(Record::Entry(entry))
+            .drop_hidden_answers_for(Record::Entry(entry), &mut information);
+        information.value().clone()
+    };
+    let flight = Entry::new(flight_parts()).unwrap();
     assert_eq!(
-        information.value(),
-        &json!({"_version": 1, "dme_or_gnss_arrivals": 2})
+        kept(&flight),
+        json!({"_version": 1, "dme_or_gnss_arrivals": 2})
     );
+    let session_with_an_approach = Entry::new(EntryParts {
+        approaches: vec![Approach::new(
+            ApproachType::Vor,
+            LocationIndicator::parse("YBAF").unwrap(),
+            false,
+        )],
+        subject: session("CASA", None).subject().clone(),
+        ..flight_parts()
+    })
+    .unwrap();
+    assert_eq!(kept(&session_with_an_approach), answers);
 }
 
 /// Reg 61.095(1)(c), (2) and (3).

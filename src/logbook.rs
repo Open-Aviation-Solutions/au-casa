@@ -52,10 +52,15 @@ pub(crate) fn casa() -> AuthorityId {
     AuthorityId::new("AU", "CASA").expect("AU is a State and CASA is not empty")
 }
 
-/// CASA's information on an entry, read as it is stored; `None` when the
-/// entry has none, or has information that cannot be read.
+/// CASA's information on an entry, read as it is stored, without the
+/// answers to questions not shown for the entry, so that no check counts an
+/// answer the pilot can no longer see, however the record was saved; `None`
+/// when the entry has none, or has information that cannot be read.
 pub(crate) fn information(entry: &Entry) -> Option<EntryInformation> {
-    read_information(Record::Entry(entry), EntryInformation::read)
+    let record = Record::Entry(entry);
+    let mut shown = record.information_for(&casa())?.clone();
+    questions::for_entry().drop_hidden_answers_for(record, &mut shown);
+    EntryInformation::read(&shown).ok()
 }
 
 /// CASA's information on an assessment, read as it is stored; `None` when
@@ -179,7 +184,8 @@ impl LicensingAuthority for Casa {
                 Err(error) => vec![unreadable(error.to_string())],
                 Ok(answers)
                     if answers.receiving_flight_training == Some(true)
-                        && questions::for_entry()
+                        && self
+                            .questions_for(record)
                             .shown_for(record, Some(information))
                             .iter()
                             .any(|question| {
