@@ -140,16 +140,18 @@ impl LicensingAuthority for Casa {
 
     /// The questions for CASA's information on an entry, each key of
     /// [`EntryInformation`], or on an assessment, each key of
-    /// [`AssessmentInformation`], at that format's version. Of an entry, the
-    /// question whether the device was an approved flight simulation
-    /// training device is asked only of a session, the two guidance
-    /// operations only of an entry with approaches, and the DME or GNSS
-    /// arrivals only of an entry under the IFR; the route is
-    /// shown for a pilot in command under supervision, and whether the
-    /// person was receiving flight training on the instructor's route.
+    /// [`AssessmentInformation`], at that format's version. Every entry is
+    /// asked the same questions, each shown where it applies, so that the
+    /// host drops an answer to one that no longer does: whether the device
+    /// was an approved flight simulation training device is shown for a
+    /// session, the two guidance operations for an entry with approaches,
+    /// the route for a pilot in command under supervision, and whether the
+    /// person was receiving flight training on the instructor's route. The
+    /// DME or GNSS arrivals are asked whatever the flight rules, as reg
+    /// 61.870 counts an instrument approach operation.
     fn questions_for(&self, record: Record) -> Questions {
         match record {
-            Record::Entry(entry) => questions::for_entry(entry),
+            Record::Entry(_) => questions::for_entry(),
             Record::Assessment(_) => questions::for_assessment(),
         }
     }
@@ -173,11 +175,11 @@ impl LicensingAuthority for Casa {
         information: &AuthoritySpecificInformation,
     ) -> Vec<Problem> {
         match record {
-            Record::Entry(entry) => match EntryInformation::read_to_save(information) {
+            Record::Entry(_) => match EntryInformation::read_to_save(information) {
                 Err(error) => vec![unreadable(error.to_string())],
                 Ok(answers)
                     if answers.receiving_flight_training == Some(true)
-                        && questions::for_entry(entry)
+                        && questions::for_entry()
                             .shown_for(record, Some(information))
                             .iter()
                             .any(|question| {

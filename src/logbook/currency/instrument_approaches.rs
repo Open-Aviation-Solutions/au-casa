@@ -29,11 +29,14 @@ pub(super) fn is_3d(approach: &Approach) -> bool {
     approach.procedure().is_3d()
 }
 
-/// The DME or GNSS arrivals an entry records in CASA's information, each "an
-/// instrument approach operation under the IFR using distance measuring
-/// equipment or a global navigation satellite system" (Table 61.935, item
-/// 20), at most `required` of them: none when it records no count, or has
-/// information that cannot be read.
+/// The DME or GNSS arrivals an entry records in CASA's information, each an
+/// instrument approach operation "using distance measuring equipment or a
+/// global navigation satellite system" (Table 61.935, item 20, which names
+/// the arrival procedure), whatever the flight rules: reg 61.870 counts
+/// instrument approach operations "conducted", and item 20's "under the IFR"
+/// is the endorsement's privilege, not what an arrival is. At most
+/// `required` of them: none when it records no count, or has information
+/// that cannot be read.
 pub(super) fn dme_or_gnss_arrivals(entry: &Entry, required: usize) -> usize {
     information(entry)
         .and_then(|information| information.dme_or_gnss_arrivals)
