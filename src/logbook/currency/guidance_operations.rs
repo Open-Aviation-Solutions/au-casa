@@ -20,7 +20,8 @@ const REQUIRED: usize = 1;
 /// training device for the purpose".
 ///
 /// An entry supplies one operation when CASA's information on it answers
-/// yes; none when it answers no, gives no answer, or cannot be read.
+/// yes; none when it answers no, gives no answer, or cannot be read, or
+/// records no approach, for which the question is not shown.
 pub(crate) struct GuidanceOperations {
     window: EventWindow,
     conducted: fn(&EntryInformation) -> Option<bool>,
@@ -71,12 +72,12 @@ impl CurrencyCheck for GuidanceOperations {
 
 #[cfg(test)]
 mod tests {
-    use logbook_shared_kernel::EntryParts;
+    use logbook_shared_kernel::{ApproachType, EntryParts};
     use time::macros::date;
     use time::Duration;
 
     use super::*;
-    use crate::logbook::test_support::{aeroplane, entry, informed, simulated};
+    use crate::logbook::test_support::{aeroplane, approach, entry, informed, simulated};
 
     const REFERENCE: Date = date!(2024 - 09 - 01);
     const ON: Date = date!(2024 - 08 - 20);
@@ -106,9 +107,17 @@ mod tests {
         ]
     }
 
-    /// Each check's result over one entry of `parts`, with information that
-    /// answers it `answer`, and the check's name.
+    /// The parts, recording an approach, for which the guidance questions
+    /// are shown.
+    fn with_approach(mut parts: EntryParts) -> EntryParts {
+        parts.approaches = vec![approach(ApproachType::Vor)];
+        parts
+    }
+
+    /// Each check's result over one entry of `parts`, with an approach and
+    /// information that answers it `answer`, and the check's name.
     fn results(answer: Option<bool>, parts: EntryParts) -> Vec<(&'static str, CurrencyResult)> {
+        let parts = with_approach(parts);
         checks(answer)
             .into_iter()
             .map(|(name, check, information)| {
@@ -137,6 +146,18 @@ mod tests {
         }
     }
 
+    /// An answer stored before the entry's approaches were removed is to a
+    /// question no longer shown, so it is not counted, whether or not the
+    /// host dropped it on saving.
+    #[test]
+    fn an_answer_stored_without_an_approach_is_no_operation() {
+        for (name, check, information) in checks(Some(true)) {
+            let mut check = check(REFERENCE);
+            check.accept_entry(&entry(informed(information, aeroplane("a", ON))));
+            assert!(!check.result().is_current(), "{name}");
+        }
+    }
+
     #[test]
     fn each_reads_only_its_own_answer() {
         let [(_, azimuth_guidance, azimuth_yes), (_, course_deviation, course_deviation_yes)] =
@@ -146,7 +167,7 @@ mod tests {
             (course_deviation, azimuth_yes),
         ] {
             let mut check = check(REFERENCE);
-            check.accept_entry(&entry(informed(other, aeroplane("a", ON))));
+            check.accept_entry(&entry(informed(other, with_approach(aeroplane("a", ON)))));
             assert!(!check.result().is_current());
         }
     }
