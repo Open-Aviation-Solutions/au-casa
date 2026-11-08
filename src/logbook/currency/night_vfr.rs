@@ -39,8 +39,7 @@ impl EntryAccumulator for NightVfr {
             return;
         }
         let pairs = entry.take_offs().night.min(entry.landings().night);
-        // One entry supplies at most the events the check needs.
-        let pairs = usize::try_from(pairs).map_or(REQUIRED, |pairs| pairs.min(REQUIRED));
+        let pairs = usize::try_from(pairs).unwrap_or(usize::MAX);
         self.window.record(entry, pairs);
     }
 }

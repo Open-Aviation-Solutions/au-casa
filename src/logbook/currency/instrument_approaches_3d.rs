@@ -35,8 +35,7 @@ impl EntryAccumulator for InstrumentApproaches3D {
             .iter()
             .filter(|approach| is_3d(approach))
             .count();
-        // One entry supplies at most the operation the check needs.
-        self.window.record(entry, operations.min(REQUIRED));
+        self.window.record(entry, operations);
     }
 }
 
