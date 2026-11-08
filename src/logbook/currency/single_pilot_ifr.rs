@@ -56,11 +56,12 @@ struct Logged {
 /// - **an approach**: recorded on one of those entries.
 ///
 /// Each is decided for the flight or session, grouped by the kernel's
-/// `SubjectId` (which keeps a flight and a session of the same id apart),
-/// once all its entries are in, and it is dated by the latest of them. An entry dated
-/// after the reference date has not happened yet, so it is left out before
-/// grouping: it neither adds to a flight nor disqualifies one. In any capacity but co-pilot, and in any category of
-/// aircraft: reg 61.875 names none.
+/// [`SubjectId`] (which keeps a flight and a session of the same id apart),
+/// once all its entries are in, and it is dated by the latest of them. An
+/// entry dated after the reference date has not happened yet, so it is left
+/// out before grouping: it neither adds to a flight nor disqualifies one. In
+/// any capacity but co-pilot, and in any category of aircraft: reg 61.875
+/// names none.
 pub(crate) struct SinglePilotIfr {
     reference: Date,
     logged: BTreeMap<SubjectId, Logged>,

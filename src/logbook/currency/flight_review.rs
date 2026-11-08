@@ -36,10 +36,8 @@ const REQUIRED: usize = 1;
 /// not end a valid review.
 pub(crate) struct FlightReview {
     window: EventWindow,
-    /// What the entries in an aircraft of the class log. An assessment's
-    /// flight is looked up among them as a flight, so a session never
-    /// matches one.
-    logged: BTreeSet<SubjectId>,
+    /// The flights an entry records in an aircraft of the class.
+    flights: BTreeSet<SubjectId>,
 }
 
 impl FlightReview {
@@ -53,14 +51,15 @@ impl FlightReview {
         class_rating: AircraftClassRating,
         entries: impl IntoIterator<Item = &'a Entry>,
     ) -> Self {
-        let logged = entries
+        let flights = entries
             .into_iter()
             .filter(|entry| is_class_rating(entry, class_rating))
             .map(|entry| entry.subject().id())
+            .filter(|id| matches!(id, SubjectId::Flight(_)))
             .collect();
         Self {
             window: EventWindow::new(reference, WINDOW_DAYS, REQUIRED),
-            logged,
+            flights,
         }
     }
 }
@@ -83,7 +82,7 @@ fn satisfies_flight_review(check_type: CheckType) -> bool {
 
 impl AssessmentAccumulator for FlightReview {
     fn accept_assessment(&mut self, assessment: &Assessment) {
-        if !self.logged.contains(&SubjectId::Flight(assessment.flight)) {
+        if !self.flights.contains(&SubjectId::Flight(assessment.flight)) {
             return;
         }
         let Some(information) = assessment_information(assessment) else {
@@ -112,7 +111,7 @@ mod tests {
 
     use super::*;
     use crate::logbook::test_support::{
-        aeroplane, assessed, entry, flown, on_flight, unclassified,
+        aeroplane, assessed, entry, flown, on_flight, simulated, unclassified,
     };
     use crate::logbook::{casa, AssessmentInformation};
 
@@ -233,6 +232,26 @@ mod tests {
                 "{check_type:?}"
             );
         }
+    }
+
+    /// "In an aircraft of the class" (reg 61.745(2)(a)): a session in a
+    /// device simulating one is not a flight.
+    #[test]
+    fn a_session_is_not_taken_for_a_flight_of_the_same_id() {
+        // Both have the nil id.
+        let session = simulated("s", ON, "C172");
+        assert!(is_class_rating(&entry(session.clone()), Sea));
+        let review = assessed(
+            "a",
+            ON,
+            0,
+            AssessmentInformation {
+                check_type: Some(CheckType::FlightReview),
+                outcome: Some(CheckOutcome::Passed),
+                check_purpose: None,
+            },
+        );
+        assert!(!result(Sea, &[session], &[review]).is_current());
     }
 
     #[test]
