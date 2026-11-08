@@ -60,15 +60,16 @@ answers one such question:
   command); the questions it asks for its information on an entry and on
   an assessment (`questions_for`, in `logbook::questions`: one for each key
   of the format, every one in the list whatever the record, and one that
-  applies only to some records shown on a kernel `Condition`, never left
-  out, so that the host's `drop_hidden_answers_for` drops its answer when
-  it saves a record it no longer applies to; the checks read an entry's
-  information through `information`, which drops those answers too, so a
-  hidden answer already stored counts for nothing; the DME or GNSS arrivals
+  applies only to some records has a kernel `Condition`, never left out,
+  so that the host's `retain_applicable_answers_for` removes its
+  answer when it saves a record it no longer applies to; the checks read an
+  entry's information through `information`, which removes those answers
+  too, so an answer already stored to a question that does not apply counts
+  for nothing; the DME or GNSS arrivals
   are asked whatever the flight rules); and the problems with the
   answers (`problems_for`): information it cannot read, so that the host
   does not stamp and save it, and reg 61.095(3)(b)'s "the person is not
-  receiving flight training", where that question is shown. Stored information must carry its version
+  receiving flight training", where that question applies. Stored information must carry its version
   (`read`); only information about to be saved may lack it
   (`read_to_save`), which is how `problems_for` reads what it is given. A `null` answer is no answer, as an
   absent key is. The currency checks are in `logbook::currency`, which
@@ -116,7 +117,7 @@ answers one such question:
   groups a flight's entries, asserts the same result for both orders.
 
 `icao-shared-kernel`, logbook-shared-kernel and aircraft-type-descriptions
-are taken by a caret range (`^0.5`, `^0.3` and `^0.1.0`), not pinned exactly
+are taken by a caret range (`^0.5`, `^0.4` and `^0.1.0`), not pinned exactly
 (au-casa#24): sibling country crates (nz-caa and the like) depend on them
 too, and a consumer such as a logbook imports several at once. Exact pins on
 different patches cannot be resolved together; with caret ranges Cargo builds
