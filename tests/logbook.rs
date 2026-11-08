@@ -98,6 +98,17 @@ fn a_session_counts_only_in_an_approved_device(
     assert_eq!(Casa::new().counts(&session("CASA", information)), counts);
 }
 
+/// An answer that cannot be read makes the information unreadable as
+/// stored, even under a question not shown for the entry.
+#[test]
+fn a_badly_typed_hidden_answer_still_makes_the_information_unreadable() {
+    let answers = json!({"_version": 1, "approved_fstd": true, "route": 42});
+    let entry = session("CASA", Some(answers.clone()));
+    let (_, shown) = asked_and_shown(Record::Entry(&entry), answers);
+    assert!(!shown.contains(&"route"));
+    assert!(!Casa::new().counts(&entry));
+}
+
 #[test]
 fn another_authoritys_information_does_not_make_a_session_count() {
     let entry = session("OTHER", Some(json!({"_version": 1, "approved_fstd": true})));
@@ -139,34 +150,44 @@ fn asked_and_shown(record: Record, answers: Value) -> (Vec<&'static str>, Vec<&'
     )
 }
 
+/// Every key of the entry format, in order.
+const ENTRY_KEYS: [&str; 6] = [
+    "approved_fstd",
+    "route",
+    "receiving_flight_training",
+    "azimuth_guidance_operation",
+    "course_deviation_indicator_operation",
+    "dme_or_gnss_arrivals",
+];
+
 #[test]
-fn a_flight_is_asked_only_what_applies_to_it() {
+fn a_flight_is_shown_only_what_applies_to_it() {
     let entry = Entry::new(flight_parts()).unwrap();
     let questions = Casa::new().questions_for(Record::Entry(&entry));
     assert_eq!(questions.version(), EntryInformation::VERSION);
     let (asked, shown) = asked_and_shown(Record::Entry(&entry), json!({}));
-    assert_eq!(asked, ["route", "receiving_flight_training"]);
-    assert!(shown.is_empty());
+    assert_eq!(asked, ENTRY_KEYS);
+    assert_eq!(shown, ["dme_or_gnss_arrivals"]);
 }
 
 #[test]
-fn a_session_is_asked_whether_its_device_was_approved() {
+fn a_session_is_shown_whether_its_device_was_approved() {
     let entry = session("CASA", None);
     let (asked, shown) = asked_and_shown(Record::Entry(&entry), json!({}));
-    assert_eq!(asked[0], "approved_fstd");
-    assert_eq!(shown, ["approved_fstd"]);
+    assert_eq!(asked, ENTRY_KEYS);
+    assert_eq!(shown, ["approved_fstd", "dme_or_gnss_arrivals"]);
 }
 
-/// Reg 61.870(6) and (7), and Table 61.935 item 20, "under the IFR".
+/// Reg 61.870(6) and (7), and reg 61.870's instrument approach operations
+/// "conducted", whatever the flight rules.
 #[rstest]
-#[case::vfr(Some(FlightRules::Vfr), false)]
-#[case::unknown(None, false)]
-#[case::ifr(Some(FlightRules::Ifr), true)]
-#[case::initially_ifr(Some(FlightRules::InitiallyIfr), false)]
-#[case::initially_vfr(Some(FlightRules::InitiallyVfr), false)]
-fn approaches_are_asked_about_and_arrivals_under_the_ifr(
+#[case::vfr(Some(FlightRules::Vfr))]
+#[case::unknown(None)]
+#[case::ifr(Some(FlightRules::Ifr))]
+#[case::initially_ifr(Some(FlightRules::InitiallyIfr))]
+#[case::initially_vfr(Some(FlightRules::InitiallyVfr))]
+fn approaches_are_asked_about_and_arrivals_whatever_the_flight_rules(
     #[case] flight_rules: Option<FlightRules>,
-    #[case] arrivals: bool,
 ) {
     let entry = Entry::new(EntryParts {
         flight_rules,
@@ -179,21 +200,60 @@ fn approaches_are_asked_about_and_arrivals_under_the_ifr(
     })
     .unwrap();
     let (_, shown) = asked_and_shown(Record::Entry(&entry), json!({}));
-    let mut expected = vec![
-        "azimuth_guidance_operation",
-        "course_deviation_indicator_operation",
-    ];
-    if arrivals {
-        expected.push("dme_or_gnss_arrivals");
-    }
-    assert_eq!(shown, expected);
+    assert_eq!(
+        shown,
+        [
+            "azimuth_guidance_operation",
+            "course_deviation_indicator_operation",
+            "dme_or_gnss_arrivals",
+        ]
+    );
+}
+
+/// The host drops an answer to a question that no longer applies to the
+/// entry, and keeps one to a question that still does.
+#[test]
+fn the_host_drops_only_the_answers_that_no_longer_apply() {
+    let answers = json!({
+        "_version": 1,
+        "approved_fstd": true,
+        "azimuth_guidance_operation": true,
+        "course_deviation_indicator_operation": true,
+        "dme_or_gnss_arrivals": 2,
+    });
+    let kept = |entry: &Entry| {
+        let mut information = AuthoritySpecificInformation::new(answers.clone());
+        Casa::new()
+            .questions_for(Record::Entry(entry))
+            .drop_hidden_answers_for(Record::Entry(entry), &mut information);
+        information.value().clone()
+    };
+    let flight = Entry::new(flight_parts()).unwrap();
+    assert_eq!(
+        kept(&flight),
+        json!({"_version": 1, "dme_or_gnss_arrivals": 2})
+    );
+    let session_with_an_approach = Entry::new(EntryParts {
+        approaches: vec![Approach::new(
+            ApproachType::Vor,
+            LocationIndicator::parse("YBAF").unwrap(),
+            false,
+        )],
+        subject: session("CASA", None).subject().clone(),
+        ..flight_parts()
+    })
+    .unwrap();
+    assert_eq!(kept(&session_with_an_approach), answers);
 }
 
 /// Reg 61.095(1)(c), (2) and (3).
 #[rstest]
-#[case::unanswered(json!({}), &["route"])]
-#[case::operator(json!({"route": "operator"}), &["route"])]
-#[case::instructor(json!({"route": "instructor"}), &["route", "receiving_flight_training"])]
+#[case::unanswered(json!({}), &["route", "dme_or_gnss_arrivals"])]
+#[case::operator(json!({"route": "operator"}), &["route", "dme_or_gnss_arrivals"])]
+#[case::instructor(
+    json!({"route": "instructor"}),
+    &["route", "receiving_flight_training", "dme_or_gnss_arrivals"]
+)]
 fn a_pilot_in_command_under_supervision_is_asked_the_route(
     #[case] answers: Value,
     #[case] expected: &[&str],

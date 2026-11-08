@@ -52,27 +52,28 @@ pub(crate) fn casa() -> AuthorityId {
     AuthorityId::new("AU", "CASA").expect("AU is a State and CASA is not empty")
 }
 
-/// CASA's information on an entry, read as it is stored; `None` when the
-/// entry has none, or has information that cannot be read.
+/// CASA's information on an entry, read as it is stored, without the
+/// answers to questions not shown for the entry, so that no check counts an
+/// answer the pilot can no longer see, however the record was saved; `None`
+/// when the entry has none, or has information that cannot be read as
+/// stored, hidden answers and all.
 pub(crate) fn information(entry: &Entry) -> Option<EntryInformation> {
-    read_information(Record::Entry(entry), EntryInformation::read)
+    let record = Record::Entry(entry);
+    let stored = record.information_for(&casa())?;
+    EntryInformation::read(stored).ok()?;
+    let mut shown = stored.clone();
+    questions::ENTRY.drop_hidden_answers_for(record, &mut shown);
+    // Removing answers from information that reads leaves information that
+    // reads.
+    EntryInformation::read(&shown).ok()
 }
 
 /// CASA's information on an assessment, read as it is stored; `None` when
 /// the assessment has none, or has information that cannot be read.
 pub(crate) fn assessment_information(assessment: &Assessment) -> Option<AssessmentInformation> {
-    read_information(Record::Assessment(assessment), AssessmentInformation::read)
-}
-
-/// CASA's information on a record, read by `read`; `None` when there is
-/// none, or it cannot be read.
-fn read_information<T, E>(
-    record: Record,
-    read: fn(&AuthoritySpecificInformation) -> Result<T, E>,
-) -> Option<T> {
-    record
+    Record::Assessment(assessment)
         .information_for(&casa())
-        .and_then(|information| read(information).ok())
+        .and_then(|information| AssessmentInformation::read(information).ok())
 }
 
 impl Default for Casa {
@@ -140,16 +141,18 @@ impl LicensingAuthority for Casa {
 
     /// The questions for CASA's information on an entry, each key of
     /// [`EntryInformation`], or on an assessment, each key of
-    /// [`AssessmentInformation`], at that format's version. Of an entry, the
-    /// question whether the device was an approved flight simulation
-    /// training device is asked only of a session, the two guidance
-    /// operations only of an entry with approaches, and the DME or GNSS
-    /// arrivals only of an entry under the IFR; the route is
-    /// shown for a pilot in command under supervision, and whether the
-    /// person was receiving flight training on the instructor's route.
+    /// [`AssessmentInformation`], at that format's version. Every entry is
+    /// asked the same questions, each shown where it applies, so that the
+    /// host drops an answer to one that no longer does: whether the device
+    /// was an approved flight simulation training device is shown for a
+    /// session, the two guidance operations for an entry with approaches,
+    /// the route for a pilot in command under supervision, and whether the
+    /// person was receiving flight training on the instructor's route. The
+    /// DME or GNSS arrivals are asked whatever the flight rules, as reg
+    /// 61.870 counts an instrument approach operation.
     fn questions_for(&self, record: Record) -> Questions {
         match record {
-            Record::Entry(entry) => questions::for_entry(entry),
+            Record::Entry(_) => questions::ENTRY.clone(),
             Record::Assessment(_) => questions::for_assessment(),
         }
     }
@@ -173,11 +176,11 @@ impl LicensingAuthority for Casa {
         information: &AuthoritySpecificInformation,
     ) -> Vec<Problem> {
         match record {
-            Record::Entry(entry) => match EntryInformation::read_to_save(information) {
+            Record::Entry(_) => match EntryInformation::read_to_save(information) {
                 Err(error) => vec![unreadable(error.to_string())],
                 Ok(answers)
                     if answers.receiving_flight_training == Some(true)
-                        && questions::for_entry(entry)
+                        && questions::ENTRY
                             .shown_for(record, Some(information))
                             .iter()
                             .any(|question| {

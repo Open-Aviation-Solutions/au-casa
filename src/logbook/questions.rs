@@ -5,8 +5,10 @@
 //! CASA's questions, for its information on an entry and on an assessment:
 //! one question for each key of the two formats.
 
-use icao_shared_kernel::{Capacity, FlightRules};
-use logbook_shared_kernel::{Answer, Choice, Condition, Entry, Question, Questions, Subject};
+use std::sync::LazyLock;
+
+use icao_shared_kernel::Capacity;
+use logbook_shared_kernel::{Answer, Choice, Condition, Question, Questions};
 
 use super::assessment_information::{CHECK_PURPOSE, CHECK_TYPE, OUTCOME};
 use super::entry_information::{
@@ -18,74 +20,72 @@ use super::{
     SupervisionRoute,
 };
 
-/// The questions about `entry`. A question that depends on the entry's
-/// subject, approaches or flight rules is asked only of an entry it applies
-/// to; the route, which depends on the capacity, is shown on the kernel's
-/// [`Condition::Capacity`], and its follow-up on the route's answer.
-pub(super) fn for_entry(entry: &Entry) -> Questions {
-    let session = matches!(entry.subject(), Subject::Session { .. });
-    let approaches = !entry.approaches().is_empty();
-    // Under the IFR throughout, as the single-pilot IFR check reads it.
-    let ifr = entry.flight_rules() == Some(FlightRules::Ifr);
-    let mut questions = Vec::new();
-    if session {
-        questions.push(Question {
+/// The questions about an entry, built once.
+pub(super) static ENTRY: LazyLock<Questions> = LazyLock::new(for_entry);
+
+/// The questions about an entry. Each is in the list whatever the entry,
+/// and one that applies only to some entries is shown on a kernel
+/// [`Condition`], so that the host drops its answer when the entry no longer
+/// meets it: whether the device was approved for a session, the guidance
+/// operations for an entry with approaches, the route for a pilot in command
+/// under supervision, and its follow-up on the route's answer.
+fn for_entry() -> Questions {
+    let questions = vec![
+        Question {
             key: APPROVED_FSTD,
             label: "Was the device an approved flight simulation training device for the purpose?"
                 .into(),
             regulation: "61.010",
             answer: Answer::YesNo,
-            shown_when: None,
+            shown_when: Some(Condition::Session),
             required: true,
-        });
-    }
-    questions.push(Question {
-        key: ROUTE,
-        label: "Which applies to the flight?".into(),
-        regulation: "61.095(1)(c)",
-        answer: Answer::Choice(vec![
-            route(
-                SupervisionRoute::Operator,
-                "The flight is conducted by an operator that has training and checking \
-                 responsibilities, and the pilot in command of the flight is authorised by the \
-                 operator or the operator's Part 142 operator to conduct the supervision of the \
-                 person",
-                "61.095(2)",
-            ),
-            route(
-                SupervisionRoute::Instructor,
-                "The person is supervised by a flight instructor or flight examiner",
-                "61.095(3)",
-            ),
-        ]),
-        shown_when: Some(Condition::Capacity(
-            Capacity::PilotInCommandUnderSupervision,
-        )),
-        required: true,
-    });
-    questions.push(Question {
-        key: RECEIVING_FLIGHT_TRAINING,
-        label: "Was the person receiving flight training?".into(),
-        regulation: "61.095(3)(b)",
-        answer: Answer::YesNo,
-        shown_when: Some(Condition::Answer {
+        },
+        Question {
             key: ROUTE,
-            is: SupervisionRoute::Instructor.as_str().into(),
-        }),
-        required: true,
-    });
-    if approaches {
-        questions.push(Question {
+            label: "Which applies to the flight?".into(),
+            regulation: "61.095(1)(c)",
+            answer: Answer::Choice(vec![
+                route(
+                    SupervisionRoute::Operator,
+                    "The flight is conducted by an operator that has training and checking \
+                     responsibilities, and the pilot in command of the flight is authorised by \
+                     the operator or the operator's Part 142 operator to conduct the supervision \
+                     of the person",
+                    "61.095(2)",
+                ),
+                route(
+                    SupervisionRoute::Instructor,
+                    "The person is supervised by a flight instructor or flight examiner",
+                    "61.095(3)",
+                ),
+            ]),
+            shown_when: Some(Condition::Capacity(
+                Capacity::PilotInCommandUnderSupervision,
+            )),
+            required: true,
+        },
+        Question {
+            key: RECEIVING_FLIGHT_TRAINING,
+            label: "Was the person receiving flight training?".into(),
+            regulation: "61.095(3)(b)",
+            answer: Answer::YesNo,
+            shown_when: Some(Condition::Answer {
+                key: ROUTE,
+                is: SupervisionRoute::Instructor.as_str().into(),
+            }),
+            required: true,
+        },
+        Question {
             key: AZIMUTH_GUIDANCE_OPERATION,
             label: "Was an approach an azimuth guidance operation (an instrument approach \
                     operation using azimuth bearings for lateral navigation guidance)?"
                 .into(),
             regulation: "61.870(6)",
             answer: Answer::YesNo,
-            shown_when: None,
+            shown_when: Some(Condition::AnyApproach),
             required: false,
-        });
-        questions.push(Question {
+        },
+        Question {
             key: COURSE_DEVIATION_INDICATOR_OPERATION,
             label: "Was an approach a course deviation indicator operation (an instrument \
                     approach operation using a course deviation indicator for lateral navigation \
@@ -93,23 +93,21 @@ pub(super) fn for_entry(entry: &Entry) -> Questions {
                 .into(),
             regulation: "61.870(7)",
             answer: Answer::YesNo,
-            shown_when: None,
+            shown_when: Some(Condition::AnyApproach),
             required: false,
-        });
-    }
-    if ifr {
-        questions.push(Question {
+        },
+        Question {
             key: DME_OR_GNSS_ARRIVALS,
-            label: "How many instrument approach operations were conducted under the IFR using \
-                    distance measuring equipment or a global navigation satellite system (DME or \
-                    GNSS arrival procedure)?"
+            label: "How many instrument approach operations were conducted using distance \
+                    measuring equipment or a global navigation satellite system (DME or GNSS \
+                    arrival procedure)?"
                 .into(),
             regulation: "Table 61.935, item 20",
             answer: Answer::Count,
             shown_when: None,
             required: false,
-        });
-    }
+        },
+    ];
     Questions::new(EntryInformation::VERSION, questions)
 }
 
