@@ -8,16 +8,12 @@ use logbook_shared_kernel::{CurrencyCheck, CurrencyResult, Entry, EntryAccumulat
 use time::Date;
 
 use super::instrument_approaches::{is_3d, WINDOW_DAYS};
-use crate::aircraft::AircraftCategory;
-use crate::logbook::guards::is_category;
 
 const REQUIRED: usize = 1;
 
 /// Reg 61.870(5): "a 3D instrument approach operation within the previous
 /// 90 days in an aircraft or an approved flight simulation training device
 /// for the purpose".
-///
-/// Only in an aeroplane: pilot-logbook's reading, kept for the move.
 ///
 /// Each entry supplies its approaches that were 3D operations.
 pub(crate) struct InstrumentApproaches3D {
@@ -34,9 +30,6 @@ impl InstrumentApproaches3D {
 
 impl EntryAccumulator for InstrumentApproaches3D {
     fn accept_entry(&mut self, entry: &Entry) {
-        if !is_category(entry, AircraftCategory::Aeroplane) {
-            return;
-        }
         let operations = entry
             .approaches()
             .iter()
@@ -60,9 +53,7 @@ mod tests {
     use time::Duration;
 
     use super::*;
-    use crate::logbook::test_support::{
-        aeroplane, approach, arrivals, circled, entry, simulated, unclassified,
-    };
+    use crate::logbook::test_support::{aeroplane, approach, arrivals, circled, entry, simulated};
 
     const REFERENCE: Date = date!(2024 - 09 - 01);
     const ON: Date = date!(2024 - 08 - 20);
@@ -135,24 +126,12 @@ mod tests {
     /// "Or an approved flight simulation training device": whether the
     /// device was approved is `Casa::counts`'.
     #[test]
-    fn a_session_representing_an_aeroplane_counts() {
-        let session = |designator| {
-            entry(EntryParts {
-                approaches: vec![approach(ApproachType::Ils)],
-                ..simulated("a", ON, designator)
-            })
-        };
-        assert!(result(&[session("C172")]).is_current());
-        assert!(!result(&[session("R44")]).is_current());
-    }
-
-    #[test]
-    fn an_unclassified_type_does_not_count() {
-        let e = entry(EntryParts {
+    fn a_session_counts() {
+        let session = entry(EntryParts {
             approaches: vec![approach(ApproachType::Ils)],
-            ..unclassified("a", ON)
+            ..simulated("a", ON, "R44")
         });
-        assert!(!result(&[e]).is_current());
+        assert!(result(&[session]).is_current());
     }
 
     #[test]

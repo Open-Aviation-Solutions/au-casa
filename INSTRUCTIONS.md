@@ -92,7 +92,9 @@ answers one such question:
 - **Each requirement has a stable id**, from `logbook::currency`'s
   `CasaRequirement`: the regulation (bare, `61.395(1)`), and for a flight
   review `|` and its class rating's stored name, as pilot-logbook keyed
-  them. A host may keep an id, so changing one is a breaking change. A new
+  them; reg 61.870(3), which is per category, follows it with `|` and the
+  category's stored name (`61.870(3)|aeroplane`), one for each of reg
+  61.015's five. A host may keep an id, so changing one is a breaking change. A new
   check is a `CasaRequirement` variant (a `match` on it will not compile
   without its id, name and regulation), a row of `REQUIREMENTS`, and its
   result paired with that variant in `currency`; a test fails until the
