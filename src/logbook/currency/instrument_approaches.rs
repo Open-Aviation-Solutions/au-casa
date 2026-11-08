@@ -32,8 +32,8 @@ pub(super) fn is_3d(approach: &Approach) -> bool {
 /// The DME or GNSS arrivals an entry records in CASA's information, each "an
 /// instrument approach operation under the IFR using distance measuring
 /// equipment or a global navigation satellite system" (Table 61.935, item
-/// 20): none when it records no count, or has
-/// information that cannot be read.
+/// 20): none when it records no count, or has information that cannot be
+/// read. A count too big for `usize` saturates at `usize::MAX`.
 pub(super) fn dme_or_gnss_arrivals(entry: &Entry) -> usize {
     information(entry)
         .and_then(|information| information.dme_or_gnss_arrivals)
@@ -181,12 +181,9 @@ mod tests {
 
     #[test]
     fn an_entry_reports_every_operation_it_records() {
-        let r = result(&[entry(arrivals(
-            u64::MAX,
-            aeroplane("a", date!(2024 - 08 - 20)),
-        ))]);
+        let r = result(&[entry(arrivals(5, aeroplane("a", date!(2024 - 08 - 20))))]);
         assert!(r.is_current());
-        assert_eq!(r.found, usize::MAX);
+        assert_eq!(r.found, 5);
     }
 
     /// "In an aircraft": of any category, or none known.

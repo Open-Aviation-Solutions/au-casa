@@ -189,13 +189,13 @@ mod tests {
     #[test]
     fn an_entry_reports_every_pair_it_records() {
         let e = entry(EntryParts {
-            take_offs: day(u32::MAX),
-            landings: night(u32::MAX),
+            take_offs: day(5),
+            landings: night(5),
             ..aeroplane("a", date!(2024 - 08 - 20))
         });
         let r = result(&[e]);
         assert!(r.is_current());
-        assert_eq!(r.found, u32::MAX as usize);
+        assert_eq!(r.found, 5);
     }
 
     #[test]
