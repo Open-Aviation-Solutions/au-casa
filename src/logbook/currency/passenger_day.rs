@@ -38,8 +38,7 @@ impl EntryAccumulator for PassengerDay {
             return;
         }
         let pairs = entry.take_offs().total().min(entry.landings().total());
-        // One entry supplies at most the events the check needs.
-        let pairs = usize::try_from(pairs).map_or(REQUIRED, |pairs| pairs.min(REQUIRED));
+        let pairs = usize::try_from(pairs).unwrap_or(usize::MAX);
         self.window.record(entry, pairs);
     }
 }
@@ -188,15 +187,15 @@ mod tests {
     }
 
     #[test]
-    fn an_entry_supplies_at_most_the_three_pairs_needed() {
+    fn an_entry_reports_every_pair_it_records() {
         let e = entry(EntryParts {
-            take_offs: day(u32::MAX),
-            landings: night(u32::MAX),
+            take_offs: day(5),
+            landings: night(5),
             ..aeroplane("a", date!(2024 - 08 - 20))
         });
         let r = result(&[e]);
         assert!(r.is_current());
-        assert_eq!(r.found, 3);
+        assert_eq!(r.found, 5);
     }
 
     #[test]

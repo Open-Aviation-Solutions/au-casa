@@ -36,9 +36,8 @@ impl EntryAccumulator for InstrumentApproaches2D {
             .iter()
             .filter(|approach| !is_3d(approach))
             .count()
-            + dme_or_gnss_arrivals(entry, REQUIRED);
-        // One entry supplies at most the operation the check needs.
-        self.window.record(entry, operations.min(REQUIRED));
+            .saturating_add(dme_or_gnss_arrivals(entry));
+        self.window.record(entry, operations);
     }
 }
 

@@ -34,15 +34,13 @@ pub(super) fn is_3d(approach: &Approach) -> bool {
 /// global navigation satellite system" (Table 61.935, item 20, which names
 /// the arrival procedure), whatever the flight rules: reg 61.870 counts
 /// instrument approach operations "conducted", and item 20's "under the IFR"
-/// is the endorsement's privilege, not what an arrival is. At most
-/// `required` of them: none when it records no count, or has information
-/// that cannot be read.
-pub(super) fn dme_or_gnss_arrivals(entry: &Entry, required: usize) -> usize {
+/// is the endorsement's privilege, not what an arrival is. None when it
+/// records no count, or has information that cannot be read; a count too big
+/// for `usize` saturates at `usize::MAX`.
+pub(super) fn dme_or_gnss_arrivals(entry: &Entry) -> usize {
     information(entry)
         .and_then(|information| information.dme_or_gnss_arrivals)
-        .map_or(0, |count| {
-            usize::try_from(count).map_or(required, |count| count.min(required))
-        })
+        .map_or(0, |count| usize::try_from(count).unwrap_or(usize::MAX))
 }
 
 /// The operations needed: "at least 3" in any category (reg 61.870(2)),
@@ -99,10 +97,11 @@ impl EntryAccumulator for InstrumentApproaches {
         {
             return;
         }
-        let required = required(self.category);
-        let operations = entry.approaches().len() + dme_or_gnss_arrivals(entry, required);
-        // One entry supplies at most the operations the check needs.
-        self.window.record(entry, operations.min(required));
+        let operations = entry
+            .approaches()
+            .len()
+            .saturating_add(dme_or_gnss_arrivals(entry));
+        self.window.record(entry, operations);
     }
 }
 
@@ -184,13 +183,10 @@ mod tests {
     }
 
     #[test]
-    fn an_entry_supplies_at_most_the_three_operations_needed() {
-        let r = result(&[entry(arrivals(
-            u64::MAX,
-            aeroplane("a", date!(2024 - 08 - 20)),
-        ))]);
+    fn an_entry_reports_every_operation_it_records() {
+        let r = result(&[entry(arrivals(5, aeroplane("a", date!(2024 - 08 - 20))))]);
         assert!(r.is_current());
-        assert_eq!(r.found, 3);
+        assert_eq!(r.found, 5);
     }
 
     /// "In an aircraft": of any category, or none known.
@@ -226,7 +222,7 @@ mod tests {
         });
         let r = in_category(AircraftCategory::Helicopter, std::slice::from_ref(&e));
         assert!(r.is_current());
-        assert_eq!(r.found, 1);
+        assert_eq!(r.found, 2);
         assert_eq!(r.expiry_date, Some(on + Duration::days(90)));
         assert!(!in_category(AircraftCategory::Aeroplane, &[e]).is_current());
     }
