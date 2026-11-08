@@ -24,9 +24,10 @@ use logbook_shared_kernel::{
     run, run_assessments, AssessmentAccumulator, AssessmentCurrencyCheck, CurrencyCheck,
     CurrencyResult, EntryAccumulator, LicensingAuthority, Logbook, Requirement, RequirementId,
 };
+use serde::Serialize;
 use time::Date;
 
-use crate::aircraft::AircraftClassRating;
+use crate::aircraft::{AircraftCategory, AircraftClassRating};
 use crate::logbook::{class_name, Casa};
 
 use flight_review::FlightReview;
@@ -47,6 +48,8 @@ enum CasaRequirement {
     PassengerNight,
     NightVfr,
     InstrumentApproaches,
+    /// Reg 61.870(3)'s instrument approach operation in this category.
+    InstrumentApproachesInCategory(AircraftCategory),
     InstrumentApproaches2D,
     InstrumentApproaches3D,
     AzimuthGuidance,
@@ -57,15 +60,31 @@ enum CasaRequirement {
     InstrumentProficiencyCheck,
 }
 
+/// Reg 61.015's categories of aircraft, in its order, each with a
+/// requirement of reg 61.870(3). A registered sailplane is not one.
+const CATEGORIES: [AircraftCategory; 5] = [
+    AircraftCategory::Aeroplane,
+    AircraftCategory::Helicopter,
+    AircraftCategory::PoweredLift,
+    AircraftCategory::Gyroplane,
+    AircraftCategory::Airship,
+];
+
 /// The requirements, in the order they are reported. Aeroplane recency
 /// comes first, then instrument recency, then the flight reviews and the
-/// instrument proficiency check, as pilot-logbook listed them; the two
-/// guidance operations follow reg 61.870(5).
-const REQUIREMENTS: [CasaRequirement; 12] = [
+/// instrument proficiency check, as pilot-logbook listed them; instrument
+/// recency is in reg 61.870's order, with a requirement of its subregulation
+/// (3) for each category in reg 61.015's.
+const REQUIREMENTS: [CasaRequirement; 17] = [
     CasaRequirement::PassengerDay,
     CasaRequirement::PassengerNight,
     CasaRequirement::NightVfr,
     CasaRequirement::InstrumentApproaches,
+    CasaRequirement::InstrumentApproachesInCategory(CATEGORIES[0]),
+    CasaRequirement::InstrumentApproachesInCategory(CATEGORIES[1]),
+    CasaRequirement::InstrumentApproachesInCategory(CATEGORIES[2]),
+    CasaRequirement::InstrumentApproachesInCategory(CATEGORIES[3]),
+    CasaRequirement::InstrumentApproachesInCategory(CATEGORIES[4]),
     CasaRequirement::InstrumentApproaches2D,
     CasaRequirement::InstrumentApproaches3D,
     CasaRequirement::AzimuthGuidance,
@@ -84,6 +103,7 @@ impl CasaRequirement {
             Self::PassengerNight => "61.395(2)",
             Self::NightVfr => "61.965",
             Self::InstrumentApproaches => "61.870(2)",
+            Self::InstrumentApproachesInCategory(_) => "61.870(3)",
             Self::InstrumentApproaches2D => "61.870(4)",
             Self::InstrumentApproaches3D => "61.870(5)",
             Self::AzimuthGuidance => "61.870(6)",
@@ -94,20 +114,25 @@ impl CasaRequirement {
         }
     }
 
-    /// Its id: pilot-logbook's key for it (its `wording.ts`), the
-    /// regulation and, for a flight review, `|` and the class rating's
-    /// stored name (`61.745|single-engine-aeroplane`). Stable: a host may
-    /// keep it.
+    /// Its id: the regulation and, for a flight review, `|` and the class
+    /// rating's stored name (`61.745|single-engine-aeroplane`), each
+    /// pilot-logbook's key for it (its `wording.ts`); for reg 61.870(3), `|`
+    /// and the category's stored name (`61.870(3)|aeroplane`), which
+    /// originate here, since pilot-logbook had no key for it. Stable: a
+    /// host may keep it.
     fn id(self) -> RequirementId {
         match self {
-            Self::FlightReview(class_rating) => {
-                let class = serde_json::to_value(class_rating)
-                    .expect("a class rating serialises to its name");
-                let class = class.as_str().expect("a class rating's name is a string");
-                RequirementId::new(format!("{}|{class}", self.regulation()))
-            }
+            Self::FlightReview(class_rating) => self.qualified(class_rating),
+            Self::InstrumentApproachesInCategory(category) => self.qualified(category),
             _ => RequirementId::new(self.regulation()),
         }
+    }
+
+    /// The regulation, `|` and `value`'s stored name.
+    fn qualified(self, value: impl Serialize) -> RequirementId {
+        let name = serde_json::to_value(value).expect("a stored name serialises");
+        let name = name.as_str().expect("a stored name is a string");
+        RequirementId::new(format!("{}|{name}", self.regulation()))
     }
 
     /// Its name, in its regulation's words.
@@ -119,6 +144,12 @@ impl CasaRequirement {
                 "Recent experience for the night VFR rating in an aeroplane".to_owned()
             }
             Self::InstrumentApproaches => "At least 3 instrument approach operations".to_owned(),
+            Self::InstrumentApproachesInCategory(category) => {
+                format!(
+                    "At least one instrument approach operation in an aircraft of the \
+                     {category} category, or an approved flight simulation training device"
+                )
+            }
             Self::InstrumentApproaches2D => "2D instrument approach operation".to_owned(),
             Self::InstrumentApproaches3D => "3D instrument approach operation".to_owned(),
             Self::AzimuthGuidance => "Azimuth guidance operation".to_owned(),
@@ -165,26 +196,30 @@ pub(super) fn currency(
     let mut passenger_night = PassengerNight::new(as_of);
     let mut night_vfr = NightVfr::new(as_of);
     let mut approaches = InstrumentApproaches::new(as_of);
+    let mut in_category =
+        CATEGORIES.map(|category| InstrumentApproaches::in_category(as_of, category));
     let mut approaches_2d = InstrumentApproaches2D::new(as_of);
     let mut approaches_3d = InstrumentApproaches3D::new(as_of);
     let mut azimuth_guidance = GuidanceOperations::azimuth_guidance(as_of);
     let mut course_deviation_indicator = GuidanceOperations::course_deviation_indicator(as_of);
     let mut single_pilot_ifr = SinglePilotIfr::new(as_of);
-    run(
-        casa,
-        &logbook.entries,
-        &mut [
-            &mut passenger_day as &mut dyn EntryAccumulator,
-            &mut passenger_night,
-            &mut night_vfr,
-            &mut approaches,
-            &mut approaches_2d,
-            &mut approaches_3d,
-            &mut azimuth_guidance,
-            &mut course_deviation_indicator,
-            &mut single_pilot_ifr,
-        ],
+    let mut accumulators: Vec<&mut dyn EntryAccumulator> = vec![
+        &mut passenger_day,
+        &mut passenger_night,
+        &mut night_vfr,
+        &mut approaches,
+        &mut approaches_2d,
+        &mut approaches_3d,
+        &mut azimuth_guidance,
+        &mut course_deviation_indicator,
+        &mut single_pilot_ifr,
+    ];
+    accumulators.extend(
+        in_category
+            .iter_mut()
+            .map(|check| check as &mut dyn EntryAccumulator),
     );
+    run(casa, &logbook.entries, &mut accumulators);
 
     let single_engine = AircraftClassRating::SingleEngineAeroplane;
     let multi_engine = AircraftClassRating::MultiEngineAeroplane;
@@ -201,11 +236,25 @@ pub(super) fn currency(
         ],
     );
 
+    let in_category = CATEGORIES
+        .iter()
+        .zip(&in_category)
+        .map(|(&category, check)| {
+            (
+                CasaRequirement::InstrumentApproachesInCategory(category),
+                check.result(),
+            )
+        });
+
     [
         (CasaRequirement::PassengerDay, passenger_day.result()),
         (CasaRequirement::PassengerNight, passenger_night.result()),
         (CasaRequirement::NightVfr, night_vfr.result()),
         (CasaRequirement::InstrumentApproaches, approaches.result()),
+    ]
+    .into_iter()
+    .chain(in_category)
+    .chain([
         (
             CasaRequirement::InstrumentApproaches2D,
             approaches_2d.result(),
@@ -232,8 +281,7 @@ pub(super) fn currency(
             CasaRequirement::InstrumentProficiencyCheck,
             proficiency_check.result(),
         ),
-    ]
-    .into_iter()
+    ])
     .map(|(requirement, result)| (requirement.id(), result))
     .collect()
 }
@@ -321,11 +369,38 @@ mod tests {
             current,
             [
                 "61.395(1)",
+                "61.870(3)|aeroplane",
                 "61.870(5)",
                 "61.870(6)",
                 "61.745|single-engine-aeroplane",
                 "61.880",
             ]
         );
+    }
+
+    /// An approved session counts towards reg 61.870(3) for the category
+    /// of the type its device represented.
+    #[test]
+    fn an_approved_session_representing_a_helicopter_answers_the_helicopter_category() {
+        let session = informed(
+            EntryInformation {
+                approved_fstd: Some(true),
+                ..EntryInformation::default()
+            },
+            EntryParts {
+                approaches: vec![approach(ApproachType::Vor)],
+                ..simulated("s", ON, "R44")
+            },
+        );
+        let logbook = Logbook {
+            entries: vec![entry(session)],
+            assessments: Vec::new(),
+        };
+        let current: Vec<String> = currency(&Casa::new(), REFERENCE, &logbook)
+            .into_iter()
+            .filter(|(id, result)| id.as_str().starts_with("61.870(3)") && result.is_current())
+            .map(|(id, _)| id.as_str().to_owned())
+            .collect();
+        assert_eq!(current, ["61.870(3)|helicopter"]);
     }
 }

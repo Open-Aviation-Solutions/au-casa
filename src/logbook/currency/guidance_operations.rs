@@ -11,8 +11,6 @@ use logbook_shared_kernel::{CurrencyCheck, CurrencyResult, Entry, EntryAccumulat
 use time::Date;
 
 use super::instrument_approaches::WINDOW_DAYS;
-use crate::aircraft::AircraftCategory;
-use crate::logbook::guards::is_category;
 use crate::logbook::{information, EntryInformation};
 
 const REQUIRED: usize = 1;
@@ -20,9 +18,6 @@ const REQUIRED: usize = 1;
 /// One of regs 61.870(6) and (7): an operation of its kind "within the
 /// previous 90 days in an aircraft or an approved flight simulation
 /// training device for the purpose".
-///
-/// Only in an aeroplane, as regs 61.870(2), (4) and (5) are here, for
-/// consistency with pilot-logbook's reading of them.
 ///
 /// An entry supplies one operation when CASA's information on it answers
 /// yes; none when it answers no, gives no answer, or cannot be read.
@@ -61,9 +56,6 @@ impl GuidanceOperations {
 
 impl EntryAccumulator for GuidanceOperations {
     fn accept_entry(&mut self, entry: &Entry) {
-        if !is_category(entry, AircraftCategory::Aeroplane) {
-            return;
-        }
         let conducted = information(entry)
             .and_then(|information| (self.conducted)(&information))
             .unwrap_or(false);
@@ -84,7 +76,7 @@ mod tests {
     use time::Duration;
 
     use super::*;
-    use crate::logbook::test_support::{aeroplane, entry, informed, simulated, unclassified};
+    use crate::logbook::test_support::{aeroplane, entry, informed, simulated};
 
     const REFERENCE: Date = date!(2024 - 09 - 01);
     const ON: Date = date!(2024 - 08 - 20);
@@ -162,19 +154,9 @@ mod tests {
     /// "Or an approved flight simulation training device": whether the
     /// device was approved is `Casa::counts`'.
     #[test]
-    fn a_session_representing_an_aeroplane_counts() {
-        for (name, r) in results(Some(true), simulated("a", ON, "C172")) {
-            assert!(r.is_current(), "{name}");
-        }
+    fn a_session_counts() {
         for (name, r) in results(Some(true), simulated("a", ON, "R44")) {
-            assert!(!r.is_current(), "{name}");
-        }
-    }
-
-    #[test]
-    fn an_unclassified_type_does_not_count() {
-        for (name, r) in results(Some(true), unclassified("a", ON)) {
-            assert!(!r.is_current(), "{name}");
+            assert!(r.is_current(), "{name}");
         }
     }
 
