@@ -115,9 +115,8 @@ impl LicensingAuthority for Casa {
     /// Seventeen: carrying a passenger by day and at night (reg 61.395(1),
     /// (2)), night VFR recency (reg 61.965), instrument recency (reg
     /// 61.870(2), (3) for each category of reg 61.015, (4) to (7), and reg
-    /// 61.875), a flight review for each
-    /// aeroplane class rating (reg 61.745) and the instrument proficiency
-    /// check (reg 61.880). Each has a stable id and a name in its
+    /// 61.875), a flight review for each aeroplane class rating (reg
+    /// 61.745) and the instrument proficiency check (reg 61.880). Each has a stable id and a name in its
     /// regulation's words.
     fn requirements(&self) -> Vec<Requirement> {
         currency::requirements()

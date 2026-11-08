@@ -84,23 +84,26 @@ answers one such question:
   has no entry is unclassified and does not count. The instrument
   proficiency check reads no aircraft, as pilot-logbook's did not, so it is
   given no entries.
-- **An unknown type does not count.** A check that requires a category
-  (`guards::is_category`) needs positive evidence. The type is classified
+- **An unknown type does not count where a category is required.** A check
+  that requires a category (`guards::is_category`) needs positive evidence;
+  regs 61.870(2) and (4) to (7) require none ("in an aircraft"), so any
+  type counts for them. The type is classified
   from the table's description of its designator or, for a designator the
   table does not catalogue, from the description the entry carries, as
   pilot-logbook did; an entry with neither is not of any category.
 - **Each requirement has a stable id**, from `logbook::currency`'s
   `CasaRequirement`: the regulation (bare, `61.395(1)`), and for a flight
   review `|` and its class rating's stored name, as pilot-logbook keyed
-  them; reg 61.870(3), which is per category, follows it with `|` and the
-  category's stored name (`61.870(3)|aeroplane`), one for each of reg
-  61.015's five. A host may keep an id, so changing one is a breaking change. A new
-  check is a `CasaRequirement` variant (a `match` on it will not compile
+  them. Reg 61.870(3), which is per category, has one for each of reg
+  61.015's five, the regulation, `|` and the category's stored name
+  (`61.870(3)|aeroplane`); pilot-logbook had no key for it, so these ids
+  originate here. A host may keep an id, so changing one is a breaking
+  change. A new check is a `CasaRequirement` variant (a `match` on it will not compile
   without its id, name and regulation), a row of `REQUIREMENTS`, and its
   result paired with that variant in `currency`; a test fails until the
   last two agree.
 - **Testing:** each check's unit tests assert its boundaries (the window's
-  edge and the expiry, the category guard, an entry dated after the
+  edge and the expiry, the category guard where it has one, an entry dated after the
   reference date), with entries built by `logbook::test_support` from the
   real table of types. A check over `EventWindow` does not depend on the
   order entries arrive in, by construction (it sorts and filters the whole
@@ -217,10 +220,11 @@ information, merged with it.
 
 While on `0.x`, a breaking release bumps the minor version (`0.2.0`) and a
 compatible one the patch, as the kernel's do (decided on au-casa#24).
-Breaking includes a change to the API and a change to the Part 61 reading
+Breaking includes a change to the API; a change to the Part 61 reading
 that changes an existing designator's category, class or design features, or
-a title of licence's Part 61 term. Consumers take au-casa by a caret range
-on the current minor (such as `^0.3.0`), so a `cargo update` takes up patches but not a breaking release,
+a title of licence's Part 61 term; and a requirement added or removed, or a
+change to what makes an existing one current. Consumers take au-casa by a
+caret range on the current minor (such as `^0.4.0`), so a `cargo update` takes up patches but not a breaking release,
 which they move to on purpose.
 
 ## Commands

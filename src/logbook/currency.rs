@@ -24,6 +24,7 @@ use logbook_shared_kernel::{
     run, run_assessments, AssessmentAccumulator, AssessmentCurrencyCheck, CurrencyCheck,
     CurrencyResult, EntryAccumulator, LicensingAuthority, Logbook, Requirement, RequirementId,
 };
+use serde::Serialize;
 use time::Date;
 
 use crate::aircraft::{AircraftCategory, AircraftClassRating};
@@ -113,25 +114,25 @@ impl CasaRequirement {
         }
     }
 
-    /// Its id: pilot-logbook's key for it (its `wording.ts`), the
-    /// regulation and, for a flight review, `|` and the class rating's
-    /// stored name (`61.745|single-engine-aeroplane`); for reg 61.870(3),
-    /// `|` and the category's stored name (`61.870(3)|aeroplane`). Stable:
-    /// a host may keep it.
+    /// Its id: the regulation and, for a flight review, `|` and the class
+    /// rating's stored name (`61.745|single-engine-aeroplane`), each
+    /// pilot-logbook's key for it (its `wording.ts`); for reg 61.870(3), `|`
+    /// and the category's stored name (`61.870(3)|aeroplane`), which
+    /// originate here, since pilot-logbook had no key for it. Stable: a
+    /// host may keep it.
     fn id(self) -> RequirementId {
-        let qualified = |name: serde_json::Value| {
-            let name = name.as_str().expect("a stored name is a string");
-            RequirementId::new(format!("{}|{name}", self.regulation()))
-        };
         match self {
-            Self::FlightReview(class_rating) => qualified(
-                serde_json::to_value(class_rating).expect("a class rating serialises to its name"),
-            ),
-            Self::InstrumentApproachesInCategory(category) => qualified(
-                serde_json::to_value(category).expect("a category serialises to its name"),
-            ),
+            Self::FlightReview(class_rating) => self.qualified(class_rating),
+            Self::InstrumentApproachesInCategory(category) => self.qualified(category),
             _ => RequirementId::new(self.regulation()),
         }
+    }
+
+    /// The regulation, `|` and `value`'s stored name.
+    fn qualified(self, value: impl Serialize) -> RequirementId {
+        let name = serde_json::to_value(value).expect("a stored name serialises");
+        let name = name.as_str().expect("a stored name is a string");
+        RequirementId::new(format!("{}|{name}", self.regulation()))
     }
 
     /// Its name, in its regulation's words.
@@ -144,7 +145,10 @@ impl CasaRequirement {
             }
             Self::InstrumentApproaches => "At least 3 instrument approach operations".to_owned(),
             Self::InstrumentApproachesInCategory(category) => {
-                format!("At least one instrument approach operation for the {category} category")
+                format!(
+                    "At least one instrument approach operation in an aircraft of the \
+                     {category} category, or an approved flight simulation training device"
+                )
             }
             Self::InstrumentApproaches2D => "2D instrument approach operation".to_owned(),
             Self::InstrumentApproaches3D => "3D instrument approach operation".to_owned(),
@@ -372,5 +376,31 @@ mod tests {
                 "61.880",
             ]
         );
+    }
+
+    /// An approved session counts towards reg 61.870(3) for the category
+    /// of the type its device represented.
+    #[test]
+    fn an_approved_session_representing_a_helicopter_answers_the_helicopter_category() {
+        let session = informed(
+            EntryInformation {
+                approved_fstd: Some(true),
+                ..EntryInformation::default()
+            },
+            EntryParts {
+                approaches: vec![approach(ApproachType::Vor)],
+                ..simulated("s", ON, "R44")
+            },
+        );
+        let logbook = Logbook {
+            entries: vec![entry(session)],
+            assessments: Vec::new(),
+        };
+        let current: Vec<String> = currency(&Casa::new(), REFERENCE, &logbook)
+            .into_iter()
+            .filter(|(id, result)| id.as_str().starts_with("61.870(3)") && result.is_current())
+            .map(|(id, _)| id.as_str().to_owned())
+            .collect();
+        assert_eq!(current, ["61.870(3)|helicopter"]);
     }
 }

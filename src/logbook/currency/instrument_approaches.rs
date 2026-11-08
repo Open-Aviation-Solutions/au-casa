@@ -42,11 +42,20 @@ pub(super) fn dme_or_gnss_arrivals(entry: &Entry, required: usize) -> usize {
         })
 }
 
+/// The operations needed: "at least 3" in any category (reg 61.870(2)),
+/// "at least one" in a category (reg 61.870(3)).
+fn required(category: Option<AircraftCategory>) -> usize {
+    if category.is_some() {
+        1
+    } else {
+        3
+    }
+}
+
 /// One of regs 61.870(2) and (3). Each entry supplies its approaches and
 /// its DME or GNSS arrivals.
 pub(crate) struct InstrumentApproaches {
     window: EventWindow,
-    required: usize,
     /// The category an entry must be known to be in, for reg 61.870(3).
     category: Option<AircraftCategory>,
 }
@@ -56,7 +65,7 @@ impl InstrumentApproaches {
     /// previous 90 days in an aircraft or an approved flight simulation
     /// training device for the purpose", in an aircraft of any category.
     pub(crate) fn new(reference: Date) -> Self {
-        Self::counting(reference, 3, None)
+        Self::counting(reference, None)
     }
 
     /// Reg 61.870(3), for one category (reg 61.015): "at least one
@@ -68,13 +77,12 @@ impl InstrumentApproaches {
     /// represented, as the totals count it; a session that recorded no type,
     /// or a type of no known category, counts towards none.
     pub(crate) fn in_category(reference: Date, category: AircraftCategory) -> Self {
-        Self::counting(reference, 1, Some(category))
+        Self::counting(reference, Some(category))
     }
 
-    fn counting(reference: Date, required: usize, category: Option<AircraftCategory>) -> Self {
+    fn counting(reference: Date, category: Option<AircraftCategory>) -> Self {
         Self {
-            window: EventWindow::new(reference, WINDOW_DAYS, required),
-            required,
+            window: EventWindow::new(reference, WINDOW_DAYS, required(category)),
             category,
         }
     }
@@ -88,9 +96,10 @@ impl EntryAccumulator for InstrumentApproaches {
         {
             return;
         }
-        let operations = entry.approaches().len() + dme_or_gnss_arrivals(entry, self.required);
+        let required = required(self.category);
+        let operations = entry.approaches().len() + dme_or_gnss_arrivals(entry, required);
         // One entry supplies at most the operations the check needs.
-        self.window.record(entry, operations.min(self.required));
+        self.window.record(entry, operations.min(required));
     }
 }
 
@@ -102,7 +111,7 @@ impl CurrencyCheck for InstrumentApproaches {
 
 #[cfg(test)]
 mod tests {
-    use logbook_shared_kernel::{ApproachType, EntryParts, RnpApchMinima};
+    use logbook_shared_kernel::{ApproachType, EntryParts, RnpApchMinima, Subject};
     use time::macros::date;
     use time::Duration;
 
@@ -226,7 +235,7 @@ mod tests {
     }
 
     /// A session counts towards the category of the type its device
-    /// represented, and an unknown type towards none.
+    /// represented, and one that recorded no type towards none.
     #[test]
     fn a_session_counts_towards_the_category_its_type_is_in() {
         let on = date!(2024 - 08 - 20);
@@ -235,9 +244,20 @@ mod tests {
             in_category(AircraftCategory::Helicopter, std::slice::from_ref(&session)).is_current()
         );
         assert!(!in_category(AircraftCategory::Aeroplane, &[session]).is_current());
-        assert!(
-            !in_category(AircraftCategory::Aeroplane, &[three(unclassified("a", on))]).is_current()
-        );
+        let mut untyped = simulated("a", on, "R44");
+        if let Subject::Session { simulated, .. } = &mut untyped.subject {
+            *simulated = None;
+        }
+        let untyped = three(untyped);
+        for category in [AircraftCategory::Aeroplane, AircraftCategory::Helicopter] {
+            assert!(!in_category(category, std::slice::from_ref(&untyped)).is_current());
+        }
+    }
+
+    #[test]
+    fn a_flight_of_no_known_category_counts_towards_none() {
+        let e = three(unclassified("a", date!(2024 - 08 - 20)));
+        assert!(!in_category(AircraftCategory::Aeroplane, &[e]).is_current());
     }
 
     #[test]
