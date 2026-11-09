@@ -80,6 +80,9 @@ answers one such question:
 - **One module for each regulation**, an `EntryAccumulator` and
   `CurrencyCheck` (or the assessment traits) over the kernel's
   `EventWindow`. Its doc comment quotes the regulation it implements.
+  Regulations whose checks differ only in their figures share one, with
+  a constructor for each that quotes its regulation
+  (`take_offs_and_landings`, for regs 61.395(1) and (2) and 61.965(a)).
 - **Each sees only the entries `Casa::counts` lets through**: the kernel's
   `run` applies it once, so a check does not repeat it. A check over
   assessments that reads their aircraft, which `run` does not reach, is
@@ -105,14 +108,15 @@ answers one such question:
   (`61.870(3)|aeroplane`); pilot-logbook had no key for it, so these ids
   originate here. Regs 61.395(1) and (2) and 61.965(a) require take-offs
   and landings, counted separately, so each is two requirements, one for
-  each, with the regulation as its `regulation` and the paragraph that
-  requires the movement as its id (`61.395(1)(a)` for the take-offs,
-  `61.395(1)(b)` for the landings, `61.965(a)(i)` and `61.965(a)(ii)`); these
-  originate here too (au-casa#67). A host may keep an id, so changing one is a breaking
-  change. A new check is a `CasaRequirement` variant (a `match` on it will not compile
-  without its id, name and regulation), a row of `REQUIREMENTS`, and its
-  result paired with that variant in `currency`; a test fails until the
-  last two agree.
+  its take-offs and one for its landings, with the regulation as its
+  `regulation` and the paragraph that requires them as its id
+  (`61.395(1)(a)` for the take-offs, `61.395(1)(b)` for the landings,
+  `61.965(a)(i)` and `61.965(a)(ii)`); these originate here too
+  (au-casa#67). A host may keep an id, so changing one is a breaking
+  change. A new check is a `CasaRequirement` variant (a `match` on it will
+  not compile without its id, name and regulation), a row of
+  `REQUIREMENTS`, and its result paired with that variant in `currency`; a
+  test fails until the last two agree.
 - **Testing:** each check's unit tests assert its boundaries (the window's
   edge and the expiry, the category guard where it has one, an entry dated after the
   reference date), with entries built by `logbook::test_support` from the

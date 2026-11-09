@@ -15,15 +15,12 @@ mod instrument_approaches;
 mod instrument_approaches_2d;
 mod instrument_approaches_3d;
 mod instrument_proficiency_check;
-mod night_vfr;
-mod passenger_day;
-mod passenger_night;
 mod single_pilot_ifr;
+mod take_offs_and_landings;
 
 use logbook_shared_kernel::{
     run, run_assessments, AssessmentAccumulator, AssessmentCurrencyCheck, CurrencyCheck,
-    CurrencyResult, DayNight, Entry, EntryAccumulator, LicensingAuthority, Logbook, Requirement,
-    RequirementId,
+    CurrencyResult, EntryAccumulator, LicensingAuthority, Logbook, Requirement, RequirementId,
 };
 use serde::Serialize;
 use time::Date;
@@ -37,43 +34,19 @@ use instrument_approaches::InstrumentApproaches;
 use instrument_approaches_2d::InstrumentApproaches2D;
 use instrument_approaches_3d::InstrumentApproaches3D;
 use instrument_proficiency_check::InstrumentProficiencyCheck;
-use night_vfr::NightVfr;
-use passenger_day::PassengerDay;
-use passenger_night::PassengerNight;
 use single_pilot_ifr::SinglePilotIfr;
-
-/// A take-off or a landing. Regs 61.395(1) and (2) and 61.965(a) each
-/// require some of both, counted separately, so each is two requirements,
-/// one for each movement.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Movement {
-    TakeOff,
-    Landing,
-}
-
-/// The movements, take-offs first, as the regulations list them.
-const MOVEMENTS: [Movement; 2] = [Movement::TakeOff, Movement::Landing];
-
-impl Movement {
-    /// The entry's movements of this kind, by day and at night.
-    fn of(self, entry: &Entry) -> DayNight<u32> {
-        match self {
-            Self::TakeOff => entry.take_offs(),
-            Self::Landing => entry.landings(),
-        }
-    }
-}
+use take_offs_and_landings::{TakeOffsAndLandings, TakeOffsOrLandings, TAKE_OFFS_AND_LANDINGS};
 
 /// A requirement CASA's rules check.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CasaRequirement {
     /// Reg 61.395(1)'s take-offs (paragraph (a)) or landings ((b)).
-    PassengerDay(Movement),
+    PassengerDay(TakeOffsOrLandings),
     /// Reg 61.395(2)'s take-offs (paragraph (a)) or landings ((b)).
-    PassengerNight(Movement),
+    PassengerNight(TakeOffsOrLandings),
     /// Reg 61.965(a)'s night take-off (subparagraph (i)) or night landing
     /// ((ii)).
-    NightVfr(Movement),
+    NightVfr(TakeOffsOrLandings),
     InstrumentApproaches,
     /// Reg 61.870(3)'s instrument approach operation in this category.
     InstrumentApproachesInCategory(AircraftCategory),
@@ -104,12 +77,12 @@ const CATEGORIES: [AircraftCategory; 5] = [
 /// recency is in reg 61.870's order, with a requirement of its subregulation
 /// (3) for each category in reg 61.015's.
 const REQUIREMENTS: [CasaRequirement; 20] = [
-    CasaRequirement::PassengerDay(Movement::TakeOff),
-    CasaRequirement::PassengerDay(Movement::Landing),
-    CasaRequirement::PassengerNight(Movement::TakeOff),
-    CasaRequirement::PassengerNight(Movement::Landing),
-    CasaRequirement::NightVfr(Movement::TakeOff),
-    CasaRequirement::NightVfr(Movement::Landing),
+    CasaRequirement::PassengerDay(TakeOffsOrLandings::TakeOffs),
+    CasaRequirement::PassengerDay(TakeOffsOrLandings::Landings),
+    CasaRequirement::PassengerNight(TakeOffsOrLandings::TakeOffs),
+    CasaRequirement::PassengerNight(TakeOffsOrLandings::Landings),
+    CasaRequirement::NightVfr(TakeOffsOrLandings::TakeOffs),
+    CasaRequirement::NightVfr(TakeOffsOrLandings::Landings),
     CasaRequirement::InstrumentApproaches,
     CasaRequirement::InstrumentApproachesInCategory(CATEGORIES[0]),
     CasaRequirement::InstrumentApproachesInCategory(CATEGORIES[1]),
@@ -127,7 +100,8 @@ const REQUIREMENTS: [CasaRequirement; 20] = [
 ];
 
 impl CasaRequirement {
-    /// The regulation that sets it, bare (`61.395(1)`).
+    /// The regulation that sets it, bare: `61.395(1)`, which sets
+    /// `61.395(1)(a)` and `(b)`.
     fn regulation(self) -> &'static str {
         match self {
             Self::PassengerDay(_) => "61.395(1)",
@@ -157,15 +131,15 @@ impl CasaRequirement {
         match self {
             Self::FlightReview(class_rating) => self.qualified(class_rating),
             Self::InstrumentApproachesInCategory(category) => self.qualified(category),
-            Self::PassengerDay(movement) | Self::PassengerNight(movement) => {
-                self.paragraph(match movement {
-                    Movement::TakeOff => "(a)",
-                    Movement::Landing => "(b)",
+            Self::PassengerDay(counts) | Self::PassengerNight(counts) => {
+                self.paragraph(match counts {
+                    TakeOffsOrLandings::TakeOffs => "(a)",
+                    TakeOffsOrLandings::Landings => "(b)",
                 })
             }
-            Self::NightVfr(movement) => self.paragraph(match movement {
-                Movement::TakeOff => "(a)(i)",
-                Movement::Landing => "(a)(ii)",
+            Self::NightVfr(counts) => self.paragraph(match counts {
+                TakeOffsOrLandings::TakeOffs => "(a)(i)",
+                TakeOffsOrLandings::Landings => "(a)(ii)",
             }),
             _ => RequirementId::new(self.regulation()),
         }
@@ -186,26 +160,17 @@ impl CasaRequirement {
     /// Its name, in its regulation's words.
     fn name(self) -> String {
         match self {
-            Self::PassengerDay(movement) => format!(
-                "Carrying a passenger by day in an aeroplane: at least 3 {}, by day or night",
-                match movement {
-                    Movement::TakeOff => "take-offs",
-                    Movement::Landing => "landings",
-                }
+            Self::PassengerDay(counts) => format!(
+                "Carrying a passenger by day in an aeroplane: at least 3 {}s, by day or night",
+                counts.one()
             ),
-            Self::PassengerNight(movement) => format!(
-                "Carrying a passenger at night in an aeroplane: at least 3 {} at night",
-                match movement {
-                    Movement::TakeOff => "take-offs",
-                    Movement::Landing => "landings",
-                }
+            Self::PassengerNight(counts) => format!(
+                "Carrying a passenger at night in an aeroplane: at least 3 {}s at night",
+                counts.one()
             ),
-            Self::NightVfr(movement) => format!(
-                "Recent experience for the night VFR rating in an aeroplane: at least one {}",
-                match movement {
-                    Movement::TakeOff => "night take-off",
-                    Movement::Landing => "night landing",
-                }
+            Self::NightVfr(counts) => format!(
+                "Recent experience for the night VFR rating in an aeroplane: at least one night {}",
+                counts.one()
             ),
             Self::InstrumentApproaches => "At least 3 instrument approach operations".to_owned(),
             Self::InstrumentApproachesInCategory(category) => {
@@ -256,9 +221,12 @@ pub(super) fn currency(
     as_of: Date,
     logbook: &Logbook,
 ) -> Vec<(RequirementId, CurrencyResult)> {
-    let mut passenger_day = MOVEMENTS.map(|movement| PassengerDay::new(as_of, movement));
-    let mut passenger_night = MOVEMENTS.map(|movement| PassengerNight::new(as_of, movement));
-    let mut night_vfr = MOVEMENTS.map(|movement| NightVfr::new(as_of, movement));
+    let mut passenger_day =
+        TAKE_OFFS_AND_LANDINGS.map(|counts| TakeOffsAndLandings::passenger_day(as_of, counts));
+    let mut passenger_night =
+        TAKE_OFFS_AND_LANDINGS.map(|counts| TakeOffsAndLandings::passenger_night(as_of, counts));
+    let mut night_vfr =
+        TAKE_OFFS_AND_LANDINGS.map(|counts| TakeOffsAndLandings::night_vfr(as_of, counts));
     let mut approaches = InstrumentApproaches::new(as_of);
     let mut in_category =
         CATEGORIES.map(|category| InstrumentApproaches::in_category(as_of, category));
@@ -316,23 +284,23 @@ pub(super) fn currency(
             )
         });
 
-    /// Each movement's result, paired with its requirement.
-    fn by_movement<C: CurrencyCheck>(
-        requirement: fn(Movement) -> CasaRequirement,
-        checks: &[C; 2],
+    /// Each check's result, paired with its requirement by what the check
+    /// counts.
+    fn by_what_they_count(
+        requirement: fn(TakeOffsOrLandings) -> CasaRequirement,
+        checks: &[TakeOffsAndLandings],
     ) -> impl Iterator<Item = (CasaRequirement, CurrencyResult)> + '_ {
-        MOVEMENTS
-            .into_iter()
-            .zip(checks)
-            .map(move |(movement, check)| (requirement(movement), check.result()))
+        checks
+            .iter()
+            .map(move |check| (requirement(check.counts()), check.result()))
     }
 
-    by_movement(CasaRequirement::PassengerDay, &passenger_day)
-        .chain(by_movement(
+    by_what_they_count(CasaRequirement::PassengerDay, &passenger_day)
+        .chain(by_what_they_count(
             CasaRequirement::PassengerNight,
             &passenger_night,
         ))
-        .chain(by_movement(CasaRequirement::NightVfr, &night_vfr))
+        .chain(by_what_they_count(CasaRequirement::NightVfr, &night_vfr))
         .chain([(CasaRequirement::InstrumentApproaches, approaches.result())])
         .chain(in_category)
         .chain([
@@ -371,7 +339,7 @@ pub(super) fn currency(
 mod tests {
     use std::collections::BTreeSet;
 
-    use logbook_shared_kernel::{ApproachType, Assessment, EntryParts};
+    use logbook_shared_kernel::{ApproachType, Assessment, DayNight, EntryParts};
     use time::macros::date;
 
     use super::*;
@@ -458,6 +426,36 @@ mod tests {
                 "61.880",
             ]
         );
+    }
+
+    /// Each requirement of regs 61.395(1), (2) and 61.965(a) is answered by
+    /// the check that counts its own take-offs or landings.
+    #[test]
+    fn take_offs_and_landings_answer_their_own_requirements() {
+        let flight = EntryParts {
+            take_offs: DayNight { day: 4, night: 1 },
+            landings: DayNight { day: 2, night: 0 },
+            ..aeroplane("e", ON)
+        };
+        let logbook = Logbook {
+            entries: vec![entry(flight)],
+            assessments: Vec::new(),
+        };
+        let found: Vec<(String, usize)> = currency(&Casa::new(), REFERENCE, &logbook)
+            .into_iter()
+            .take(6)
+            .map(|(id, result)| (id.as_str().to_owned(), result.found))
+            .collect();
+        let expected = [
+            ("61.395(1)(a)", 5),
+            ("61.395(1)(b)", 2),
+            ("61.395(2)(a)", 1),
+            ("61.395(2)(b)", 0),
+            ("61.965(a)(i)", 1),
+            ("61.965(a)(ii)", 0),
+        ]
+        .map(|(id, found)| (id.to_owned(), found));
+        assert_eq!(found, expected);
     }
 
     /// An approved session counts towards reg 61.870(3) for the category
