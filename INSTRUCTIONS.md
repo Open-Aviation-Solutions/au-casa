@@ -47,10 +47,20 @@ answers one such question:
   as `Casa`, which implements logbook-shared-kernel's `LicensingAuthority`
   for `AU-CASA`; and CASA's authority-specific information on an entry
   (`EntryInformation`) and on an assessment (`AssessmentInformation`: the
-  check type, outcome and purpose of regs 61.745(3), (3A) and 61.880), two
+  check type of regs 61.745(3) and (3A), and its outcome or, for a flight
+  test, which has no outcome of its own, its purposes, each a kind
+  (`licence`, `category_rating`, `class_rating`, `operational_rating` or
+  `operational_endorsement`: not any endorsement, since reg 61.745(3)(c)
+  has a design feature endorsement's flight training completed, not a
+  flight test passed) and a value with an outcome of its own, as the
+  kernel's `Answer::Choices` stores them, in the order of `CheckPurpose::ALL`, which is part of the
+  format; the checks read an assessment without the answers to questions
+  that do not apply to it, as an entry; au-casa#60), two
   stored formats whose every key and spelling is mapped by hand, with no
   derived serde, each under a version of its own (the kernel's reserved key
-  `_version`). `Casa` says which entries count (`counts`: a session
+  `_version`). A stored value is an identifier (`flight_test`,
+  `instrument_rating`), and its wording is its choice's label, so a value
+  does not change when its wording does. `Casa` says which entries count (`counts`: a session
   only in an approved flight simulation training device, reg 61.010), what
   a type counts as (`classify`), which requirements it checks, each with a
   stable id and a name in its regulation's words (`requirements`), the
@@ -131,7 +141,7 @@ answers one such question:
   groups a flight's entries, asserts the same result for both orders.
 
 `icao-shared-kernel`, logbook-shared-kernel and aircraft-type-descriptions
-are taken by a caret range (`^0.5`, `^0.4` and `^0.1.0`), not pinned exactly
+are taken by a caret range (`^0.5`, `^0.5` and `^0.1.0`), not pinned exactly
 (au-casa#24): sibling country crates (nz-caa and the like) depend on them
 too, and a consumer such as a logbook imports several at once. Exact pins on
 different patches cannot be resolved together; with caret ranges Cargo builds
@@ -236,7 +246,22 @@ CASA's information on an entry and on an assessment (`EntryInformation`,
 records. A change to either, to a key, a spelling, or what an answer means,
 is breaking: it bumps that format's `VERSION`, is released as a breaking
 release, and ships with a migration of the data repository's stored
-information, merged with it.
+information.
+
+The migration is in two parts (decided on au-casa#60). au-casa ships a
+public, tested function that rewrites one record's stored information from
+the previous version to the new one, and refuses, with the reason, what it
+cannot rewrite without guessing, so that the pilot fills it in by hand
+(`AssessmentInformation::migrate_from_version_1`, for the assessment
+format's version 2). Information of the new version already is given back
+as it is, once it reads, so the migration can be run again. It knows the format, and nothing of where a host
+keeps its records. The host's take-up of the release runs it over the data
+repository: for version 2 of the assessment format, pilot-logbook#206's
+`make migrate-assessment-purposes` (with `--report`) calls the function
+through the module, and lists the flight tests stored with no purpose. It
+runs on a data repository branch merged with the host's take-up, not with
+au-casa's pull request, since the deployed page refuses records of a
+version it does not read until it takes up the release.
 
 While on `0.x`, a breaking release bumps the minor version (`0.2.0`) and a
 compatible one the patch, as the kernel's do (decided on au-casa#24).

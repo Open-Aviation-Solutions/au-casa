@@ -13,7 +13,9 @@ use logbook_shared_kernel::{
 };
 use time::{Date, Duration};
 
-use crate::logbook::{assessment_information, CheckOutcome, CheckPurpose, CheckType};
+use crate::logbook::{
+    assessment_information, AssessedPurpose, CheckOutcome, CheckPurpose, CheckType,
+};
 
 const REQUIRED: usize = 1;
 /// The look-back for the assessments reported as supporting evidence:
@@ -74,9 +76,11 @@ struct Passed {
 /// or is renewed by a pass after it; a pass on the same day as the failure
 /// is taken as after it. A failed check of another kind ends nothing.
 ///
-/// What a check was, its outcome and its purpose are CASA's information on
-/// the assessment: one with none, or with information that cannot be read,
-/// counts for nothing, failed or passed.
+/// What a check was, its outcome and a flight test's purposes, each with
+/// its own outcome, are CASA's information on the assessment: one with
+/// none, or with information that cannot be read, counts for nothing,
+/// failed or passed. A flight test passed for both the rating and an
+/// endorsement counts as the rating's.
 ///
 /// Whether an endorsement test qualifies depends on the rating tests before
 /// it, so the passes are kept and decided in
@@ -137,29 +141,41 @@ impl AssessmentAccumulator for InstrumentProficiencyCheck {
         let Some(information) = assessment_information(assessment) else {
             return;
         };
-        match information.outcome {
-            Some(CheckOutcome::Passed) => {}
-            Some(CheckOutcome::Failed) => {
-                if information.check_type == Some(CheckType::InstrumentProficiencyCheck) {
-                    self.failed.push(assessment.date);
-                }
+        let basis = if information.check_type == Some(CheckType::FlightTest) {
+            // A flight test's purposes each have their own outcome, and it
+            // has none of its own; a failed one ends nothing.
+            let passed = |purpose| {
+                information.check_purposes.contains(&AssessedPurpose {
+                    purpose,
+                    outcome: CheckOutcome::Passed,
+                })
+            };
+            if passed(CheckPurpose::InstrumentRating) {
+                Basis::RatingTest
+            } else if passed(CheckPurpose::InstrumentEndorsement) {
+                Basis::EndorsementTest
+            } else {
+                // Passed for neither, or for another purpose only.
                 return;
             }
-            None => return,
-        }
-        let basis = match (information.check_type, information.check_purpose) {
-            (Some(CheckType::FlightTest), Some(CheckPurpose::InstrumentRating)) => {
-                Basis::RatingTest
+        } else {
+            match information.outcome {
+                Some(CheckOutcome::Passed) => {}
+                Some(CheckOutcome::Failed) => {
+                    if information.check_type == Some(CheckType::InstrumentProficiencyCheck) {
+                        self.failed.push(assessment.date);
+                    }
+                    return;
+                }
+                None => return,
             }
-            (Some(CheckType::FlightTest), Some(CheckPurpose::InstrumentEndorsement)) => {
-                Basis::EndorsementTest
+            match information.check_type {
+                Some(
+                    CheckType::InstrumentProficiencyCheck | CheckType::OperatorProficiencyCheck,
+                ) => Basis::ProficiencyCheck,
+                // A check of another kind.
+                _ => return,
             }
-            (
-                Some(CheckType::InstrumentProficiencyCheck | CheckType::OperatorProficiencyCheck),
-                _,
-            ) => Basis::ProficiencyCheck,
-            // A flight test with no purpose, or a check of another kind.
-            _ => return,
         };
         self.passed.push(Passed {
             id: assessment.id.clone(),
@@ -251,12 +267,13 @@ mod tests {
     use time::macros::date;
 
     use super::*;
-    use crate::logbook::test_support::assessed;
+    use crate::logbook::test_support::{assessed, flight_test};
     use crate::logbook::{casa, AssessmentInformation};
 
     const REFERENCE: Date = date!(2024 - 09 - 01);
 
-    /// A check of this type with this outcome and purpose.
+    /// A check of this type with this outcome and purpose: a flight test's
+    /// outcome is its purpose's, as it has none of its own.
     fn checked(
         id: &str,
         on: Date,
@@ -264,16 +281,20 @@ mod tests {
         outcome: CheckOutcome,
         check_purpose: Option<CheckPurpose>,
     ) -> Assessment {
-        assessed(
-            id,
-            on,
-            1,
+        let information = if check_type == CheckType::FlightTest {
+            let purposes: Vec<_> = check_purpose
+                .map(|purpose| (purpose, outcome))
+                .into_iter()
+                .collect();
+            flight_test(&purposes)
+        } else {
             AssessmentInformation {
                 check_type: Some(check_type),
                 outcome: Some(outcome),
-                check_purpose,
-            },
-        )
+                check_purposes: Vec::new(),
+            }
+        };
+        assessed(id, on, 1, information)
     }
 
     fn ipc(id: &str, on: Date, outcome: CheckOutcome) -> Assessment {
@@ -448,6 +469,42 @@ mod tests {
             );
         }
         assert!(result(&[ipc("ipc", on, CheckOutcome::Passed), failed_operator]).is_current());
+    }
+
+    /// Each purpose of a flight test has its own outcome: a test passed for
+    /// the class rating and failed for the instrument rating is no pass of
+    /// "the flight test for the instrument rating" (reg 61.880(3)(a)), and
+    /// one passed for both the rating and an endorsement counts once, as the
+    /// rating's.
+    #[test]
+    fn a_flight_test_counts_by_its_instrument_purposes_outcomes() {
+        use CheckOutcome::{Failed, Passed};
+        let on = date!(2024 - 08 - 02);
+        let test =
+            |purposes: &[(CheckPurpose, CheckOutcome)]| assessed("t", on, 1, flight_test(purposes));
+        let class = CheckPurpose::MultiEngineAeroplaneClassRating;
+        let partly = test(&[(class, Passed), (CheckPurpose::InstrumentRating, Failed)]);
+        assert!(!result(&[partly]).is_current());
+        let both = test(&[
+            (class, Passed),
+            (CheckPurpose::InstrumentRating, Passed),
+            (CheckPurpose::InstrumentEndorsement, Passed),
+        ]);
+        assert_eq!(ids(&result(&[both])), ["t"]);
+
+        // A flight test's own outcome, which does not apply to it, is
+        // dropped, not counted: failed, it neither undoes the passed rating
+        // nor ends a valid check.
+        let with_its_own = assessed(
+            "t",
+            on,
+            1,
+            AssessmentInformation {
+                outcome: Some(Failed),
+                ..flight_test(&[(CheckPurpose::InstrumentRating, Passed)])
+            },
+        );
+        assert_eq!(ids(&result(&[with_its_own])), ["t"]);
     }
 
     #[test]

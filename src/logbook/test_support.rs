@@ -23,7 +23,10 @@ use time::Date;
 use uuid::Uuid;
 
 use crate::logbook::guards::tabled;
-use crate::logbook::{casa, AssessmentInformation, EntryInformation};
+use crate::logbook::{
+    casa, AssessedPurpose, AssessmentInformation, CheckOutcome, CheckPurpose, CheckType,
+    EntryInformation,
+};
 
 /// The entry these parts make.
 pub(crate) fn entry(parts: EntryParts) -> Entry {
@@ -156,6 +159,19 @@ pub(crate) fn on_flight(flight: u128, mut parts: EntryParts) -> EntryParts {
         *id = Uuid::from_u128(flight);
     }
     parts
+}
+
+/// CASA's information on a flight test for these purposes, each with its
+/// outcome, and none of its own.
+pub(crate) fn flight_test(purposes: &[(CheckPurpose, CheckOutcome)]) -> AssessmentInformation {
+    AssessmentInformation {
+        check_type: Some(CheckType::FlightTest),
+        outcome: None,
+        check_purposes: purposes
+            .iter()
+            .map(|&(purpose, outcome)| AssessedPurpose { purpose, outcome })
+            .collect(),
+    }
 }
 
 /// An assessment on flight `flight`, with this as CASA's information,

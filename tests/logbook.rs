@@ -9,8 +9,8 @@ use std::collections::BTreeMap;
 
 use aircraft_type_descriptions::{AircraftDescription, AirframeKind, EngineType};
 use au_casa::{
-    AssessmentInformation, AssessmentInformationError, Casa, CheckOutcome, CheckPurpose, CheckType,
-    EntryInformation, InformationError, SupervisionRoute,
+    AssessedPurpose, AssessmentInformation, AssessmentInformationError, Casa, CheckOutcome,
+    CheckPurpose, CheckType, EntryInformation, InformationError, MigrationError, SupervisionRoute,
 };
 use icao_shared_kernel::{
     Aircraft, AircraftRegistration, AircraftType, Capacity, FlightDuration, FlightRules,
@@ -311,6 +311,11 @@ fn an_answer(question: &Question) -> Value {
         Answer::Choice(choices) => choices[0].value.into(),
         Answer::YesNo => false.into(),
         Answer::Count => 2.into(),
+        Answer::Choices { groups, each } => json!([{
+            "kind": groups[0].kind.value,
+            "value": groups[0].choices[0].value,
+            "answer": each[0].value,
+        }]),
         other => panic!("CASA asks no {other:?}"),
     }
 }
@@ -335,6 +340,10 @@ fn every_question_is_a_key_of_its_format() {
         let mut answers = serde_json::Map::new();
         for question in &questions {
             answers.insert(question.key.into(), an_answer(question));
+            let alone = json!({ question.key: an_answer(question) });
+            assert!(casa
+                .problems_for(record, &AuthoritySpecificInformation::new(alone))
+                .is_empty());
             if let Answer::Choice(choices) = &question.answer {
                 for choice in choices {
                     let one = json!({ question.key: choice.value });
@@ -345,29 +354,107 @@ fn every_question_is_a_key_of_its_format() {
             }
         }
         assert_eq!(answers.len(), questions.iter().count());
-        assert!(casa
-            .problems_for(record, &AuthoritySpecificInformation::new(answers.into()))
-            .is_empty());
+        // Together, once the host has removed the answers to questions that
+        // do not apply (an outcome of a flight test's own, for one).
+        let mut information = AuthoritySpecificInformation::new(answers.into());
+        questions.retain_applicable_answers_for(record, &mut information);
+        assert!(casa.problems_for(record, &information).is_empty());
     }
 }
 
 #[test]
-fn an_assessment_is_asked_its_check_outcome_and_a_flight_tests_purpose() {
+fn an_assessment_is_asked_its_check_and_its_outcome_or_a_flight_tests_purposes() {
     let assessment = an_assessment();
     let record = Record::Assessment(&assessment);
     let questions = Casa::new().questions_for(record);
     assert_eq!(questions.version(), AssessmentInformation::VERSION);
-    let (asked, applicable) = asked_and_applicable(record, json!({"check_type": "flight review"}));
-    assert_eq!(asked, ["check_type", "outcome", "check_purpose"]);
+    let (asked, applicable) = asked_and_applicable(record, json!({"check_type": "flight_review"}));
+    assert_eq!(asked, ["check_type", "outcome", "check_purposes"]);
     assert_eq!(applicable, ["check_type", "outcome"]);
-    let (_, applicable) = asked_and_applicable(record, json!({"check_type": "flight test"}));
-    assert_eq!(applicable, ["check_type", "outcome", "check_purpose"]);
-    let required: Vec<_> = questions
-        .required_unanswered_for(record, None)
-        .into_iter()
-        .map(|q| q.key)
-        .collect();
-    assert_eq!(required, ["check_type", "outcome"]);
+    let (_, applicable) = asked_and_applicable(record, json!({"check_type": "flight_test"}));
+    assert_eq!(applicable, ["check_type", "check_purposes"]);
+    let required = |answers| -> Vec<_> {
+        questions
+            .required_unanswered_for(record, Some(&AuthoritySpecificInformation::new(answers)))
+            .into_iter()
+            .map(|q| q.key)
+            .collect()
+    };
+    assert_eq!(required(json!({})), ["check_type"]);
+    assert_eq!(
+        required(json!({"check_type": "flight_review"})),
+        ["outcome"]
+    );
+    assert_eq!(
+        required(json!({"check_type": "flight_test"})),
+        ["check_purposes"]
+    );
+}
+
+/// The stored order is part of format v2: the licences in reg 61.010's
+/// order, an air transport pilot licence before a private pilot licence.
+#[test]
+fn the_purposes_are_stored_in_their_regulations_order() {
+    let atpl =
+        json!({"kind": "licence", "value": "air_transport_pilot_licence", "answer": "passed"});
+    let ppl = json!({"kind": "licence", "value": "private_pilot_licence", "answer": "passed"});
+    assert!(read_assessment(json!({"check_purposes": [atpl, ppl]})).is_ok());
+    assert_eq!(
+        read_assessment(json!({"check_purposes": [ppl, atpl]})),
+        Err(AssessmentInformationError::InvalidAnswer("check_purposes"))
+    );
+}
+
+/// An answer to a question that does not apply (a flight test's own
+/// outcome, another check's purposes) is read as stored, not refused; the
+/// checks read the information without it, as the host saves it.
+#[test]
+fn an_answer_its_check_does_not_take_is_read_as_stored() {
+    let purposes =
+        json!([{"kind": "licence", "value": "private_pilot_licence", "answer": "passed"}]);
+    let test = read_assessment(json!({
+        "check_type": "flight_test",
+        "outcome": "failed",
+        "check_purposes": purposes,
+    }))
+    .unwrap();
+    assert_eq!(test.outcome, Some(CheckOutcome::Failed));
+    let review = read_assessment(json!({
+        "check_type": "flight_review",
+        "outcome": "failed",
+        "check_purposes": purposes,
+    }))
+    .unwrap();
+    assert_eq!(review.check_purposes.len(), 1);
+}
+
+/// What the questions accept as a flight test's purposes is what the format
+/// reads, so the host saves nothing CASA cannot read: each purpose alone,
+/// and the purposes in their order, but not out of it.
+#[test]
+fn the_purposes_question_accepts_what_the_format_reads() {
+    let assessment = an_assessment();
+    let questions = Casa::new().questions_for(Record::Assessment(&assessment));
+    let question = questions
+        .iter()
+        .find(|question| question.key == "check_purposes")
+        .unwrap();
+    let mut all = Vec::new();
+    for purpose in CheckPurpose::ALL {
+        let information = AssessmentInformation {
+            check_purposes: vec![AssessedPurpose {
+                purpose,
+                outcome: CheckOutcome::Passed,
+            }],
+            ..AssessmentInformation::default()
+        };
+        let stored = information.to_information().into_value()["check_purposes"].clone();
+        assert!(question.answer.accepts(&stored), "{purpose:?}");
+        all.push(stored[0].clone());
+    }
+    assert!(question.answer.accepts(&Value::Array(all.clone())));
+    all.reverse();
+    assert!(!question.answer.accepts(&Value::Array(all)));
 }
 
 /// Reg 61.095(3)(b): "the person is not receiving flight training".
@@ -630,7 +717,7 @@ fn information_on_an_assessment_that_cannot_be_read_is_refused_before_it_is_save
         )
     };
     assert!(problems(json!({"outcome": "passed"})).is_empty());
-    assert!(problems(json!({"_version": 1, "outcome": "passed"})).is_empty());
+    assert!(problems(json!({"_version": 2, "outcome": "passed"})).is_empty());
     // Information on an entry is not information on an assessment.
     let refused = problems(json!({"approved_fstd": true}));
     assert_eq!(refused.len(), 1);
@@ -646,30 +733,30 @@ fn stored_information_on_an_assessment_must_carry_its_version() {
         Err(AssessmentInformationError::UnsupportedVersion)
     );
     assert_eq!(
-        stored(json!({"_version": 1, "outcome": "passed"}))
+        stored(json!({"_version": 2, "outcome": "passed"}))
             .unwrap()
             .outcome,
         Some(CheckOutcome::Passed)
     );
-    assert_eq!(AssessmentInformation::VERSION, 1);
+    assert_eq!(AssessmentInformation::VERSION, 2);
 }
 
 /// Regs 61.745(3) and (3A).
 #[rstest]
-#[case(CheckType::FlightTest, "flight test")]
-#[case(CheckType::FlightReview, "flight review")]
-#[case(CheckType::OperatorProficiencyCheck, "operator proficiency check")]
-#[case(CheckType::InstrumentProficiencyCheck, "instrument proficiency check")]
+#[case(CheckType::FlightTest, "flight_test")]
+#[case(CheckType::FlightReview, "flight_review")]
+#[case(CheckType::OperatorProficiencyCheck, "operator_proficiency_check")]
+#[case(CheckType::InstrumentProficiencyCheck, "instrument_proficiency_check")]
 #[case(
     CheckType::NightVisionImagingSystemProficiencyCheck,
-    "night vision imaging system proficiency check"
+    "night_vision_imaging_system_proficiency_check"
 )]
 #[case(
     CheckType::AerialApplicationProficiencyCheck,
-    "aerial application proficiency check"
+    "aerial_application_proficiency_check"
 )]
-#[case(CheckType::InstructorProficiencyCheck, "instructor proficiency check")]
-#[case(CheckType::ExaminerProficiencyCheck, "examiner proficiency check")]
+#[case(CheckType::InstructorProficiencyCheck, "instructor_proficiency_check")]
+#[case(CheckType::ExaminerProficiencyCheck, "examiner_proficiency_check")]
 fn every_check_type_has_its_spelling(#[case] check_type: CheckType, #[case] spelt: &str) {
     let information = AssessmentInformation {
         check_type: Some(check_type),
@@ -700,23 +787,173 @@ fn every_outcome_has_its_spelling(#[case] outcome: CheckOutcome, #[case] spelt: 
     assert_eq!(read_assessment(json!({"outcome": spelt})), Ok(information));
 }
 
-/// Reg 61.880(3)(a) and (b).
-#[rstest]
-#[case(CheckPurpose::InstrumentRating, "instrument rating")]
-#[case(CheckPurpose::InstrumentEndorsement, "instrument endorsement")]
-fn every_check_purpose_has_its_spelling(#[case] purpose: CheckPurpose, #[case] spelt: &str) {
-    let information = AssessmentInformation {
-        check_purpose: Some(purpose),
+/// A flight test's purposes, each stored with its own outcome.
+fn with_purposes(purposes: &[(CheckPurpose, CheckOutcome)]) -> AssessmentInformation {
+    AssessmentInformation {
+        check_type: Some(CheckType::FlightTest),
+        check_purposes: purposes
+            .iter()
+            .map(|&(purpose, outcome)| AssessedPurpose { purpose, outcome })
+            .collect(),
         ..AssessmentInformation::default()
-    };
-    assert_eq!(
-        information.to_information().into_value(),
-        json!({"check_purpose": spelt})
-    );
-    assert_eq!(
-        read_assessment(json!({"check_purpose": spelt})),
-        Ok(information)
-    );
+    }
+}
+
+#[rstest]
+#[case(
+    CheckPurpose::RecreationalPilotLicence,
+    "licence",
+    "recreational_pilot_licence"
+)]
+#[case(CheckPurpose::PrivatePilotLicence, "licence", "private_pilot_licence")]
+#[case(
+    CheckPurpose::CommercialPilotLicence,
+    "licence",
+    "commercial_pilot_licence"
+)]
+#[case(
+    CheckPurpose::MultiCrewPilotLicence,
+    "licence",
+    "multi_crew_pilot_licence"
+)]
+#[case(
+    CheckPurpose::AirTransportPilotLicence,
+    "licence",
+    "air_transport_pilot_licence"
+)]
+#[case(
+    CheckPurpose::AeroplaneCategoryRating,
+    "category_rating",
+    "aeroplane_category_rating"
+)]
+#[case(
+    CheckPurpose::HelicopterCategoryRating,
+    "category_rating",
+    "helicopter_category_rating"
+)]
+#[case(
+    CheckPurpose::PoweredLiftAircraftCategoryRating,
+    "category_rating",
+    "powered_lift_aircraft_category_rating"
+)]
+#[case(
+    CheckPurpose::GyroplaneCategoryRating,
+    "category_rating",
+    "gyroplane_category_rating"
+)]
+#[case(
+    CheckPurpose::AirshipCategoryRating,
+    "category_rating",
+    "airship_category_rating"
+)]
+#[case(
+    CheckPurpose::SingleEngineAeroplaneClassRating,
+    "class_rating",
+    "single_engine_aeroplane_class_rating"
+)]
+#[case(
+    CheckPurpose::MultiEngineAeroplaneClassRating,
+    "class_rating",
+    "multi_engine_aeroplane_class_rating"
+)]
+#[case(
+    CheckPurpose::SingleEngineHelicopterClassRating,
+    "class_rating",
+    "single_engine_helicopter_class_rating"
+)]
+#[case(
+    CheckPurpose::PoweredLiftAircraftClassRating,
+    "class_rating",
+    "powered_lift_aircraft_class_rating"
+)]
+#[case(
+    CheckPurpose::SingleEngineGyroplaneClassRating,
+    "class_rating",
+    "single_engine_gyroplane_class_rating"
+)]
+#[case(
+    CheckPurpose::AirshipClassRating,
+    "class_rating",
+    "airship_class_rating"
+)]
+#[case(
+    CheckPurpose::AerialApplicationRating,
+    "operational_rating",
+    "aerial_application_rating"
+)]
+#[case(CheckPurpose::ExaminerRating, "operational_rating", "examiner_rating")]
+#[case(
+    CheckPurpose::InstructorRating,
+    "operational_rating",
+    "instructor_rating"
+)]
+#[case(
+    CheckPurpose::InstrumentRating,
+    "operational_rating",
+    "instrument_rating"
+)]
+#[case(CheckPurpose::LowLevelRating, "operational_rating", "low_level_rating")]
+#[case(CheckPurpose::NightVfrRating, "operational_rating", "night_vfr_rating")]
+#[case(
+    CheckPurpose::NightVisionImagingSystemRating,
+    "operational_rating",
+    "night_vision_imaging_system_rating"
+)]
+#[case(
+    CheckPurpose::PrivateInstrumentRating,
+    "operational_rating",
+    "private_instrument_rating"
+)]
+#[case(
+    CheckPurpose::InstrumentEndorsement,
+    "operational_endorsement",
+    "instrument_endorsement"
+)]
+fn every_check_purpose_has_its_kind_and_spelling(
+    #[case] purpose: CheckPurpose,
+    #[case] kind: &str,
+    #[case] spelt: &str,
+) {
+    let information = with_purposes(&[(purpose, CheckOutcome::Failed)]);
+    let stored = json!({
+        "check_type": "flight_test",
+        "check_purposes": [{"kind": kind, "value": spelt, "answer": "failed"}],
+    });
+    assert_eq!(information.to_information().into_value(), stored);
+    assert_eq!(read_assessment(stored), Ok(information));
+}
+
+#[test]
+fn every_check_purpose_is_one_of_the_list_once() {
+    assert_eq!(CheckPurpose::ALL.len(), 25);
+    for (at, purpose) in CheckPurpose::ALL.iter().enumerate() {
+        assert!(!CheckPurpose::ALL[..at].contains(purpose), "{purpose:?}");
+    }
+}
+
+/// The owner's multi-engine instrument rating test: passed for the class
+/// rating and failed for the instrument rating, which come in the order of
+/// the purposes, whatever order they are held in.
+#[test]
+fn each_purpose_is_stored_with_its_own_outcome_in_the_purposes_order() {
+    let information = with_purposes(&[
+        (CheckPurpose::InstrumentRating, CheckOutcome::Failed),
+        (
+            CheckPurpose::MultiEngineAeroplaneClassRating,
+            CheckOutcome::Passed,
+        ),
+    ]);
+    let stored = json!({
+        "check_type": "flight_test",
+        "check_purposes": [
+            {"kind": "class_rating", "value": "multi_engine_aeroplane_class_rating", "answer": "passed"},
+            {"kind": "operational_rating", "value": "instrument_rating", "answer": "failed"},
+        ],
+    });
+    assert_eq!(information.to_information().into_value(), stored);
+    let read = read_assessment(stored).unwrap();
+    assert_eq!(read.check_purposes.len(), 2);
+    assert_eq!(read.to_information(), information.to_information());
 }
 
 #[test]
@@ -733,12 +970,29 @@ fn an_assessment_answer_not_given_has_no_key() {
     );
 }
 
+const PURPOSES: AssessmentInformationError =
+    AssessmentInformationError::InvalidAnswer("check_purposes");
+
 #[rstest]
 #[case::not_an_object(json!("passed"), AssessmentInformationError::NotAnObject)]
-#[case::another_version(json!({"_version": 2}), AssessmentInformationError::UnsupportedVersion)]
-#[case::unknown_key(json!({"purpose": "instrument rating"}), AssessmentInformationError::UnknownKey("purpose".into()))]
-#[case::unknown_check_type(json!({"check_type": "flight_review"}), AssessmentInformationError::InvalidAnswer("check_type"))]
+#[case::another_version(json!({"_version": 1}), AssessmentInformationError::UnsupportedVersion)]
+#[case::version_1s_purpose(json!({"check_purpose": "instrument rating"}), AssessmentInformationError::UnknownKey("check_purpose".into()))]
+#[case::version_1s_check_type(json!({"check_type": "flight review"}), AssessmentInformationError::InvalidAnswer("check_type"))]
 #[case::outcome_as_yes_no(json!({"outcome": true}), AssessmentInformationError::InvalidAnswer("outcome"))]
+#[case::no_purposes(json!({"check_purposes": []}), PURPOSES)]
+#[case::not_a_list(json!({"check_purposes": {"kind": "operational_endorsement", "value": "instrument_endorsement", "answer": "passed"}}), PURPOSES)]
+#[case::another_kind(json!({"check_purposes": [{"kind": "operational_rating", "value": "instrument_endorsement", "answer": "passed"}]}), PURPOSES)]
+#[case::no_answer(json!({"check_purposes": [{"kind": "operational_endorsement", "value": "instrument_endorsement"}]}), PURPOSES)]
+#[case::another_answer(json!({"check_purposes": [{"kind": "operational_endorsement", "value": "instrument_endorsement", "answer": "yes"}]}), PURPOSES)]
+#[case::another_key(json!({"check_purposes": [{"kind": "operational_endorsement", "value": "instrument_endorsement", "answer": "passed", "on": "2024-01-01"}]}), PURPOSES)]
+#[case::out_of_order(json!({"check_purposes": [
+    {"kind": "operational_endorsement", "value": "instrument_endorsement", "answer": "passed"},
+    {"kind": "licence", "value": "private_pilot_licence", "answer": "passed"},
+]}), PURPOSES)]
+#[case::twice(json!({"check_purposes": [
+    {"kind": "licence", "value": "private_pilot_licence", "answer": "passed"},
+    {"kind": "licence", "value": "private_pilot_licence", "answer": "failed"},
+]}), PURPOSES)]
 fn what_is_not_the_assessment_format_is_refused(
     #[case] stored: Value,
     #[case] error: AssessmentInformationError,
@@ -746,23 +1000,121 @@ fn what_is_not_the_assessment_format_is_refused(
     assert_eq!(read_assessment(stored), Err(error));
 }
 
-/// pilot-logbook's stored assessment today (`flight_assessment_to_json`),
-/// its three keys moved as they are and versioned: a flight review has a
-/// `null` purpose.
+fn migrated(stored: Value) -> Result<Value, MigrationError> {
+    AssessmentInformation::migrate_from_version_1(&AuthoritySpecificInformation::new(stored))
+        .map(|information| information.into_value())
+}
+
+/// pilot-logbook's stored assessments of version 1, as
+/// `migrate-kernel-records` wrote them: a flight review has a `null`
+/// purpose, and a flight test's purpose moves, with its outcome, into the
+/// purposes, and reads as this version.
 #[test]
-fn an_assessment_is_read_as_pilot_logbook_stores_it() {
-    let stored = json!({
-        "_version": 1,
-        "check_type": "flight review",
-        "outcome": "passed",
-        "check_purpose": null,
-    });
+fn version_1_is_migrated_to_identifiers_and_a_flight_tests_purposes() {
     assert_eq!(
-        AssessmentInformation::read(&AuthoritySpecificInformation::new(stored)),
-        Ok(AssessmentInformation {
-            check_type: Some(CheckType::FlightReview),
-            outcome: Some(CheckOutcome::Passed),
-            check_purpose: None,
+        migrated(json!({
+            "_version": 1,
+            "check_type": "flight review",
+            "outcome": "passed",
+            "check_purpose": null,
+        })),
+        Ok(json!({"_version": 2, "check_type": "flight_review", "outcome": "passed"}))
+    );
+    let test = migrated(json!({
+        "_version": 1,
+        "check_type": "flight test",
+        "outcome": "failed",
+        "check_purpose": "instrument rating",
+    }))
+    .unwrap();
+    assert_eq!(
+        test,
+        json!({
+            "_version": 2,
+            "check_type": "flight_test",
+            "check_purposes": [
+                {"kind": "operational_rating", "value": "instrument_rating", "answer": "failed"},
+            ],
         })
+    );
+    assert_eq!(
+        AssessmentInformation::read(&AuthoritySpecificInformation::new(test)),
+        Ok(with_purposes(&[(
+            CheckPurpose::InstrumentRating,
+            CheckOutcome::Failed
+        )]))
+    );
+    assert_eq!(
+        migrated(json!({
+            "_version": 1,
+            "check_type": "flight test",
+            "outcome": "passed",
+            "check_purpose": "instrument endorsement",
+        }))
+        .unwrap()["check_purposes"],
+        json!([{"kind": "operational_endorsement", "value": "instrument_endorsement", "answer": "passed"}])
+    );
+}
+
+/// A purpose on a check that is not a flight test answered a question that
+/// did not apply to it.
+#[test]
+fn version_1s_purpose_on_another_check_is_left_out() {
+    assert_eq!(
+        migrated(json!({
+            "_version": 1,
+            "check_type": "instrument proficiency check",
+            "outcome": "passed",
+            "check_purpose": "instrument rating",
+        })),
+        Ok(
+            json!({"_version": 2, "check_type": "instrument_proficiency_check", "outcome": "passed"})
+        )
+    );
+}
+
+#[rstest]
+#[case::no_purpose(json!({"_version": 1, "check_type": "flight test", "outcome": "passed", "check_purpose": null}), MigrationError::NoPurpose)]
+#[case::no_outcome(json!({"_version": 1, "check_type": "flight test", "check_purpose": "instrument rating"}), MigrationError::NoOutcome)]
+#[case::not_an_object(json!(null), MigrationError::NotAnObject)]
+#[case::version_3(json!({"_version": 3, "check_type": "flight_review", "outcome": "passed"}), MigrationError::UnsupportedVersion)]
+#[case::unreadable_version_2(json!({"_version": 2, "check_type": "flight test"}), MigrationError::Unreadable(AssessmentInformationError::InvalidAnswer("check_type")))]
+#[case::no_version(json!({"check_type": "flight review", "outcome": "passed"}), MigrationError::UnsupportedVersion)]
+#[case::unknown_key(json!({"_version": 1, "check_purposes": []}), MigrationError::UnknownKey("check_purposes".into()))]
+#[case::another_purpose(json!({"_version": 1, "check_type": "flight test", "outcome": "passed", "check_purpose": "private pilot licence"}), MigrationError::InvalidAnswer("check_purpose"))]
+fn what_cannot_be_migrated_is_refused_for_the_owner_to_fill_in(
+    #[case] stored: Value,
+    #[case] error: MigrationError,
+) {
+    assert_eq!(migrated(stored), Err(error));
+}
+
+/// Information of version 2 already, such as a flight test the owner has
+/// filled in, is given back as it is, so the migration can be run again.
+#[test]
+fn version_2_is_given_back_as_it_is() {
+    let filled_in = json!({
+        "_version": 2,
+        "check_type": "flight_test",
+        "check_purposes": [{"kind": "licence", "value": "private_pilot_licence", "answer": "passed"}],
+    });
+    assert_eq!(migrated(filled_in.clone()), Ok(filled_in));
+    let once = migrated(json!({"_version": 1, "check_type": "flight review", "outcome": "passed"}))
+        .unwrap();
+    assert_eq!(migrated(once.clone()), Ok(once));
+}
+
+/// A flight test of version 2 with no purposes is refused on a second run,
+/// as it is from version 1, so the report lists the same missing data.
+#[test]
+fn a_version_2_flight_test_with_no_purposes_is_refused() {
+    assert_eq!(
+        migrated(json!({"_version": 2, "check_type": "flight_test"})),
+        Err(MigrationError::NoPurpose)
+    );
+    // Nor does a flight test's own outcome stand for its purposes.
+    assert_eq!(
+        migrated(json!({"_version": 2, "check_type": "flight_test", "outcome": "passed"})),
+        Err(MigrationError::NoPurpose)
     );
 }
