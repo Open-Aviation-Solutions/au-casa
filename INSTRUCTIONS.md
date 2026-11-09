@@ -80,8 +80,9 @@ answers one such question:
 - **One module for each regulation**, an `EntryAccumulator` and
   `CurrencyCheck` (or the assessment traits) over the kernel's
   `EventWindow`. Its doc comment quotes the regulation it implements.
-  Regulations whose checks differ only in their figures share one, with
-  a constructor for each that quotes its regulation
+  Regulations whose checks differ only in their figures, and in whether
+  they count by night only, share one, with a constructor for each that
+  quotes its regulation
   (`take_offs_and_landings`, for regs 61.395(1) and (2) and 61.965(a)).
 - **Each sees only the entries `Casa::counts` lets through**: the kernel's
   `run` applies it once, so a check does not repeat it. A check over

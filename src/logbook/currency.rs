@@ -2,8 +2,9 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! CASA's currency checks, one module for each regulation, written over the
-//! kernel's [`EventWindow`](logbook_shared_kernel::EventWindow), and the
+//! CASA's currency checks, a module for each regulation or for regulations
+//! whose checks differ only in their figures, written over the kernel's
+//! [`EventWindow`](logbook_shared_kernel::EventWindow), and the
 //! requirements they answer. Each sees only the entries
 //! [`Casa::counts`](crate::Casa) lets through, so none repeats that gate. A
 //! check over assessments ([`AssessmentCurrencyCheck`]) that reads their
@@ -131,13 +132,11 @@ impl CasaRequirement {
         match self {
             Self::FlightReview(class_rating) => self.qualified(class_rating),
             Self::InstrumentApproachesInCategory(category) => self.qualified(category),
-            Self::PassengerDay(counts) | Self::PassengerNight(counts) => {
-                self.paragraph(match counts {
-                    TakeOffsOrLandings::TakeOffs => "(a)",
-                    TakeOffsOrLandings::Landings => "(b)",
-                })
-            }
-            Self::NightVfr(counts) => self.paragraph(match counts {
+            Self::PassengerDay(kind) | Self::PassengerNight(kind) => self.paragraph(match kind {
+                TakeOffsOrLandings::TakeOffs => "(a)",
+                TakeOffsOrLandings::Landings => "(b)",
+            }),
+            Self::NightVfr(kind) => self.paragraph(match kind {
                 TakeOffsOrLandings::TakeOffs => "(a)(i)",
                 TakeOffsOrLandings::Landings => "(a)(ii)",
             }),
@@ -160,17 +159,17 @@ impl CasaRequirement {
     /// Its name, in its regulation's words.
     fn name(self) -> String {
         match self {
-            Self::PassengerDay(counts) => format!(
-                "Carrying a passenger by day in an aeroplane: at least 3 {}s, by day or night",
-                counts.one()
+            Self::PassengerDay(kind) => format!(
+                "Carrying a passenger by day in an aeroplane: at least 3 {}, by day or night",
+                kind.plural()
             ),
-            Self::PassengerNight(counts) => format!(
-                "Carrying a passenger at night in an aeroplane: at least 3 {}s at night",
-                counts.one()
+            Self::PassengerNight(kind) => format!(
+                "Carrying a passenger at night in an aeroplane: at least 3 {} at night",
+                kind.plural()
             ),
-            Self::NightVfr(counts) => format!(
+            Self::NightVfr(kind) => format!(
                 "Recent experience for the night VFR rating in an aeroplane: at least one night {}",
-                counts.one()
+                kind.one()
             ),
             Self::InstrumentApproaches => "At least 3 instrument approach operations".to_owned(),
             Self::InstrumentApproachesInCategory(category) => {
@@ -222,11 +221,11 @@ pub(super) fn currency(
     logbook: &Logbook,
 ) -> Vec<(RequirementId, CurrencyResult)> {
     let mut passenger_day =
-        TAKE_OFFS_AND_LANDINGS.map(|counts| TakeOffsAndLandings::passenger_day(as_of, counts));
+        TAKE_OFFS_AND_LANDINGS.map(|kind| TakeOffsAndLandings::passenger_day(as_of, kind));
     let mut passenger_night =
-        TAKE_OFFS_AND_LANDINGS.map(|counts| TakeOffsAndLandings::passenger_night(as_of, counts));
+        TAKE_OFFS_AND_LANDINGS.map(|kind| TakeOffsAndLandings::passenger_night(as_of, kind));
     let mut night_vfr =
-        TAKE_OFFS_AND_LANDINGS.map(|counts| TakeOffsAndLandings::night_vfr(as_of, counts));
+        TAKE_OFFS_AND_LANDINGS.map(|kind| TakeOffsAndLandings::night_vfr(as_of, kind));
     let mut approaches = InstrumentApproaches::new(as_of);
     let mut in_category =
         CATEGORIES.map(|category| InstrumentApproaches::in_category(as_of, category));
@@ -292,7 +291,7 @@ pub(super) fn currency(
     ) -> impl Iterator<Item = (CasaRequirement, CurrencyResult)> + '_ {
         checks
             .iter()
-            .map(move |check| (requirement(check.counts()), check.result()))
+            .map(move |check| (requirement(check.kind()), check.result()))
     }
 
     by_what_they_count(CasaRequirement::PassengerDay, &passenger_day)

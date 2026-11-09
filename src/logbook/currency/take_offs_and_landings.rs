@@ -6,7 +6,8 @@
 //! reg 61.965(a), the recent experience of the holder of a night VFR
 //! rating: each requires take-offs and landings, counted separately, so
 //! each is two requirements, one for its take-offs and one for its
-//! landings. The checks differ only in their figures, so they are one.
+//! landings. The checks differ only in their figures, and in whether they
+//! count by night only, so they are one.
 
 use logbook_shared_kernel::{
     CurrencyCheck, CurrencyResult, DayNight, Entry, EntryAccumulator, EventWindow,
@@ -37,6 +38,14 @@ pub(crate) const TAKE_OFFS_AND_LANDINGS: [TakeOffsOrLandings; 2] =
     [TakeOffsOrLandings::TakeOffs, TakeOffsOrLandings::Landings];
 
 impl TakeOffsOrLandings {
+    /// Them, in Part 61's words: "take-offs" or "landings".
+    pub(crate) fn plural(self) -> &'static str {
+        match self {
+            Self::TakeOffs => "take-offs",
+            Self::Landings => "landings",
+        }
+    }
+
     /// One of them, in Part 61's words: "take-off" or "landing".
     pub(crate) fn one(self) -> &'static str {
         match self {
@@ -55,53 +64,76 @@ impl TakeOffsOrLandings {
 }
 
 /// The take-offs or the landings one of these regulations requires, in an
-/// aeroplane. A take-off and a landing need not be in the same entry. A
-/// take-off is counted as the pilot recorded it, which takes reg
-/// 61.395(3)'s "each take-off must be followed by a climb to at least 500
-/// ft AGL" as met.
+/// aeroplane. A take-off and a landing need not be in the same entry.
 pub(crate) struct TakeOffsAndLandings {
     window: EventWindow,
-    counts: TakeOffsOrLandings,
-    at_night_only: bool,
+    kind: TakeOffsOrLandings,
+    /// The number to count, from the entry's by day and at night.
+    counted: fn(&DayNight<u32>) -> u64,
+}
+
+/// By day and at night together.
+fn day_and_night(recorded: &DayNight<u32>) -> u64 {
+    recorded.total()
+}
+
+/// At night only.
+fn night_only(recorded: &DayNight<u32>) -> u64 {
+    u64::from(recorded.night)
 }
 
 impl TakeOffsAndLandings {
     /// Reg 61.395(1): "within the previous 90 days, in an aircraft of that
     /// category or an approved flight simulator for the purpose, conducted,
     /// by day or night: (a) at least 3 take-offs; and (b) at least 3
-    /// landings".
-    pub(crate) fn passenger_day(reference: Date, counts: TakeOffsOrLandings) -> Self {
+    /// landings; while controlling the aircraft or flight simulator".
+    ///
+    /// A take-off or landing is counted as the pilot recorded it, which
+    /// takes "while controlling the aircraft or flight simulator", and
+    /// subregulation (3)'s "each take-off must be followed by a climb to at
+    /// least 500 ft AGL", as met.
+    pub(crate) fn passenger_day(reference: Date, kind: TakeOffsOrLandings) -> Self {
         let window = EventWindow::new(reference, PASSENGER_WINDOW_DAYS, PASSENGER_REQUIRED);
-        Self::new(window, counts, false)
+        Self::new(window, kind, day_and_night)
     }
 
     /// Reg 61.395(2): "within the previous 90 days, in an aircraft of that
     /// category or an approved flight simulator for the purpose, conducted,
-    /// at night: (a) at least 3 take-offs; and (b) at least 3 landings".
-    pub(crate) fn passenger_night(reference: Date, counts: TakeOffsOrLandings) -> Self {
+    /// at night: (a) at least 3 take-offs; and (b) at least 3 landings;
+    /// while controlling the aircraft or flight simulator".
+    ///
+    /// A take-off or landing is counted as the pilot recorded it, which
+    /// takes "while controlling the aircraft or flight simulator", and
+    /// subregulation (3)'s "each take-off must be followed by a climb to at
+    /// least 500 ft AGL", as met.
+    pub(crate) fn passenger_night(reference: Date, kind: TakeOffsOrLandings) -> Self {
         let window = EventWindow::new(reference, PASSENGER_WINDOW_DAYS, PASSENGER_REQUIRED);
-        Self::new(window, counts, true)
+        Self::new(window, kind, night_only)
     }
 
     /// Reg 61.965(a): "within the previous 6 months … (i) at least one
     /// night take-off; and (ii) at least one night landing; in an aircraft
     /// of that category while controlling the aircraft".
-    pub(crate) fn night_vfr(reference: Date, counts: TakeOffsOrLandings) -> Self {
+    pub(crate) fn night_vfr(reference: Date, kind: TakeOffsOrLandings) -> Self {
         let window = EventWindow::new(reference, NIGHT_VFR_WINDOW_DAYS, NIGHT_VFR_REQUIRED);
-        Self::new(window, counts, true)
+        Self::new(window, kind, night_only)
     }
 
-    fn new(window: EventWindow, counts: TakeOffsOrLandings, at_night_only: bool) -> Self {
+    fn new(
+        window: EventWindow,
+        kind: TakeOffsOrLandings,
+        counted: fn(&DayNight<u32>) -> u64,
+    ) -> Self {
         Self {
             window,
-            counts,
-            at_night_only,
+            kind,
+            counted,
         }
     }
 
     /// Whether it counts take-offs or landings.
-    pub(crate) fn counts(&self) -> TakeOffsOrLandings {
-        self.counts
+    pub(crate) fn kind(&self) -> TakeOffsOrLandings {
+        self.kind
     }
 }
 
@@ -110,12 +142,7 @@ impl EntryAccumulator for TakeOffsAndLandings {
         if !is_category(entry, AircraftCategory::Aeroplane) {
             return;
         }
-        let recorded = self.counts.of(entry);
-        let count = if self.at_night_only {
-            u64::from(recorded.night)
-        } else {
-            recorded.total()
-        };
+        let count = (self.counted)(&self.kind.of(entry));
         let count = usize::try_from(count).unwrap_or(usize::MAX);
         self.window.record(entry, count);
     }
@@ -144,8 +171,8 @@ mod tests {
 
     /// The take-offs' result and the landings'.
     fn result(check: Check, entries: &[Entry]) -> [CurrencyResult; 2] {
-        TAKE_OFFS_AND_LANDINGS.map(|counts| {
-            let mut check = check(REFERENCE, counts);
+        TAKE_OFFS_AND_LANDINGS.map(|kind| {
+            let mut check = check(REFERENCE, kind);
             for entry in entries {
                 check.accept_entry(entry);
             }
