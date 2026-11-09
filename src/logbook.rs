@@ -22,7 +22,8 @@ mod test_support;
 mod totals;
 
 pub use assessment_information::{
-    AssessmentInformation, AssessmentInformationError, CheckOutcome, CheckPurpose, CheckType,
+    AssessedPurpose, AssessmentInformation, AssessmentInformationError, CheckOutcome, CheckPurpose,
+    CheckType, MigrationError, PurposeKind,
 };
 pub use entry_information::{EntryInformation, InformationError, SupervisionRoute};
 

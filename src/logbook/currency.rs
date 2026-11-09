@@ -359,7 +359,7 @@ mod tests {
             AssessmentInformation {
                 check_type: Some(check_type),
                 outcome: Some(CheckOutcome::Passed),
-                check_purpose: None,
+                check_purposes: Vec::new(),
             },
         )
     }

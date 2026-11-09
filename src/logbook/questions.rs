@@ -8,15 +8,17 @@
 use std::sync::LazyLock;
 
 use icao_shared_kernel::Capacity;
-use logbook_shared_kernel::{Answer, Choice, Condition, Question, Questions};
+use logbook_shared_kernel::{
+    Answer, Choice, ChoiceGroup, ChoiceKind, Condition, Question, Questions,
+};
 
-use super::assessment_information::{CHECK_PURPOSE, CHECK_TYPE, OUTCOME};
+use super::assessment_information::{CHECK_PURPOSES, CHECK_TYPE, OUTCOME};
 use super::entry_information::{
     APPROVED_FSTD, AZIMUTH_GUIDANCE_OPERATION, COURSE_DEVIATION_INDICATOR_OPERATION,
     DME_OR_GNSS_ARRIVALS, RECEIVING_FLIGHT_TRAINING, ROUTE,
 };
 use super::{
-    AssessmentInformation, CheckOutcome, CheckPurpose, CheckType, EntryInformation,
+    AssessmentInformation, CheckOutcome, CheckPurpose, CheckType, EntryInformation, PurposeKind,
     SupervisionRoute,
 };
 
@@ -130,29 +132,43 @@ fn guidance_applies() -> Condition {
     ])
 }
 
-/// The questions about an assessment: the check, its outcome and, for a
-/// flight test, its purpose where reg 61.880(3) depends on it. The check and
-/// its outcome are required, as pilot-logbook requires them.
+/// The questions about an assessment: the check, then its outcome or, for a
+/// flight test, its purposes, each with its own outcome, since a flight
+/// test has no outcome of its own. Each is required where it applies, as
+/// pilot-logbook requires the check and its outcome, and a flight test must
+/// have its purposes.
 pub(super) fn for_assessment() -> Questions {
     use CheckType::*;
-    let check_types = [
-        (FlightTest, "61.745(3)(a), (b)"),
-        (FlightReview, "61.745(1)"),
-        (OperatorProficiencyCheck, "61.745(3)(e)(i)"),
-        (InstrumentProficiencyCheck, "61.745(3A)(a)"),
-        (NightVisionImagingSystemProficiencyCheck, "61.745(3A)(b)"),
-        (AerialApplicationProficiencyCheck, "61.745(3A)(c)"),
-        (InstructorProficiencyCheck, "61.745(3A)(d)"),
-        (ExaminerProficiencyCheck, "61.745(3A)(e)"),
-    ];
+    let regulation = |check: CheckType| match check {
+        FlightTest => "61.745(3)(a), (b)",
+        FlightReview => "61.745(1)",
+        OperatorProficiencyCheck => "61.745(3)(e)(i)",
+        InstrumentProficiencyCheck => "61.745(3A)(a)",
+        NightVisionImagingSystemProficiencyCheck => "61.745(3A)(b)",
+        AerialApplicationProficiencyCheck => "61.745(3A)(c)",
+        InstructorProficiencyCheck => "61.745(3A)(d)",
+        ExaminerProficiencyCheck => "61.745(3A)(e)",
+    };
+    let is = |check: CheckType| Condition::Answer {
+        key: CHECK_TYPE,
+        is: check.as_str().into(),
+    };
+    let outcomes = || {
+        vec![
+            choice(CheckOutcome::Passed.as_str(), "passed", "61.745(3)"),
+            // Reg 61.745(3) speaks only of passing; no one regulation
+            // speaks of failing every kind of check.
+            choice(CheckOutcome::Failed.as_str(), "failed", ""),
+        ]
+    };
     let questions = vec![
         Question {
             key: CHECK_TYPE,
             label: "Which check was it?".into(),
             regulation: "61.745(3), (3A)",
             answer: Answer::Choice(
-                check_types
-                    .map(|(check, regulation)| choice(check.as_str(), regulation))
+                CheckType::ALL
+                    .map(|check| choice(check.as_str(), check.label(), regulation(check)))
                     .into(),
             ),
             applies_when: None,
@@ -162,31 +178,42 @@ pub(super) fn for_assessment() -> Questions {
             key: OUTCOME,
             label: "What was its outcome?".into(),
             regulation: "61.745(3)",
-            answer: Answer::Choice(vec![
-                choice(CheckOutcome::Passed.as_str(), "61.745(3)"),
-                // Reg 61.745(3) speaks only of passing; no one regulation
-                // speaks of failing every kind of check.
-                choice(CheckOutcome::Failed.as_str(), ""),
-            ]),
-            applies_when: None,
+            answer: Answer::Choice(outcomes()),
+            // Every check but a flight test, whose purposes have outcomes.
+            applies_when: Some(Condition::Any(
+                CheckType::ALL
+                    .into_iter()
+                    .filter(|check| *check != FlightTest)
+                    .map(is)
+                    .collect(),
+            )),
             required: true,
         },
         Question {
-            key: CHECK_PURPOSE,
-            label: "Was the flight test for the instrument rating, or for an instrument \
-                    endorsement?"
-                .into(),
-            regulation: "61.880(3)",
-            answer: Answer::Choice(vec![
-                choice(CheckPurpose::InstrumentRating.as_str(), "61.880(3)(a)"),
-                choice(CheckPurpose::InstrumentEndorsement.as_str(), "61.880(3)(b)"),
-            ]),
-            applies_when: Some(Condition::Answer {
-                key: CHECK_TYPE,
-                is: FlightTest.as_str().into(),
-            }),
-            // A flight test for another rating has neither purpose.
-            required: false,
+            key: CHECK_PURPOSES,
+            label: "What was the flight test for, and what was its outcome for each?".into(),
+            regulation: "61.010",
+            answer: Answer::Choices {
+                groups: PurposeKind::ALL
+                    .into_iter()
+                    .map(|kind| ChoiceGroup {
+                        kind: ChoiceKind {
+                            value: kind.as_str(),
+                            label: capitalised(kind.label()),
+                        },
+                        choices: CheckPurpose::ALL
+                            .into_iter()
+                            .filter(|purpose| purpose.kind() == kind)
+                            .map(|purpose| {
+                                choice(purpose.as_str(), purpose.label(), purpose.regulation())
+                            })
+                            .collect(),
+                    })
+                    .collect(),
+                each: outcomes(),
+            },
+            applies_when: Some(is(FlightTest)),
+            required: true,
         },
     ];
     Questions::new(AssessmentInformation::VERSION, questions)
@@ -200,18 +227,21 @@ fn route(route: SupervisionRoute, label: &str, regulation: &'static str) -> Choi
     }
 }
 
-/// A choice labelled with its stored spelling, which is in its regulation's
-/// words, capitalised.
-fn choice(value: &'static str, regulation: &'static str) -> Choice {
-    let mut label = value.to_owned();
-    if let Some(first) = label.get_mut(..1) {
-        first.make_ascii_uppercase();
-    }
+/// A choice, labelled in its regulation's words, capitalised.
+fn choice(value: &'static str, label: &str, regulation: &'static str) -> Choice {
     Choice {
         value,
-        label,
+        label: capitalised(label),
         regulation,
     }
+}
+
+fn capitalised(words: &str) -> String {
+    let mut capitalised = words.to_owned();
+    if let Some(first) = capitalised.get_mut(..1) {
+        first.make_ascii_uppercase();
+    }
+    capitalised
 }
 
 #[cfg(test)]

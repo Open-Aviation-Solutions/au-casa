@@ -14,7 +14,7 @@ use time::Date;
 
 use crate::aircraft::AircraftClassRating;
 use crate::logbook::guards::is_class_rating;
-use crate::logbook::{assessment_information, CheckOutcome, CheckType};
+use crate::logbook::{assessment_information, AssessmentInformation, CheckOutcome, CheckType};
 
 /// 24 months, as pilot-logbook counted them (2 × 365 days).
 const WINDOW_DAYS: u32 = 730;
@@ -27,7 +27,8 @@ const REQUIRED: usize = 1;
 /// passed check within the previous 730 days, as pilot-logbook had it.
 ///
 /// A check counts when CASA's information on the assessment records it as
-/// passed and as a check that reg 61.745(3) takes as a completed flight
+/// passed ([`passed`]: a flight test, for any of its purposes) and as a
+/// check that reg 61.745(3) takes as a completed flight
 /// review ([`satisfies_flight_review`]), and it was conducted "in an
 /// aircraft of the class covered by the rating" (reg 61.745(2)(a)). The
 /// assessment's aircraft is that of the entry for the same flight: an
@@ -80,6 +81,20 @@ fn satisfies_flight_review(check_type: CheckType) -> bool {
     }
 }
 
+/// Whether the check was passed: a flight test, which has no outcome of its
+/// own, when it was passed for any of its purposes (until au-casa#69 reads
+/// which), and any other check by its outcome.
+fn passed(information: &AssessmentInformation) -> bool {
+    if information.check_type == Some(CheckType::FlightTest) {
+        information
+            .check_purposes
+            .iter()
+            .any(|assessed| assessed.outcome == CheckOutcome::Passed)
+    } else {
+        information.outcome == Some(CheckOutcome::Passed)
+    }
+}
+
 impl AssessmentAccumulator for FlightReview {
     fn accept_assessment(&mut self, assessment: &Assessment) {
         if !self.flights.contains(&SubjectId::Flight(assessment.flight)) {
@@ -88,9 +103,7 @@ impl AssessmentAccumulator for FlightReview {
         let Some(information) = assessment_information(assessment) else {
             return;
         };
-        if information.outcome == Some(CheckOutcome::Passed)
-            && information.check_type.is_some_and(satisfies_flight_review)
-        {
+        if passed(&information) && information.check_type.is_some_and(satisfies_flight_review) {
             self.window.record_assessment(assessment);
         }
     }
@@ -113,25 +126,39 @@ mod tests {
     use crate::logbook::test_support::{
         aeroplane, assessed, entry, flown, on_flight, simulated, unclassified,
     };
-    use crate::logbook::{casa, AssessmentInformation};
+    use crate::logbook::{casa, AssessedPurpose, CheckPurpose};
 
     use AircraftClassRating::{MultiEngineAeroplane as Mea, SingleEngineAeroplane as Sea};
 
     const REFERENCE: Date = date!(2024 - 09 - 01);
     const ON: Date = date!(2024 - 05 - 24);
 
-    /// A check of this type with this outcome, on flight 1.
+    /// A check of this type with this outcome, on flight 1: a flight test's
+    /// for the private pilot licence, as a flight test has no outcome of
+    /// its own.
     fn checked(on: Date, check_type: CheckType, outcome: CheckOutcome) -> Assessment {
-        assessed(
-            "a",
-            on,
-            1,
+        let information = if check_type == CheckType::FlightTest {
+            flight_test(&[(CheckPurpose::PrivatePilotLicence, outcome)])
+        } else {
             AssessmentInformation {
                 check_type: Some(check_type),
                 outcome: Some(outcome),
-                check_purpose: None,
-            },
-        )
+                check_purposes: Vec::new(),
+            }
+        };
+        assessed("a", on, 1, information)
+    }
+
+    /// A flight test for these purposes, each with its outcome.
+    fn flight_test(purposes: &[(CheckPurpose, CheckOutcome)]) -> AssessmentInformation {
+        AssessmentInformation {
+            check_type: Some(CheckType::FlightTest),
+            outcome: None,
+            check_purposes: purposes
+                .iter()
+                .map(|&(purpose, outcome)| AssessedPurpose { purpose, outcome })
+                .collect(),
+        }
     }
 
     /// A passed flight review on flight 1.
@@ -214,18 +241,28 @@ mod tests {
         assert_eq!(result(Sea, &single_engine(), &[no_type]).expiry_date, None);
     }
 
+    /// Until au-casa#69 reads which, a flight test passed for any of its
+    /// purposes is taken as passed. One with an outcome of its own, which
+    /// it does not have, is not.
+    #[test]
+    fn a_flight_test_is_passed_when_any_of_its_purposes_is() {
+        use CheckOutcome::{Failed, Passed};
+        use CheckPurpose::{InstrumentRating, MultiEngineAeroplaneClassRating as Class};
+        let test = |information| assessed("a", ON, 1, information);
+        let partly = test(flight_test(&[(Class, Passed), (InstrumentRating, Failed)]));
+        assert!(result(Sea, &single_engine(), &[partly]).is_current());
+        let failed = test(flight_test(&[(Class, Failed), (InstrumentRating, Failed)]));
+        assert!(!result(Sea, &single_engine(), &[failed]).is_current());
+        let outcome_only = test(AssessmentInformation {
+            outcome: Some(Passed),
+            ..flight_test(&[])
+        });
+        assert!(!result(Sea, &single_engine(), &[outcome_only]).is_current());
+    }
+
     #[test]
     fn every_check_type_is_taken_as_a_flight_review() {
-        for check_type in [
-            CheckType::FlightTest,
-            CheckType::FlightReview,
-            CheckType::OperatorProficiencyCheck,
-            CheckType::InstrumentProficiencyCheck,
-            CheckType::NightVisionImagingSystemProficiencyCheck,
-            CheckType::AerialApplicationProficiencyCheck,
-            CheckType::InstructorProficiencyCheck,
-            CheckType::ExaminerProficiencyCheck,
-        ] {
+        for check_type in CheckType::ALL {
             let check = checked(ON, check_type, CheckOutcome::Passed);
             assert!(
                 result(Sea, &single_engine(), &[check]).is_current(),
@@ -248,7 +285,7 @@ mod tests {
             AssessmentInformation {
                 check_type: Some(CheckType::FlightReview),
                 outcome: Some(CheckOutcome::Passed),
-                check_purpose: None,
+                check_purposes: Vec::new(),
             },
         );
         assert!(!result(Sea, &[session], &[review]).is_current());
