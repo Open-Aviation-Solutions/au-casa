@@ -147,9 +147,10 @@ mod tests {
         }
     }
 
-    /// An answer stored before the entry's approaches were removed is to a
-    /// question that no longer applies, so it is not counted, whether or not
-    /// the host removed it on saving.
+    /// An answer stored before the entry's approaches were removed, on an
+    /// entry that records no DME or GNSS arrival either, is to a question
+    /// that no longer applies, so it is not counted, whether or not the host
+    /// removed it on saving.
     #[test]
     fn an_answer_stored_without_an_approach_is_no_operation() {
         for (name, check, information) in checks(Some(true)) {

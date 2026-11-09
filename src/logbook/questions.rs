@@ -91,8 +91,9 @@ fn for_entry() -> Questions {
         },
         Question {
             key: AZIMUTH_GUIDANCE_OPERATION,
-            label: "Was an approach an azimuth guidance operation (an instrument approach \
-                    operation using azimuth bearings for lateral navigation guidance)?"
+            label: "Was an instrument approach operation (an approach or a DME or GNSS \
+                    arrival) an azimuth guidance operation (an instrument approach operation \
+                    using azimuth bearings for lateral navigation guidance)?"
                 .into(),
             regulation: "61.870(6)",
             answer: Answer::YesNo,
@@ -101,8 +102,9 @@ fn for_entry() -> Questions {
         },
         Question {
             key: COURSE_DEVIATION_INDICATOR_OPERATION,
-            label: "Was an approach a course deviation indicator operation (an instrument \
-                    approach operation using a course deviation indicator for lateral navigation \
+            label: "Was an instrument approach operation (an approach or a DME or GNSS \
+                    arrival) a course deviation indicator operation (an instrument approach \
+                    operation using a course deviation indicator for lateral navigation \
                     guidance)?"
                 .into(),
             regulation: "61.870(7)",
@@ -209,5 +211,38 @@ fn choice(value: &'static str, regulation: &'static str) -> Choice {
         value,
         label,
         regulation,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The keys of the answers `condition` reads. A condition the kernel
+    /// adds later reads none here until it is matched.
+    fn keys_read(condition: &Condition) -> Vec<&'static str> {
+        match condition {
+            Condition::Answer { key, .. } | Condition::CountAtLeast { key, .. } => vec![key],
+            Condition::All(conditions) | Condition::Any(conditions) => {
+                conditions.iter().flat_map(keys_read).collect()
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    /// A condition reads only the answer to an earlier question, so each
+    /// key a condition reads is an earlier question's: the route before
+    /// whether the person was receiving flight training, and the DME or
+    /// GNSS arrivals before the guidance operations.
+    #[test]
+    fn every_condition_reads_an_earlier_questions_answer() {
+        for questions in [ENTRY.clone(), for_assessment()] {
+            let keys: Vec<_> = questions.iter().map(|question| question.key).collect();
+            for (at, question) in questions.iter().enumerate() {
+                for key in question.applies_when.iter().flat_map(keys_read) {
+                    assert!(keys[..at].contains(&key), "{} reads {key}", question.key);
+                }
+            }
+        }
     }
 }
