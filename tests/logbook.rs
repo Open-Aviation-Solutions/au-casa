@@ -99,13 +99,13 @@ fn a_session_counts_only_in_an_approved_device(
 }
 
 /// An answer that cannot be read makes the information unreadable as
-/// stored, even under a question not shown for the entry.
+/// stored, even to a question that does not apply to the entry.
 #[test]
-fn a_badly_typed_hidden_answer_still_makes_the_information_unreadable() {
+fn a_badly_typed_answer_to_a_question_that_does_not_apply_still_makes_the_information_unreadable() {
     let answers = json!({"_version": 1, "approved_fstd": true, "route": 42});
     let entry = session("CASA", Some(answers.clone()));
-    let (_, shown) = asked_and_shown(Record::Entry(&entry), answers);
-    assert!(!shown.contains(&"route"));
+    let (_, applicable) = asked_and_applicable(Record::Entry(&entry), answers);
+    assert!(!applicable.contains(&"route"));
     assert!(!Casa::new().counts(&entry));
 }
 
@@ -138,15 +138,15 @@ fn a_type_counts_as_its_category_and_class(
     assert!(classification.cautions.is_empty());
 }
 
-/// The keys of the questions about `record`, and of those shown for it
+/// The keys of the questions about `record`, and of those that apply to it
 /// given `answers`.
-fn asked_and_shown(record: Record, answers: Value) -> (Vec<&'static str>, Vec<&'static str>) {
+fn asked_and_applicable(record: Record, answers: Value) -> (Vec<&'static str>, Vec<&'static str>) {
     let questions = Casa::new().questions_for(record);
     let information = AuthoritySpecificInformation::new(answers);
     let keys = |questions: Vec<&Question>| questions.iter().map(|q| q.key).collect();
     (
         keys(questions.iter().collect()),
-        keys(questions.shown_for(record, Some(&information))),
+        keys(questions.applicable_for(record, Some(&information))),
     )
 }
 
@@ -161,21 +161,21 @@ const ENTRY_KEYS: [&str; 6] = [
 ];
 
 #[test]
-fn a_flight_is_shown_only_what_applies_to_it() {
+fn only_the_arrivals_apply_to_a_flight() {
     let entry = Entry::new(flight_parts()).unwrap();
     let questions = Casa::new().questions_for(Record::Entry(&entry));
     assert_eq!(questions.version(), EntryInformation::VERSION);
-    let (asked, shown) = asked_and_shown(Record::Entry(&entry), json!({}));
+    let (asked, applicable) = asked_and_applicable(Record::Entry(&entry), json!({}));
     assert_eq!(asked, ENTRY_KEYS);
-    assert_eq!(shown, ["dme_or_gnss_arrivals"]);
+    assert_eq!(applicable, ["dme_or_gnss_arrivals"]);
 }
 
 #[test]
-fn a_session_is_shown_whether_its_device_was_approved() {
+fn whether_its_device_was_approved_applies_to_a_session() {
     let entry = session("CASA", None);
-    let (asked, shown) = asked_and_shown(Record::Entry(&entry), json!({}));
+    let (asked, applicable) = asked_and_applicable(Record::Entry(&entry), json!({}));
     assert_eq!(asked, ENTRY_KEYS);
-    assert_eq!(shown, ["approved_fstd", "dme_or_gnss_arrivals"]);
+    assert_eq!(applicable, ["approved_fstd", "dme_or_gnss_arrivals"]);
 }
 
 /// Reg 61.870(6) and (7), and reg 61.870's instrument approach operations
@@ -199,9 +199,9 @@ fn approaches_are_asked_about_and_arrivals_whatever_the_flight_rules(
         ..flight_parts()
     })
     .unwrap();
-    let (_, shown) = asked_and_shown(Record::Entry(&entry), json!({}));
+    let (_, applicable) = asked_and_applicable(Record::Entry(&entry), json!({}));
     assert_eq!(
-        shown,
+        applicable,
         [
             "azimuth_guidance_operation",
             "course_deviation_indicator_operation",
@@ -225,7 +225,7 @@ fn the_host_drops_only_the_answers_that_no_longer_apply() {
         let mut information = AuthoritySpecificInformation::new(answers.clone());
         Casa::new()
             .questions_for(Record::Entry(entry))
-            .drop_hidden_answers_for(Record::Entry(entry), &mut information);
+            .retain_applicable_answers_for(Record::Entry(entry), &mut information);
         information.value().clone()
     };
     let flight = Entry::new(flight_parts()).unwrap();
@@ -263,8 +263,8 @@ fn a_pilot_in_command_under_supervision_is_asked_the_route(
         ..flight_parts()
     })
     .unwrap();
-    let (_, shown) = asked_and_shown(Record::Entry(&entry), answers);
-    assert_eq!(shown, expected);
+    let (_, applicable) = asked_and_applicable(Record::Entry(&entry), answers);
+    assert_eq!(applicable, expected);
     let questions = Casa::new().questions_for(Record::Entry(&entry));
     let unanswered: Vec<_> = questions
         .required_unanswered_for(
@@ -331,11 +331,11 @@ fn an_assessment_is_asked_its_check_outcome_and_a_flight_tests_purpose() {
     let record = Record::Assessment(&assessment);
     let questions = Casa::new().questions_for(record);
     assert_eq!(questions.version(), AssessmentInformation::VERSION);
-    let (asked, shown) = asked_and_shown(record, json!({"check_type": "flight review"}));
+    let (asked, applicable) = asked_and_applicable(record, json!({"check_type": "flight review"}));
     assert_eq!(asked, ["check_type", "outcome", "check_purpose"]);
-    assert_eq!(shown, ["check_type", "outcome"]);
-    let (_, shown) = asked_and_shown(record, json!({"check_type": "flight test"}));
-    assert_eq!(shown, ["check_type", "outcome", "check_purpose"]);
+    assert_eq!(applicable, ["check_type", "outcome"]);
+    let (_, applicable) = asked_and_applicable(record, json!({"check_type": "flight test"}));
+    assert_eq!(applicable, ["check_type", "outcome", "check_purpose"]);
     let required: Vec<_> = questions
         .required_unanswered_for(record, None)
         .into_iter()

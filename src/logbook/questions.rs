@@ -24,11 +24,11 @@ use super::{
 pub(super) static ENTRY: LazyLock<Questions> = LazyLock::new(for_entry);
 
 /// The questions about an entry. Each is in the list whatever the entry,
-/// and one that applies only to some entries is shown on a kernel
-/// [`Condition`], so that the host drops its answer when the entry no longer
-/// meets it: whether the device was approved for a session, the guidance
-/// operations for an entry with approaches, the route for a pilot in command
-/// under supervision, and its follow-up on the route's answer.
+/// and one that applies only to some entries has a kernel [`Condition`], so
+/// that the host removes its answer when the entry no longer meets it:
+/// whether the device was approved for a session, the guidance operations
+/// for an entry with approaches, the route for a pilot in command under
+/// supervision, and its follow-up on the route's answer.
 fn for_entry() -> Questions {
     let questions = vec![
         Question {
@@ -37,7 +37,7 @@ fn for_entry() -> Questions {
                 .into(),
             regulation: "61.010",
             answer: Answer::YesNo,
-            shown_when: Some(Condition::Session),
+            applies_when: Some(Condition::Session),
             required: true,
         },
         Question {
@@ -59,7 +59,7 @@ fn for_entry() -> Questions {
                     "61.095(3)",
                 ),
             ]),
-            shown_when: Some(Condition::Capacity(
+            applies_when: Some(Condition::Capacity(
                 Capacity::PilotInCommandUnderSupervision,
             )),
             required: true,
@@ -69,7 +69,7 @@ fn for_entry() -> Questions {
             label: "Was the person receiving flight training?".into(),
             regulation: "61.095(3)(b)",
             answer: Answer::YesNo,
-            shown_when: Some(Condition::Answer {
+            applies_when: Some(Condition::Answer {
                 key: ROUTE,
                 is: SupervisionRoute::Instructor.as_str().into(),
             }),
@@ -82,7 +82,7 @@ fn for_entry() -> Questions {
                 .into(),
             regulation: "61.870(6)",
             answer: Answer::YesNo,
-            shown_when: Some(Condition::AnyApproach),
+            applies_when: Some(Condition::AnyApproach),
             required: false,
         },
         Question {
@@ -93,7 +93,7 @@ fn for_entry() -> Questions {
                 .into(),
             regulation: "61.870(7)",
             answer: Answer::YesNo,
-            shown_when: Some(Condition::AnyApproach),
+            applies_when: Some(Condition::AnyApproach),
             required: false,
         },
         Question {
@@ -104,7 +104,7 @@ fn for_entry() -> Questions {
                 .into(),
             regulation: "Table 61.935, item 20",
             answer: Answer::Count,
-            shown_when: None,
+            applies_when: None,
             required: false,
         },
     ];
@@ -136,7 +136,7 @@ pub(super) fn for_assessment() -> Questions {
                     .map(|(check, regulation)| choice(check.as_str(), regulation))
                     .into(),
             ),
-            shown_when: None,
+            applies_when: None,
             required: true,
         },
         Question {
@@ -149,7 +149,7 @@ pub(super) fn for_assessment() -> Questions {
                 // speaks of failing every kind of check.
                 choice(CheckOutcome::Failed.as_str(), ""),
             ]),
-            shown_when: None,
+            applies_when: None,
             required: true,
         },
         Question {
@@ -162,7 +162,7 @@ pub(super) fn for_assessment() -> Questions {
                 choice(CheckPurpose::InstrumentRating.as_str(), "61.880(3)(a)"),
                 choice(CheckPurpose::InstrumentEndorsement.as_str(), "61.880(3)(b)"),
             ]),
-            shown_when: Some(Condition::Answer {
+            applies_when: Some(Condition::Answer {
                 key: CHECK_TYPE,
                 is: FlightTest.as_str().into(),
             }),

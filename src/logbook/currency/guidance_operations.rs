@@ -21,7 +21,7 @@ const REQUIRED: usize = 1;
 ///
 /// An entry supplies one operation when CASA's information on it answers
 /// yes; none when it answers no, gives no answer, or cannot be read, or
-/// records no approach, for which the question is not shown.
+/// records no approach, for which the question does not apply.
 pub(crate) struct GuidanceOperations {
     window: EventWindow,
     conducted: fn(&EntryInformation) -> Option<bool>,
@@ -108,7 +108,7 @@ mod tests {
     }
 
     /// The parts, recording an approach, for which the guidance questions
-    /// are shown.
+    /// apply.
     fn with_approach(mut parts: EntryParts) -> EntryParts {
         parts.approaches = vec![approach(ApproachType::Vor)];
         parts
@@ -147,8 +147,8 @@ mod tests {
     }
 
     /// An answer stored before the entry's approaches were removed is to a
-    /// question no longer shown, so it is not counted, whether or not the
-    /// host dropped it on saving.
+    /// question that no longer applies, so it is not counted, whether or not
+    /// the host removed it on saving.
     #[test]
     fn an_answer_stored_without_an_approach_is_no_operation() {
         for (name, check, information) in checks(Some(true)) {

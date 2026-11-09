@@ -53,19 +53,19 @@ pub(crate) fn casa() -> AuthorityId {
 }
 
 /// CASA's information on an entry, read as it is stored, without the
-/// answers to questions not shown for the entry, so that no check counts an
-/// answer the pilot can no longer see, however the record was saved; `None`
-/// when the entry has none, or has information that cannot be read as
-/// stored, hidden answers and all.
+/// answers to questions that do not apply to the entry, so that no check
+/// counts an answer to a question that no longer applies, however the record
+/// was saved; `None` when the entry has none, or has information that cannot
+/// be read as stored, those answers and all.
 pub(crate) fn information(entry: &Entry) -> Option<EntryInformation> {
     let record = Record::Entry(entry);
     let stored = record.information_for(&casa())?;
     EntryInformation::read(stored).ok()?;
-    let mut shown = stored.clone();
-    questions::ENTRY.drop_hidden_answers_for(record, &mut shown);
+    let mut applicable = stored.clone();
+    questions::ENTRY.retain_applicable_answers_for(record, &mut applicable);
     // Removing answers from information that reads leaves information that
     // reads.
-    EntryInformation::read(&shown).ok()
+    EntryInformation::read(&applicable).ok()
 }
 
 /// CASA's information on an assessment, read as it is stored; `None` when
@@ -142,10 +142,10 @@ impl LicensingAuthority for Casa {
     /// The questions for CASA's information on an entry, each key of
     /// [`EntryInformation`], or on an assessment, each key of
     /// [`AssessmentInformation`], at that format's version. Every entry is
-    /// asked the same questions, each shown where it applies, so that the
-    /// host drops an answer to one that no longer does: whether the device
-    /// was an approved flight simulation training device is shown for a
-    /// session, the two guidance operations for an entry with approaches,
+    /// asked the same questions, each with the condition on which it
+    /// applies, so that the host removes an answer to one that no longer
+    /// does: whether the device was an approved flight simulation training
+    /// device applies to a session, the two guidance operations for an entry with approaches,
     /// the route for a pilot in command under supervision, and whether the
     /// person was receiving flight training on the instructor's route. The
     /// DME or GNSS arrivals are asked whatever the flight rules, as reg
@@ -167,7 +167,7 @@ impl LicensingAuthority for Casa {
     /// ([`EntryInformation::read`]), and so counts for nothing.
     ///
     /// And a refusal at `receiving_flight_training` when its answer is yes
-    /// where the question is shown, on the route of reg 61.095(3) for a pilot
+    /// where the question applies, on the route of reg 61.095(3) for a pilot
     /// in command under supervision: "the person is not receiving flight
     /// training" (reg 61.095(3)(b)).
     fn problems_for(
@@ -181,7 +181,7 @@ impl LicensingAuthority for Casa {
                 Ok(answers)
                     if answers.receiving_flight_training == Some(true)
                         && questions::ENTRY
-                            .shown_for(record, Some(information))
+                            .applicable_for(record, Some(information))
                             .iter()
                             .any(|question| {
                                 question.key == entry_information::RECEIVING_FLIGHT_TRAINING
