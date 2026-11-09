@@ -248,6 +248,36 @@ mod tests {
         assert!(!result(Sea, &single_engine(), &[outcome_only]).is_current());
     }
 
+    /// An answer that does not apply is dropped, not counted: a flight
+    /// review's purposes do not make a failed review passed, and a flight
+    /// test's own failed outcome does not undo its passed purposes.
+    #[test]
+    fn an_answer_that_does_not_apply_is_not_counted() {
+        use CheckOutcome::{Failed, Passed};
+        let purposes = flight_test(&[(CheckPurpose::PrivatePilotLicence, Passed)]).check_purposes;
+        let review = assessed(
+            "a",
+            ON,
+            1,
+            AssessmentInformation {
+                check_type: Some(CheckType::FlightReview),
+                outcome: Some(Failed),
+                check_purposes: purposes,
+            },
+        );
+        assert!(!result(Sea, &single_engine(), &[review]).is_current());
+        let test = assessed(
+            "a",
+            ON,
+            1,
+            AssessmentInformation {
+                outcome: Some(Failed),
+                ..flight_test(&[(CheckPurpose::PrivatePilotLicence, Passed)])
+            },
+        );
+        assert!(result(Sea, &single_engine(), &[test]).is_current());
+    }
+
     #[test]
     fn every_check_type_is_taken_as_a_flight_review() {
         for check_type in CheckType::ALL {

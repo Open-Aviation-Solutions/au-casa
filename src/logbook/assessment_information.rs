@@ -6,10 +6,11 @@
 
 mod version_1;
 
-use logbook_shared_kernel::AuthoritySpecificInformation;
+use logbook_shared_kernel::{Assessment, AssessmentId, AuthoritySpecificInformation, Record};
 use serde_json::{json, Map, Value};
 use thiserror::Error;
 
+use super::questions;
 use super::stored::{self, Unreadable};
 
 pub use version_1::MigrationError;
@@ -31,10 +32,13 @@ pub struct AssessmentInformation {
     /// `check_type`: which of the checks of regs 61.745(3) and (3A) it was.
     pub check_type: Option<CheckType>,
     /// `outcome`: whether the pilot passed it. A flight test has none of its
-    /// own, only its purposes' outcomes, so the two cannot disagree.
+    /// own, only its purposes' outcomes: the question does not apply to
+    /// one, so the host removes such an answer on a save, and the checks
+    /// read none ([`applicable`]).
     pub outcome: Option<CheckOutcome>,
     /// `check_purposes`: what a flight test was for, each purpose with its
-    /// outcome. Empty is no answer.
+    /// outcome; it applies to a flight test only, as `outcome` does not.
+    /// Empty is no answer.
     pub check_purposes: Vec<AssessedPurpose>,
 }
 
@@ -250,7 +254,10 @@ pub enum CheckPurpose {
 impl CheckPurpose {
     /// Every purpose, kind by kind in the order of [`PurposeKind::ALL`], and
     /// within a kind in its regulation's order: the order CASA's question
-    /// offers them in, and they are stored in.
+    /// offers them in, and they are stored in. The stored order is part of
+    /// the format (version 2), as the kernel's `Answer::Choices` accepts
+    /// only that order, so reordering this list is a breaking change to the
+    /// format, with a new version and a migration.
     pub const ALL: [Self; 25] = [
         Self::AirTransportPilotLicence,
         Self::CommercialPilotLicence,
@@ -283,120 +290,162 @@ impl CheckPurpose {
     /// regulation that names it.
     fn spelling(self) -> (PurposeKind, &'static str, &'static str, &'static str) {
         use PurposeKind::*;
-        let (kind, value, label) = match self {
+        // Reg 61.010 defines the pilot licences and the operational
+        // ratings; reg 61.730(3) grants a category rating for an existing
+        // licence, and reg 61.750 a class rating; reg 61.890 sets out the
+        // kinds of instrument endorsement.
+        match self {
             Self::RecreationalPilotLicence => (
                 Licence,
                 "recreational_pilot_licence",
                 "recreational pilot licence",
+                "61.010",
             ),
-            Self::PrivatePilotLicence => {
-                (Licence, "private_pilot_licence", "private pilot licence")
-            }
+            Self::PrivatePilotLicence => (
+                Licence,
+                "private_pilot_licence",
+                "private pilot licence",
+                "61.010",
+            ),
             Self::CommercialPilotLicence => (
                 Licence,
                 "commercial_pilot_licence",
                 "commercial pilot licence",
+                "61.010",
             ),
             Self::MultiCrewPilotLicence => (
                 Licence,
                 "multi_crew_pilot_licence",
                 "multi-crew pilot licence",
+                "61.010",
             ),
             Self::AirTransportPilotLicence => (
                 Licence,
                 "air_transport_pilot_licence",
                 "air transport pilot licence",
+                "61.010",
             ),
             Self::AeroplaneCategoryRating => (
                 CategoryRating,
                 "aeroplane_category_rating",
                 "aeroplane category rating",
+                "61.730(3)",
             ),
             Self::HelicopterCategoryRating => (
                 CategoryRating,
                 "helicopter_category_rating",
                 "helicopter category rating",
+                "61.730(3)",
             ),
             Self::PoweredLiftAircraftCategoryRating => (
                 CategoryRating,
                 "powered_lift_aircraft_category_rating",
                 "powered-lift aircraft category rating",
+                "61.730(3)",
             ),
             Self::GyroplaneCategoryRating => (
                 CategoryRating,
                 "gyroplane_category_rating",
                 "gyroplane category rating",
+                "61.730(3)",
             ),
             Self::AirshipCategoryRating => (
                 CategoryRating,
                 "airship_category_rating",
                 "airship category rating",
+                "61.730(3)",
             ),
             Self::SingleEngineAeroplaneClassRating => (
                 ClassRating,
                 "single_engine_aeroplane_class_rating",
                 "single-engine aeroplane class rating",
+                "61.750",
             ),
             Self::MultiEngineAeroplaneClassRating => (
                 ClassRating,
                 "multi_engine_aeroplane_class_rating",
                 "multi-engine aeroplane class rating",
+                "61.750",
             ),
             Self::SingleEngineHelicopterClassRating => (
                 ClassRating,
                 "single_engine_helicopter_class_rating",
                 "single-engine helicopter class rating",
+                "61.750",
             ),
             Self::PoweredLiftAircraftClassRating => (
                 ClassRating,
                 "powered_lift_aircraft_class_rating",
                 "powered-lift aircraft class rating",
+                "61.750",
             ),
             Self::SingleEngineGyroplaneClassRating => (
                 ClassRating,
                 "single_engine_gyroplane_class_rating",
                 "single-engine gyroplane class rating",
+                "61.750",
             ),
-            Self::AirshipClassRating => {
-                (ClassRating, "airship_class_rating", "airship class rating")
-            }
+            Self::AirshipClassRating => (
+                ClassRating,
+                "airship_class_rating",
+                "airship class rating",
+                "61.750",
+            ),
             Self::AerialApplicationRating => (
                 OperationalRating,
                 "aerial_application_rating",
                 "aerial application rating",
+                "61.010",
             ),
-            Self::ExaminerRating => (OperationalRating, "examiner_rating", "examiner rating"),
-            Self::InstructorRating => (OperationalRating, "instructor_rating", "instructor rating"),
-            Self::InstrumentRating => (OperationalRating, "instrument_rating", "instrument rating"),
-            Self::LowLevelRating => (OperationalRating, "low_level_rating", "low-level rating"),
-            Self::NightVfrRating => (OperationalRating, "night_vfr_rating", "night VFR rating"),
+            Self::ExaminerRating => (
+                OperationalRating,
+                "examiner_rating",
+                "examiner rating",
+                "61.010",
+            ),
+            Self::InstructorRating => (
+                OperationalRating,
+                "instructor_rating",
+                "instructor rating",
+                "61.010",
+            ),
+            Self::InstrumentRating => (
+                OperationalRating,
+                "instrument_rating",
+                "instrument rating",
+                "61.010",
+            ),
+            Self::LowLevelRating => (
+                OperationalRating,
+                "low_level_rating",
+                "low-level rating",
+                "61.010",
+            ),
+            Self::NightVfrRating => (
+                OperationalRating,
+                "night_vfr_rating",
+                "night VFR rating",
+                "61.010",
+            ),
             Self::NightVisionImagingSystemRating => (
                 OperationalRating,
                 "night_vision_imaging_system_rating",
                 "night vision imaging system rating",
+                "61.010",
             ),
             Self::PrivateInstrumentRating => (
                 OperationalRating,
                 "private_instrument_rating",
                 "private instrument rating",
+                "61.010",
             ),
             Self::InstrumentEndorsement => (
                 Endorsement,
                 "instrument_endorsement",
                 "instrument endorsement",
+                "61.890",
             ),
-        };
-        // Reg 61.010 defines the pilot licences and the operational
-        // ratings; reg 61.730(3) grants a category rating for an existing
-        // licence, and reg 61.750 a class rating; reg 61.890 sets out the
-        // kinds of instrument endorsement.
-        let regulation = match kind {
-            Licence | OperationalRating => "61.010",
-            CategoryRating => "61.730(3)",
-            ClassRating => "61.750",
-            Endorsement => "61.890",
-        };
-        (kind, value, label, regulation)
+        }
     }
 
     /// Its kind.
@@ -422,9 +471,15 @@ impl CheckPurpose {
     /// The purpose a stored kind and spelling name; `None` for any other,
     /// or for a spelling stored under a kind that is not its own.
     pub fn parse(kind: &str, spelling: &str) -> Option<Self> {
+        Self::position(kind, spelling).map(|at| Self::ALL[at])
+    }
+
+    /// Where in [`Self::ALL`] the purpose a stored kind and spelling name
+    /// is.
+    fn position(kind: &str, spelling: &str) -> Option<usize> {
         Self::ALL
-            .into_iter()
-            .find(|purpose| purpose.kind().as_str() == kind && purpose.as_str() == spelling)
+            .iter()
+            .position(|purpose| purpose.kind().as_str() == kind && purpose.as_str() == spelling)
     }
 }
 
@@ -451,10 +506,6 @@ pub enum AssessmentInformationError {
     UnknownKey(String),
     #[error("CASA's information on an assessment holds no answer of its kind under {0:?}")]
     InvalidAnswer(&'static str),
-    /// An answer its check does not take: an outcome of a flight test's own,
-    /// or purposes of another check.
-    #[error("CASA's information on an assessment answers {0:?}, which its check does not take")]
-    NotOfItsCheck(&'static str),
 }
 
 impl AssessmentInformationError {
@@ -487,9 +538,11 @@ impl AssessmentInformation {
     /// `Answer::Choices` accepts them: a list of at least one
     /// `{"kind", "value", "answer"}`, with no other key, in the order of
     /// [`CheckPurpose::ALL`] and none listed twice. An empty list is
-    /// refused, as no purposes are stored as no key. A flight test has no
-    /// outcome of its own, and no other check has purposes, so that the two
-    /// cannot disagree: information that holds either is refused.
+    /// refused, as no purposes are stored as no key. An answer to a question
+    /// that does not apply (a flight test's own outcome, another check's
+    /// purposes) is read here as stored; the checks read the information
+    /// without those answers ([`applicable`]), as the host removes them on
+    /// a save.
     pub fn read(
         information: &AuthoritySpecificInformation,
     ) -> Result<Self, AssessmentInformationError> {
@@ -517,41 +570,31 @@ impl AssessmentInformation {
     /// and no outcome, is refused, for its purposes to be filled in by hand,
     /// as is information that cannot be read as version 1. Information of
     /// this version already, such as a flight test filled in so, is given
-    /// back as it is once it reads, so that a migration can be run again.
+    /// back as it is once it reads, so that a migration can be run again;
+    /// one that is a flight test with no purposes is refused, as it is from
+    /// version 1.
     pub fn migrate_from_version_1(
         information: &AuthoritySpecificInformation,
     ) -> Result<AuthoritySpecificInformation, MigrationError> {
         if information.version() == Some(Self::VERSION) {
             Self::read(information).map_err(MigrationError::Unreadable)?;
+            let read =
+                Self::read(&applicable(information, None)).map_err(MigrationError::Unreadable)?;
+            if read.check_type == Some(CheckType::FlightTest) && read.check_purposes.is_empty() {
+                return Err(MigrationError::NoPurpose);
+            }
             return Ok(information.clone());
         }
-        let mut migrated = version_1::migrate(information)?
-            .to_information()
-            .into_value();
-        if let Some(answers) = migrated.as_object_mut() {
-            answers.insert(
-                AuthoritySpecificInformation::VERSION_KEY.into(),
-                Self::VERSION.into(),
-            );
-        }
-        Ok(AuthoritySpecificInformation::new(migrated))
+        let mut migrated = version_1::migrate(information)?.to_information();
+        questions::ASSESSMENT.stamp(&mut migrated);
+        Ok(migrated)
     }
 
     fn read_with(
         information: &AuthoritySpecificInformation,
         stored: bool,
     ) -> Result<Self, AssessmentInformationError> {
-        let read = Self::read_answers(information, stored)
-            .map_err(AssessmentInformationError::from_unreadable)?;
-        match read.check_type {
-            Some(CheckType::FlightTest) if read.outcome.is_some() => {
-                Err(AssessmentInformationError::NotOfItsCheck(OUTCOME))
-            }
-            Some(check) if check != CheckType::FlightTest && !read.check_purposes.is_empty() => {
-                Err(AssessmentInformationError::NotOfItsCheck(CHECK_PURPOSES))
-            }
-            _ => Ok(read),
-        }
+        Self::read_answers(information, stored).map_err(AssessmentInformationError::from_unreadable)
     }
 
     fn read_answers(
@@ -616,10 +659,7 @@ fn purposes(value: &Value) -> Option<Vec<AssessedPurpose>> {
     for item in value.as_array()? {
         let item = item.as_object().filter(|item| item.len() == 3)?;
         let field = |key| item.get(key).and_then(Value::as_str);
-        let (kind, value) = (field("kind")?, field("value")?);
-        let position = CheckPurpose::ALL
-            .iter()
-            .position(|p| p.kind().as_str() == kind && p.as_str() == value)?;
+        let position = CheckPurpose::position(field("kind")?, field("value")?)?;
         let purpose = CheckPurpose::ALL[position];
         let outcome = CheckOutcome::parse(field("answer")?)?;
         if previous.is_some_and(|previous| position <= previous) {
@@ -629,4 +669,33 @@ fn purposes(value: &Value) -> Option<Vec<AssessedPurpose>> {
         purposes.push(AssessedPurpose { purpose, outcome });
     }
     (!purposes.is_empty()).then_some(purposes)
+}
+
+/// Stored information without the answers to questions that do not apply
+/// to the assessment (a flight test's own outcome, another check's
+/// purposes), as the host removes them on a save. The questions about an
+/// assessment apply on its answers alone, so without its record (`None`,
+/// for the migration, which has only the information) any assessment
+/// stands for it.
+pub(crate) fn applicable(
+    information: &AuthoritySpecificInformation,
+    assessment: Option<&Assessment>,
+) -> AuthoritySpecificInformation {
+    let placeholder;
+    let assessment = match assessment {
+        Some(assessment) => assessment,
+        None => {
+            placeholder = Assessment {
+                id: AssessmentId::new(""),
+                date: time::Date::MIN,
+                flight: Default::default(),
+                authority_information: Default::default(),
+            };
+            &placeholder
+        }
+    };
+    let mut applicable = information.clone();
+    questions::ASSESSMENT
+        .retain_applicable_answers_for(Record::Assessment(assessment), &mut applicable);
+    applicable
 }

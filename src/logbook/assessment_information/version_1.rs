@@ -5,6 +5,8 @@
 //! Version 1 of CASA's information on an assessment, read only to migrate
 //! it: the check type and outcome as phrases, and `check_purpose`, one of
 //! the two purposes reg 61.880(3) names, beside the flight test's outcome.
+//! Information of version 2 already is checked and given back by
+//! [`AssessmentInformation::migrate_from_version_1`] itself.
 
 use logbook_shared_kernel::AuthoritySpecificInformation;
 use thiserror::Error;
@@ -24,8 +26,9 @@ const KEYS: [&str; 3] = [super::CHECK_TYPE, super::OUTCOME, CHECK_PURPOSE];
 pub enum MigrationError {
     #[error("CASA's information on an assessment is not a JSON object")]
     NotAnObject,
+    /// Of neither version 1 nor version 2.
     #[error("CASA's information on an assessment is not of version 1 or 2")]
-    NotVersion1,
+    UnsupportedVersion,
     /// Information of version 2 already, which cannot be read.
     #[error(transparent)]
     Unreadable(AssessmentInformationError),
@@ -48,7 +51,7 @@ impl From<Unreadable> for MigrationError {
     fn from(unreadable: Unreadable) -> Self {
         match unreadable {
             Unreadable::NotAnObject => Self::NotAnObject,
-            Unreadable::UnsupportedVersion => Self::NotVersion1,
+            Unreadable::UnsupportedVersion => Self::UnsupportedVersion,
             Unreadable::UnknownKey(key) => Self::UnknownKey(key),
             Unreadable::InvalidAnswer(key) => Self::InvalidAnswer(key),
         }

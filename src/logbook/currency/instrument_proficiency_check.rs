@@ -491,6 +491,20 @@ mod tests {
             (CheckPurpose::InstrumentEndorsement, Passed),
         ]);
         assert_eq!(ids(&result(&[both])), ["t"]);
+
+        // A flight test's own outcome, which does not apply to it, is
+        // dropped, not counted: failed, it neither undoes the passed rating
+        // nor ends a valid check.
+        let with_its_own = assessed(
+            "t",
+            on,
+            1,
+            AssessmentInformation {
+                outcome: Some(Failed),
+                ..flight_test(&[(CheckPurpose::InstrumentRating, Passed)])
+            },
+        );
+        assert_eq!(ids(&result(&[with_its_own])), ["t"]);
     }
 
     #[test]

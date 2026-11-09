@@ -50,7 +50,9 @@ answers one such question:
   check type of regs 61.745(3) and (3A), and its outcome or, for a flight
   test, which has no outcome of its own, its purposes, each a kind and a
   value with an outcome of its own, as the kernel's `Answer::Choices`
-  stores them; au-casa#60), two
+  stores them, in the order of `CheckPurpose::ALL`, which is part of the
+  format; the checks read an assessment without the answers to questions
+  that do not apply to it, as an entry; au-casa#60), two
   stored formats whose every key and spelling is mapped by hand, with no
   derived serde, each under a version of its own (the kernel's reserved key
   `_version`). A stored value is an identifier (`flight_test`,

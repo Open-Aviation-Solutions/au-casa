@@ -25,6 +25,9 @@ use super::{
 /// The questions about an entry, built once.
 pub(super) static ENTRY: LazyLock<Questions> = LazyLock::new(for_entry);
 
+/// The questions about an assessment, built once.
+pub(super) static ASSESSMENT: LazyLock<Questions> = LazyLock::new(for_assessment);
+
 /// The questions about an entry. Each is in the list whatever the entry,
 /// and one that applies only to some entries has a kernel [`Condition`], so
 /// that the host removes its answer when the entry no longer meets it:
@@ -137,7 +140,7 @@ fn guidance_applies() -> Condition {
 /// test has no outcome of its own. Each is required where it applies, as
 /// pilot-logbook requires the check and its outcome, and a flight test must
 /// have its purposes.
-pub(super) fn for_assessment() -> Questions {
+fn for_assessment() -> Questions {
     use CheckType::*;
     let regulation = |check: CheckType| match check {
         FlightTest => "61.745(3)(a), (b)",

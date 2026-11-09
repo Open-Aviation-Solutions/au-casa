@@ -69,12 +69,20 @@ pub(crate) fn information(entry: &Entry) -> Option<EntryInformation> {
     EntryInformation::read(&applicable).ok()
 }
 
-/// CASA's information on an assessment, read as it is stored; `None` when
-/// the assessment has none, or has information that cannot be read.
+/// CASA's information on an assessment, read as it is stored, without the
+/// answers to questions that do not apply to it (a flight test's own
+/// outcome, another check's purposes), as for an entry; `None` when the
+/// assessment has none, or has information that cannot be read as stored.
 pub(crate) fn assessment_information(assessment: &Assessment) -> Option<AssessmentInformation> {
-    Record::Assessment(assessment)
-        .information_for(&casa())
-        .and_then(|information| AssessmentInformation::read(information).ok())
+    let stored = Record::Assessment(assessment).information_for(&casa())?;
+    AssessmentInformation::read(stored).ok()?;
+    // Removing answers from information that reads leaves information that
+    // reads.
+    AssessmentInformation::read(&assessment_information::applicable(
+        stored,
+        Some(assessment),
+    ))
+    .ok()
 }
 
 impl Default for Casa {
@@ -157,7 +165,7 @@ impl LicensingAuthority for Casa {
     fn questions_for(&self, record: Record) -> Questions {
         match record {
             Record::Entry(_) => questions::ENTRY.clone(),
-            Record::Assessment(_) => questions::for_assessment(),
+            Record::Assessment(_) => questions::ASSESSMENT.clone(),
         }
     }
 
