@@ -150,14 +150,14 @@ fn asked_and_applicable(record: Record, answers: Value) -> (Vec<&'static str>, V
     )
 }
 
-/// Every key of the entry format, in order.
+/// Every key of the entry format, in the order asked.
 const ENTRY_KEYS: [&str; 6] = [
     "approved_fstd",
     "route",
     "receiving_flight_training",
+    "dme_or_gnss_arrivals",
     "azimuth_guidance_operation",
     "course_deviation_indicator_operation",
-    "dme_or_gnss_arrivals",
 ];
 
 #[test]
@@ -200,14 +200,29 @@ fn approaches_are_asked_about_and_arrivals_whatever_the_flight_rules(
     })
     .unwrap();
     let (_, applicable) = asked_and_applicable(Record::Entry(&entry), json!({}));
-    assert_eq!(
-        applicable,
-        [
-            "azimuth_guidance_operation",
-            "course_deviation_indicator_operation",
-            "dme_or_gnss_arrivals",
-        ]
-    );
+    assert_eq!(applicable, GUIDANCE_KEYS);
+}
+
+/// The arrivals, and the guidance operations of reg 61.870(6) and (7)
+/// after them.
+const GUIDANCE_KEYS: [&str; 3] = [
+    "dme_or_gnss_arrivals",
+    "azimuth_guidance_operation",
+    "course_deviation_indicator_operation",
+];
+
+/// A DME or GNSS arrival is an instrument approach operation (Table 61.935,
+/// item 20), so the guidance operations apply to an entry that records one
+/// and no approach.
+#[rstest]
+#[case::one(json!({"dme_or_gnss_arrivals": 1}), &GUIDANCE_KEYS)]
+#[case::two(json!({"dme_or_gnss_arrivals": 2}), &GUIDANCE_KEYS)]
+#[case::none(json!({"dme_or_gnss_arrivals": 0}), &["dme_or_gnss_arrivals"])]
+#[case::unanswered(json!({}), &["dme_or_gnss_arrivals"])]
+fn arrivals_are_asked_about_as_approaches_are(#[case] answers: Value, #[case] expected: &[&str]) {
+    let entry = Entry::new(flight_parts()).unwrap();
+    let (_, applicable) = asked_and_applicable(Record::Entry(&entry), answers);
+    assert_eq!(applicable, expected);
 }
 
 /// The host drops an answer to a question that no longer applies to the
@@ -221,7 +236,7 @@ fn the_host_drops_only_the_answers_that_no_longer_apply() {
         "course_deviation_indicator_operation": true,
         "dme_or_gnss_arrivals": 2,
     });
-    let kept = |entry: &Entry| {
+    let kept = |entry: &Entry, answers: &Value| {
         let mut information = AuthoritySpecificInformation::new(answers.clone());
         Casa::new()
             .questions_for(Record::Entry(entry))
@@ -230,9 +245,20 @@ fn the_host_drops_only_the_answers_that_no_longer_apply() {
     };
     let flight = Entry::new(flight_parts()).unwrap();
     assert_eq!(
-        kept(&flight),
-        json!({"_version": 1, "dme_or_gnss_arrivals": 2})
+        kept(&flight, &answers),
+        json!({
+            "_version": 1,
+            "azimuth_guidance_operation": true,
+            "course_deviation_indicator_operation": true,
+            "dme_or_gnss_arrivals": 2,
+        })
     );
+    let mut no_arrivals = answers.clone();
+    no_arrivals
+        .as_object_mut()
+        .unwrap()
+        .remove("dme_or_gnss_arrivals");
+    assert_eq!(kept(&flight, &no_arrivals), json!({"_version": 1}));
     let session_with_an_approach = Entry::new(EntryParts {
         approaches: vec![Approach::new(
             ApproachType::Vor,
@@ -243,7 +269,7 @@ fn the_host_drops_only_the_answers_that_no_longer_apply() {
         ..flight_parts()
     })
     .unwrap();
-    assert_eq!(kept(&session_with_an_approach), answers);
+    assert_eq!(kept(&session_with_an_approach, &answers), answers);
 }
 
 /// Reg 61.095(1)(c), (2) and (3).

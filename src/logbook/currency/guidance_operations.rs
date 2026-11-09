@@ -21,7 +21,8 @@ const REQUIRED: usize = 1;
 ///
 /// An entry supplies one operation when CASA's information on it answers
 /// yes; none when it answers no, gives no answer, or cannot be read, or
-/// records no approach, for which the question does not apply.
+/// records neither an approach nor a DME or GNSS arrival, for which the
+/// question does not apply.
 pub(crate) struct GuidanceOperations {
     window: EventWindow,
     conducted: fn(&EntryInformation) -> Option<bool>,
@@ -146,15 +147,35 @@ mod tests {
         }
     }
 
-    /// An answer stored before the entry's approaches were removed is to a
-    /// question that no longer applies, so it is not counted, whether or not
-    /// the host removed it on saving.
+    /// An answer stored before the entry's approaches were removed, on an
+    /// entry that records no DME or GNSS arrival either, is to a question
+    /// that no longer applies, so it is not counted, whether or not the host
+    /// removed it on saving.
     #[test]
     fn an_answer_stored_without_an_approach_is_no_operation() {
         for (name, check, information) in checks(Some(true)) {
             let mut check = check(REFERENCE);
             check.accept_entry(&entry(informed(information, aeroplane("a", ON))));
             assert!(!check.result().is_current(), "{name}");
+        }
+    }
+
+    /// A DME or GNSS arrival is an instrument approach operation, so the
+    /// questions apply to an entry that records one and no approach, and
+    /// its answer counts; with no arrival either, it does not.
+    #[test]
+    fn an_answer_stored_with_only_arrivals_is_an_operation() {
+        for (arrivals, current) in [(1, true), (0, false)] {
+            for (name, check, information) in checks(Some(true)) {
+                let information = EntryInformation {
+                    dme_or_gnss_arrivals: Some(arrivals),
+                    ..information
+                };
+                let mut check = check(REFERENCE);
+                check.accept_entry(&entry(informed(information, aeroplane("a", ON))));
+                let r = check.result();
+                assert_eq!(r.is_current(), current, "{name}, {arrivals} arrivals");
+            }
         }
     }
 
