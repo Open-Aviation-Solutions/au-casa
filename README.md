@@ -17,17 +17,19 @@ that are Australia's alone are kept here.
 
 ## Status
 
-Early: a `0.x` release. Take it by a caret range on its minor version (such as `"0.4"`): until `1.0`
+Early: a `0.x` release. Take it by a caret range on its minor version (such as `"0.5"`): until `1.0`
 a breaking release is a minor version (0.2 stopped re-exporting the aircraft
 description types; 0.3 moved to `icao-shared-kernel` 0.5; 0.4 counts every category in reg
-61.870's checks and adds reg 61.870(3) for each category), as
+61.870's checks and adds reg 61.870(3) for each category; 0.5 moves to logbook-shared-kernel
+0.5, counts take-offs and landings separately, and changes CASA's information on an
+assessment to its format version 2), as
 [`INSTRUCTIONS.md`, "Releasing"](INSTRUCTIONS.md#releasing) sets out. It takes `icao-shared-kernel` and
 [aircraft-type-descriptions](https://github.com/Open-Aviation-Solutions/aircraft-type-descriptions)
 by caret range; `0.1.0` pinned them exactly (`=0.1.3` and `=0.1.0`), `0.1.1`
 takes `^0.1.3` and `^0.1.0`, `0.2.0` takes `^0.2.0` and `^0.1.0`, and `0.3.0`
 and `0.4.0` take `^0.5` and `^0.1.0`, with
 [logbook-shared-kernel](https://github.com/Open-Aviation-Solutions/logbook-shared-kernel)
-at `^0.2`.
+at `^0.2`, and `0.5.0` takes it at `^0.5`.
 
 What is covered:
 
@@ -109,18 +111,19 @@ and what they fly.
 
 Add it from crates.io, with the kernel at a version it accepts. au-casa takes
 the kernel at a matching `0.x` minor (au-casa `0.1.x` with kernel `0.1.x`,
-`0.2.x` with `0.2.x`, `0.3.x` and `0.4.x` with `0.5.x`); mixing them builds two copies of `LicenceTitle`. From `0.3`, `Casa`
+`0.2.x` with `0.2.x`, `0.3.x` to `0.5.x` with `0.5.x`); mixing them builds two copies of `LicenceTitle`. From `0.3`, `Casa`
 implements logbook-shared-kernel's `LicensingAuthority`, so a consumer takes
-that crate at the minor au-casa takes too (`0.2` for au-casa `0.3` and `0.4`): with another,
+that crate at the minor au-casa takes too (`0.2` for au-casa `0.3` and `0.4`, `0.5` for
+au-casa `0.5`): with another,
 `Casa` implements a different trait from the one the consumer names. The
 published set is:
 
 ```toml
 [dependencies]
-au-casa = "0.4"
+au-casa = "0.5"
 aircraft-type-descriptions = "0.1.0"
 icao-shared-kernel = "0.5"
-logbook-shared-kernel = "0.2"
+logbook-shared-kernel = "0.5"
 ```
 
 The aircraft description types (`AircraftDescription`, `AirframeKind`,
