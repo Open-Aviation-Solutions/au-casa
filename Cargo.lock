@@ -300,9 +300,9 @@ checksum = "65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a"
 
 [[package]]
 name = "logbook-shared-kernel"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5055e7797cd4956886a70df7221909167b6a066c9725348051614abf2d66fd6b"
+checksum = "9f7036f7a2bcd0baf2d1084817238be6a6eb1129cdc53ef98fa7b829dc334590"
 dependencies = [
  "aircraft-type-descriptions",
  "icao-shared-kernel",

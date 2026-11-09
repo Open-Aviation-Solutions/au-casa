@@ -20,7 +20,7 @@ path = "src/lib.rs"
 # By caret range, not pinned exactly, so that one copy of each is built with
 # sibling country crates; see INSTRUCTIONS.md ("Purpose and scope").
 icao-shared-kernel = "^0.5"
-logbook-shared-kernel = "^0.4"
+logbook-shared-kernel = "^0.5"
 aircraft-type-descriptions = "^0.1.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
