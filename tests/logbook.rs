@@ -906,7 +906,7 @@ fn with_purposes(purposes: &[(CheckPurpose, CheckOutcome)]) -> AssessmentInforma
 )]
 #[case(
     CheckPurpose::InstrumentEndorsement,
-    "endorsement",
+    "operational_endorsement",
     "instrument_endorsement"
 )]
 fn every_check_purpose_has_its_kind_and_spelling(
@@ -980,13 +980,13 @@ const PURPOSES: AssessmentInformationError =
 #[case::version_1s_check_type(json!({"check_type": "flight review"}), AssessmentInformationError::InvalidAnswer("check_type"))]
 #[case::outcome_as_yes_no(json!({"outcome": true}), AssessmentInformationError::InvalidAnswer("outcome"))]
 #[case::no_purposes(json!({"check_purposes": []}), PURPOSES)]
-#[case::not_a_list(json!({"check_purposes": {"kind": "endorsement", "value": "instrument_endorsement", "answer": "passed"}}), PURPOSES)]
+#[case::not_a_list(json!({"check_purposes": {"kind": "operational_endorsement", "value": "instrument_endorsement", "answer": "passed"}}), PURPOSES)]
 #[case::another_kind(json!({"check_purposes": [{"kind": "operational_rating", "value": "instrument_endorsement", "answer": "passed"}]}), PURPOSES)]
-#[case::no_answer(json!({"check_purposes": [{"kind": "endorsement", "value": "instrument_endorsement"}]}), PURPOSES)]
-#[case::another_answer(json!({"check_purposes": [{"kind": "endorsement", "value": "instrument_endorsement", "answer": "yes"}]}), PURPOSES)]
-#[case::another_key(json!({"check_purposes": [{"kind": "endorsement", "value": "instrument_endorsement", "answer": "passed", "on": "2024-01-01"}]}), PURPOSES)]
+#[case::no_answer(json!({"check_purposes": [{"kind": "operational_endorsement", "value": "instrument_endorsement"}]}), PURPOSES)]
+#[case::another_answer(json!({"check_purposes": [{"kind": "operational_endorsement", "value": "instrument_endorsement", "answer": "yes"}]}), PURPOSES)]
+#[case::another_key(json!({"check_purposes": [{"kind": "operational_endorsement", "value": "instrument_endorsement", "answer": "passed", "on": "2024-01-01"}]}), PURPOSES)]
 #[case::out_of_order(json!({"check_purposes": [
-    {"kind": "endorsement", "value": "instrument_endorsement", "answer": "passed"},
+    {"kind": "operational_endorsement", "value": "instrument_endorsement", "answer": "passed"},
     {"kind": "licence", "value": "private_pilot_licence", "answer": "passed"},
 ]}), PURPOSES)]
 #[case::twice(json!({"check_purposes": [
@@ -1052,7 +1052,7 @@ fn version_1_is_migrated_to_identifiers_and_a_flight_tests_purposes() {
             "check_purpose": "instrument endorsement",
         }))
         .unwrap()["check_purposes"],
-        json!([{"kind": "endorsement", "value": "instrument_endorsement", "answer": "passed"}])
+        json!([{"kind": "operational_endorsement", "value": "instrument_endorsement", "answer": "passed"}])
     );
 }
 

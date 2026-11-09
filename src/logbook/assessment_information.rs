@@ -171,8 +171,12 @@ pub enum PurposeKind {
     ClassRating,
     /// `operational_rating`: an operational rating (reg 61.010).
     OperationalRating,
-    /// `endorsement`.
-    Endorsement,
+    /// `operational_endorsement`: an operational endorsement (reg 61.010),
+    /// such as the instrument endorsement. Not any endorsement: reg
+    /// 61.745(3)(c) has a design feature endorsement's flight training
+    /// completed, not a flight test passed, so it is no flight test's
+    /// purpose.
+    OperationalEndorsement,
 }
 
 impl PurposeKind {
@@ -182,7 +186,7 @@ impl PurposeKind {
         Self::CategoryRating,
         Self::ClassRating,
         Self::OperationalRating,
-        Self::Endorsement,
+        Self::OperationalEndorsement,
     ];
 
     /// Its stored spelling, and its name in Part 61's words.
@@ -192,7 +196,7 @@ impl PurposeKind {
             Self::CategoryRating => ("category_rating", "aircraft category rating"),
             Self::ClassRating => ("class_rating", "aircraft class rating"),
             Self::OperationalRating => ("operational_rating", "operational rating"),
-            Self::Endorsement => ("endorsement", "endorsement"),
+            Self::OperationalEndorsement => ("operational_endorsement", "operational endorsement"),
         }
     }
 
@@ -440,7 +444,7 @@ impl CheckPurpose {
                 "61.010",
             ),
             Self::InstrumentEndorsement => (
-                Endorsement,
+                OperationalEndorsement,
                 "instrument_endorsement",
                 "instrument endorsement",
                 "61.890",

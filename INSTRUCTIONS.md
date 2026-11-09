@@ -48,9 +48,12 @@ answers one such question:
   for `AU-CASA`; and CASA's authority-specific information on an entry
   (`EntryInformation`) and on an assessment (`AssessmentInformation`: the
   check type of regs 61.745(3) and (3A), and its outcome or, for a flight
-  test, which has no outcome of its own, its purposes, each a kind and a
-  value with an outcome of its own, as the kernel's `Answer::Choices`
-  stores them, in the order of `CheckPurpose::ALL`, which is part of the
+  test, which has no outcome of its own, its purposes, each a kind
+  (`licence`, `category_rating`, `class_rating`, `operational_rating` or
+  `operational_endorsement`: not any endorsement, since reg 61.745(3)(c)
+  has a design feature endorsement's flight training completed, not a
+  flight test passed) and a value with an outcome of its own, as the
+  kernel's `Answer::Choices` stores them, in the order of `CheckPurpose::ALL`, which is part of the
   format; the checks read an assessment without the answers to questions
   that do not apply to it, as an entry; au-casa#60), two
   stored formats whose every key and spelling is mapped by hand, with no
