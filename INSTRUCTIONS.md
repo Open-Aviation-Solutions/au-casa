@@ -98,12 +98,17 @@ answers one such question:
   table does not catalogue, from the description the entry carries, as
   pilot-logbook did; an entry with neither is not of any category.
 - **Each requirement has a stable id**, from `logbook::currency`'s
-  `CasaRequirement`: the regulation (bare, `61.395(1)`), and for a flight
+  `CasaRequirement`: the regulation (bare, `61.870(2)`), and for a flight
   review `|` and its class rating's stored name, as pilot-logbook keyed
   them. Reg 61.870(3), which is per category, has one for each of reg
   61.015's five, the regulation, `|` and the category's stored name
   (`61.870(3)|aeroplane`); pilot-logbook had no key for it, so these ids
-  originate here. A host may keep an id, so changing one is a breaking
+  originate here. Regs 61.395(1) and (2) and 61.965(a) require take-offs
+  and landings, counted separately, so each is two requirements, one for
+  each, with the regulation as its `regulation` and the paragraph that
+  requires the movement as its id (`61.395(1)(a)` for the take-offs,
+  `61.395(1)(b)` for the landings, `61.965(a)(i)` and `61.965(a)(ii)`); these
+  originate here too (au-casa#67). A host may keep an id, so changing one is a breaking
   change. A new check is a `CasaRequirement` variant (a `match` on it will not compile
   without its id, name and regulation), a row of `REQUIREMENTS`, and its
   result paired with that variant in `currency`; a test fails until the

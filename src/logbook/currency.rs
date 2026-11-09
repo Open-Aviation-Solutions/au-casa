@@ -22,7 +22,8 @@ mod single_pilot_ifr;
 
 use logbook_shared_kernel::{
     run, run_assessments, AssessmentAccumulator, AssessmentCurrencyCheck, CurrencyCheck,
-    CurrencyResult, EntryAccumulator, LicensingAuthority, Logbook, Requirement, RequirementId,
+    CurrencyResult, DayNight, Entry, EntryAccumulator, LicensingAuthority, Logbook, Requirement,
+    RequirementId,
 };
 use serde::Serialize;
 use time::Date;
@@ -41,12 +42,38 @@ use passenger_day::PassengerDay;
 use passenger_night::PassengerNight;
 use single_pilot_ifr::SinglePilotIfr;
 
+/// A take-off or a landing. Regs 61.395(1) and (2) and 61.965(a) each
+/// require some of both, counted separately, so each is two requirements,
+/// one for each movement.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Movement {
+    TakeOff,
+    Landing,
+}
+
+/// The movements, take-offs first, as the regulations list them.
+const MOVEMENTS: [Movement; 2] = [Movement::TakeOff, Movement::Landing];
+
+impl Movement {
+    /// The entry's movements of this kind, by day and at night.
+    fn of(self, entry: &Entry) -> DayNight<u32> {
+        match self {
+            Self::TakeOff => entry.take_offs(),
+            Self::Landing => entry.landings(),
+        }
+    }
+}
+
 /// A requirement CASA's rules check.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CasaRequirement {
-    PassengerDay,
-    PassengerNight,
-    NightVfr,
+    /// Reg 61.395(1)'s take-offs (paragraph (a)) or landings ((b)).
+    PassengerDay(Movement),
+    /// Reg 61.395(2)'s take-offs (paragraph (a)) or landings ((b)).
+    PassengerNight(Movement),
+    /// Reg 61.965(a)'s night take-off (subparagraph (i)) or night landing
+    /// ((ii)).
+    NightVfr(Movement),
     InstrumentApproaches,
     /// Reg 61.870(3)'s instrument approach operation in this category.
     InstrumentApproachesInCategory(AircraftCategory),
@@ -71,14 +98,18 @@ const CATEGORIES: [AircraftCategory; 5] = [
 ];
 
 /// The requirements, in the order they are reported. Aeroplane recency
-/// comes first, then instrument recency, then the flight reviews and the
-/// instrument proficiency check, as pilot-logbook listed them; instrument
+/// comes first, take-offs before landings for each regulation, then
+/// instrument recency, then the flight reviews and the instrument
+/// proficiency check, as pilot-logbook listed them; instrument
 /// recency is in reg 61.870's order, with a requirement of its subregulation
 /// (3) for each category in reg 61.015's.
-const REQUIREMENTS: [CasaRequirement; 17] = [
-    CasaRequirement::PassengerDay,
-    CasaRequirement::PassengerNight,
-    CasaRequirement::NightVfr,
+const REQUIREMENTS: [CasaRequirement; 20] = [
+    CasaRequirement::PassengerDay(Movement::TakeOff),
+    CasaRequirement::PassengerDay(Movement::Landing),
+    CasaRequirement::PassengerNight(Movement::TakeOff),
+    CasaRequirement::PassengerNight(Movement::Landing),
+    CasaRequirement::NightVfr(Movement::TakeOff),
+    CasaRequirement::NightVfr(Movement::Landing),
     CasaRequirement::InstrumentApproaches,
     CasaRequirement::InstrumentApproachesInCategory(CATEGORIES[0]),
     CasaRequirement::InstrumentApproachesInCategory(CATEGORIES[1]),
@@ -99,9 +130,9 @@ impl CasaRequirement {
     /// The regulation that sets it, bare (`61.395(1)`).
     fn regulation(self) -> &'static str {
         match self {
-            Self::PassengerDay => "61.395(1)",
-            Self::PassengerNight => "61.395(2)",
-            Self::NightVfr => "61.965",
+            Self::PassengerDay(_) => "61.395(1)",
+            Self::PassengerNight(_) => "61.395(2)",
+            Self::NightVfr(_) => "61.965",
             Self::InstrumentApproaches => "61.870(2)",
             Self::InstrumentApproachesInCategory(_) => "61.870(3)",
             Self::InstrumentApproaches2D => "61.870(4)",
@@ -118,14 +149,31 @@ impl CasaRequirement {
     /// rating's stored name (`61.745|single-engine-aeroplane`), each
     /// pilot-logbook's key for it (its `wording.ts`); for reg 61.870(3), `|`
     /// and the category's stored name (`61.870(3)|aeroplane`), which
-    /// originate here, since pilot-logbook had no key for it. Stable: a
-    /// host may keep it.
+    /// originate here, since pilot-logbook had no key for it; for the
+    /// take-offs and landings of regs 61.395(1) and (2) and 61.965(a), the
+    /// paragraph that requires them (`61.395(1)(a)`, `61.965(a)(ii)`), which
+    /// originate here too (au-casa#67). Stable: a host may keep it.
     fn id(self) -> RequirementId {
         match self {
             Self::FlightReview(class_rating) => self.qualified(class_rating),
             Self::InstrumentApproachesInCategory(category) => self.qualified(category),
+            Self::PassengerDay(movement) | Self::PassengerNight(movement) => {
+                self.paragraph(match movement {
+                    Movement::TakeOff => "(a)",
+                    Movement::Landing => "(b)",
+                })
+            }
+            Self::NightVfr(movement) => self.paragraph(match movement {
+                Movement::TakeOff => "(a)(i)",
+                Movement::Landing => "(a)(ii)",
+            }),
             _ => RequirementId::new(self.regulation()),
         }
+    }
+
+    /// The regulation, then `paragraph`.
+    fn paragraph(self, paragraph: &str) -> RequirementId {
+        RequirementId::new(format!("{}{paragraph}", self.regulation()))
     }
 
     /// The regulation, `|` and `value`'s stored name.
@@ -138,11 +186,27 @@ impl CasaRequirement {
     /// Its name, in its regulation's words.
     fn name(self) -> String {
         match self {
-            Self::PassengerDay => "Carrying a passenger by day in an aeroplane".to_owned(),
-            Self::PassengerNight => "Carrying a passenger at night in an aeroplane".to_owned(),
-            Self::NightVfr => {
-                "Recent experience for the night VFR rating in an aeroplane".to_owned()
-            }
+            Self::PassengerDay(movement) => format!(
+                "Carrying a passenger by day in an aeroplane: at least 3 {}, by day or night",
+                match movement {
+                    Movement::TakeOff => "take-offs",
+                    Movement::Landing => "landings",
+                }
+            ),
+            Self::PassengerNight(movement) => format!(
+                "Carrying a passenger at night in an aeroplane: at least 3 {} at night",
+                match movement {
+                    Movement::TakeOff => "take-offs",
+                    Movement::Landing => "landings",
+                }
+            ),
+            Self::NightVfr(movement) => format!(
+                "Recent experience for the night VFR rating in an aeroplane: at least one {}",
+                match movement {
+                    Movement::TakeOff => "night take-off",
+                    Movement::Landing => "night landing",
+                }
+            ),
             Self::InstrumentApproaches => "At least 3 instrument approach operations".to_owned(),
             Self::InstrumentApproachesInCategory(category) => {
                 format!(
@@ -192,9 +256,9 @@ pub(super) fn currency(
     as_of: Date,
     logbook: &Logbook,
 ) -> Vec<(RequirementId, CurrencyResult)> {
-    let mut passenger_day = PassengerDay::new(as_of);
-    let mut passenger_night = PassengerNight::new(as_of);
-    let mut night_vfr = NightVfr::new(as_of);
+    let mut passenger_day = MOVEMENTS.map(|movement| PassengerDay::new(as_of, movement));
+    let mut passenger_night = MOVEMENTS.map(|movement| PassengerNight::new(as_of, movement));
+    let mut night_vfr = MOVEMENTS.map(|movement| NightVfr::new(as_of, movement));
     let mut approaches = InstrumentApproaches::new(as_of);
     let mut in_category =
         CATEGORIES.map(|category| InstrumentApproaches::in_category(as_of, category));
@@ -203,10 +267,16 @@ pub(super) fn currency(
     let mut azimuth_guidance = GuidanceOperations::azimuth_guidance(as_of);
     let mut course_deviation_indicator = GuidanceOperations::course_deviation_indicator(as_of);
     let mut single_pilot_ifr = SinglePilotIfr::new(as_of);
+    let [day_take_offs, day_landings] = &mut passenger_day;
+    let [night_take_offs, night_landings] = &mut passenger_night;
+    let [night_vfr_take_offs, night_vfr_landings] = &mut night_vfr;
     let mut accumulators: Vec<&mut dyn EntryAccumulator> = vec![
-        &mut passenger_day,
-        &mut passenger_night,
-        &mut night_vfr,
+        day_take_offs,
+        day_landings,
+        night_take_offs,
+        night_landings,
+        night_vfr_take_offs,
+        night_vfr_landings,
         &mut approaches,
         &mut approaches_2d,
         &mut approaches_3d,
@@ -246,44 +316,55 @@ pub(super) fn currency(
             )
         });
 
-    [
-        (CasaRequirement::PassengerDay, passenger_day.result()),
-        (CasaRequirement::PassengerNight, passenger_night.result()),
-        (CasaRequirement::NightVfr, night_vfr.result()),
-        (CasaRequirement::InstrumentApproaches, approaches.result()),
-    ]
-    .into_iter()
-    .chain(in_category)
-    .chain([
-        (
-            CasaRequirement::InstrumentApproaches2D,
-            approaches_2d.result(),
-        ),
-        (
-            CasaRequirement::InstrumentApproaches3D,
-            approaches_3d.result(),
-        ),
-        (CasaRequirement::AzimuthGuidance, azimuth_guidance.result()),
-        (
-            CasaRequirement::CourseDeviationIndicator,
-            course_deviation_indicator.result(),
-        ),
-        (CasaRequirement::SinglePilotIfr, single_pilot_ifr.result()),
-        (
-            CasaRequirement::FlightReview(single_engine),
-            single_engine_review.result(),
-        ),
-        (
-            CasaRequirement::FlightReview(multi_engine),
-            multi_engine_review.result(),
-        ),
-        (
-            CasaRequirement::InstrumentProficiencyCheck,
-            proficiency_check.result(),
-        ),
-    ])
-    .map(|(requirement, result)| (requirement.id(), result))
-    .collect()
+    /// Each movement's result, paired with its requirement.
+    fn by_movement<C: CurrencyCheck>(
+        requirement: fn(Movement) -> CasaRequirement,
+        checks: &[C; 2],
+    ) -> impl Iterator<Item = (CasaRequirement, CurrencyResult)> + '_ {
+        MOVEMENTS
+            .into_iter()
+            .zip(checks)
+            .map(move |(movement, check)| (requirement(movement), check.result()))
+    }
+
+    by_movement(CasaRequirement::PassengerDay, &passenger_day)
+        .chain(by_movement(
+            CasaRequirement::PassengerNight,
+            &passenger_night,
+        ))
+        .chain(by_movement(CasaRequirement::NightVfr, &night_vfr))
+        .chain([(CasaRequirement::InstrumentApproaches, approaches.result())])
+        .chain(in_category)
+        .chain([
+            (
+                CasaRequirement::InstrumentApproaches2D,
+                approaches_2d.result(),
+            ),
+            (
+                CasaRequirement::InstrumentApproaches3D,
+                approaches_3d.result(),
+            ),
+            (CasaRequirement::AzimuthGuidance, azimuth_guidance.result()),
+            (
+                CasaRequirement::CourseDeviationIndicator,
+                course_deviation_indicator.result(),
+            ),
+            (CasaRequirement::SinglePilotIfr, single_pilot_ifr.result()),
+            (
+                CasaRequirement::FlightReview(single_engine),
+                single_engine_review.result(),
+            ),
+            (
+                CasaRequirement::FlightReview(multi_engine),
+                multi_engine_review.result(),
+            ),
+            (
+                CasaRequirement::InstrumentProficiencyCheck,
+                proficiency_check.result(),
+            ),
+        ])
+        .map(|(requirement, result)| (requirement.id(), result))
+        .collect()
 }
 
 #[cfg(test)]
@@ -368,7 +449,8 @@ mod tests {
         assert_eq!(
             current,
             [
-                "61.395(1)",
+                "61.395(1)(a)",
+                "61.395(1)(b)",
                 "61.870(3)|aeroplane",
                 "61.870(5)",
                 "61.870(6)",
