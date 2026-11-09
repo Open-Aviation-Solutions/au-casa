@@ -248,7 +248,8 @@ public, tested function that rewrites one record's stored information from
 the previous version to the new one, and refuses, with the reason, what it
 cannot rewrite without guessing, so that the pilot fills it in by hand
 (`AssessmentInformation::migrate_from_version_1`, for the assessment
-format's version 2). It knows the format, and nothing of where a host
+format's version 2). Information of the new version already is given back
+as it is, once it reads, so the migration can be run again. It knows the format, and nothing of where a host
 keeps its records. The host's take-up of the release runs it over the data
 repository: for version 2 of the assessment format, pilot-logbook#206's
 `make migrate-assessment-purposes` (with `--report`) calls the function

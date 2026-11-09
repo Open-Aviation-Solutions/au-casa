@@ -9,7 +9,10 @@
 use logbook_shared_kernel::AuthoritySpecificInformation;
 use thiserror::Error;
 
-use super::{AssessedPurpose, AssessmentInformation, CheckOutcome, CheckPurpose, CheckType};
+use super::{
+    AssessedPurpose, AssessmentInformation, AssessmentInformationError, CheckOutcome, CheckPurpose,
+    CheckType,
+};
 use crate::logbook::stored::{self, Unreadable};
 
 const VERSION: u32 = 1;
@@ -21,8 +24,11 @@ const KEYS: [&str; 3] = [super::CHECK_TYPE, super::OUTCOME, CHECK_PURPOSE];
 pub enum MigrationError {
     #[error("CASA's information on an assessment is not a JSON object")]
     NotAnObject,
-    #[error("CASA's information on an assessment is not of version 1")]
+    #[error("CASA's information on an assessment is not of version 1 or 2")]
     NotVersion1,
+    /// Information of version 2 already, which cannot be read.
+    #[error(transparent)]
+    Unreadable(AssessmentInformationError),
     #[error("CASA's information on an assessment of version 1 has no key {0:?}")]
     UnknownKey(String),
     #[error(

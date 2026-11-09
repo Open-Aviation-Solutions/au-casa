@@ -124,9 +124,9 @@ mod tests {
 
     use super::*;
     use crate::logbook::test_support::{
-        aeroplane, assessed, entry, flown, on_flight, simulated, unclassified,
+        aeroplane, assessed, entry, flight_test, flown, on_flight, simulated, unclassified,
     };
-    use crate::logbook::{casa, AssessedPurpose, CheckPurpose};
+    use crate::logbook::{casa, CheckPurpose};
 
     use AircraftClassRating::{MultiEngineAeroplane as Mea, SingleEngineAeroplane as Sea};
 
@@ -147,18 +147,6 @@ mod tests {
             }
         };
         assessed("a", on, 1, information)
-    }
-
-    /// A flight test for these purposes, each with its outcome.
-    fn flight_test(purposes: &[(CheckPurpose, CheckOutcome)]) -> AssessmentInformation {
-        AssessmentInformation {
-            check_type: Some(CheckType::FlightTest),
-            outcome: None,
-            check_purposes: purposes
-                .iter()
-                .map(|&(purpose, outcome)| AssessedPurpose { purpose, outcome })
-                .collect(),
-        }
     }
 
     /// A passed flight review on flight 1.

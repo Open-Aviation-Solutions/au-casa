@@ -6,7 +6,7 @@
 
 mod version_1;
 
-use logbook_shared_kernel::{AuthoritySpecificInformation, Questions};
+use logbook_shared_kernel::AuthoritySpecificInformation;
 use serde_json::{json, Map, Value};
 use thiserror::Error;
 
@@ -163,7 +163,7 @@ pub enum PurposeKind {
     /// `category_rating`: an aircraft category rating for an existing pilot
     /// licence (reg 61.730(3)).
     CategoryRating,
-    /// `class_rating`: an aircraft class rating (reg 61.020).
+    /// `class_rating`: an aircraft class rating (reg 61.750).
     ClassRating,
     /// `operational_rating`: an operational rating (reg 61.010).
     OperationalRating,
@@ -208,27 +208,31 @@ impl PurposeKind {
 /// instrument endorsement, are left out until they are needed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CheckPurpose {
-    /// The pilot licences of reg 61.010.
-    RecreationalPilotLicence,
-    PrivatePilotLicence,
+    /// The pilot licences, in reg 61.010's order.
+    AirTransportPilotLicence,
     CommercialPilotLicence,
     MultiCrewPilotLicence,
-    AirTransportPilotLicence,
-    /// The category ratings, one for each category of reg 61.015.
+    PrivatePilotLicence,
+    RecreationalPilotLicence,
+    /// The category ratings, one for each category of reg 61.015, in its
+    /// order.
     AeroplaneCategoryRating,
     HelicopterCategoryRating,
     PoweredLiftAircraftCategoryRating,
     GyroplaneCategoryRating,
     AirshipCategoryRating,
-    /// The class ratings, one for each class of reg 61.020
-    /// ([`AircraftClassRating`](crate::aircraft::AircraftClassRating)).
+    /// The aircraft class ratings of Division 61.L.3, one for each class of
+    /// reg 61.020(1)
+    /// ([`AircraftClassRating`](crate::aircraft::AircraftClassRating)), in
+    /// its order, each named as Part 61 names one ("single-engine aeroplane
+    /// class rating", reg 61.375(4)).
     SingleEngineAeroplaneClassRating,
     MultiEngineAeroplaneClassRating,
     SingleEngineHelicopterClassRating,
     PoweredLiftAircraftClassRating,
     SingleEngineGyroplaneClassRating,
     AirshipClassRating,
-    /// The operational ratings, as reg 61.010 defines them.
+    /// The operational ratings, as reg 61.010 defines them, in its order.
     AerialApplicationRating,
     ExaminerRating,
     InstructorRating,
@@ -238,7 +242,8 @@ pub enum CheckPurpose {
     NightVfrRating,
     NightVisionImagingSystemRating,
     PrivateInstrumentRating,
-    /// "The flight test for an instrument endorsement" (reg 61.880(3)(b)).
+    /// "The flight test for an instrument endorsement" (reg 61.880(3)(b)),
+    /// one of the kinds of reg 61.890.
     InstrumentEndorsement,
 }
 
@@ -247,11 +252,11 @@ impl CheckPurpose {
     /// within a kind in its regulation's order: the order CASA's question
     /// offers them in, and they are stored in.
     pub const ALL: [Self; 25] = [
-        Self::RecreationalPilotLicence,
-        Self::PrivatePilotLicence,
+        Self::AirTransportPilotLicence,
         Self::CommercialPilotLicence,
         Self::MultiCrewPilotLicence,
-        Self::AirTransportPilotLicence,
+        Self::PrivatePilotLicence,
+        Self::RecreationalPilotLicence,
         Self::AeroplaneCategoryRating,
         Self::HelicopterCategoryRating,
         Self::PoweredLiftAircraftCategoryRating,
@@ -381,13 +386,15 @@ impl CheckPurpose {
                 "instrument endorsement",
             ),
         };
-        // Reg 61.010 defines the pilot licences, the operational ratings and
-        // the instrument endorsement; reg 61.730(3) grants a category rating
-        // for an existing licence; reg 61.020 lists the classes.
+        // Reg 61.010 defines the pilot licences and the operational
+        // ratings; reg 61.730(3) grants a category rating for an existing
+        // licence, and reg 61.750 a class rating; reg 61.890 sets out the
+        // kinds of instrument endorsement.
         let regulation = match kind {
-            Licence | OperationalRating | Endorsement => "61.010",
+            Licence | OperationalRating => "61.010",
             CategoryRating => "61.730(3)",
-            ClassRating => "61.020",
+            ClassRating => "61.750",
+            Endorsement => "61.890",
         };
         (kind, value, label, regulation)
     }
@@ -444,6 +451,10 @@ pub enum AssessmentInformationError {
     UnknownKey(String),
     #[error("CASA's information on an assessment holds no answer of its kind under {0:?}")]
     InvalidAnswer(&'static str),
+    /// An answer its check does not take: an outcome of a flight test's own,
+    /// or purposes of another check.
+    #[error("CASA's information on an assessment answers {0:?}, which its check does not take")]
+    NotOfItsCheck(&'static str),
 }
 
 impl AssessmentInformationError {
@@ -476,7 +487,9 @@ impl AssessmentInformation {
     /// `Answer::Choices` accepts them: a list of at least one
     /// `{"kind", "value", "answer"}`, with no other key, in the order of
     /// [`CheckPurpose::ALL`] and none listed twice. An empty list is
-    /// refused, as no purposes are stored as no key.
+    /// refused, as no purposes are stored as no key. A flight test has no
+    /// outcome of its own, and no other check has purposes, so that the two
+    /// cannot disagree: information that holds either is refused.
     pub fn read(
         information: &AuthoritySpecificInformation,
     ) -> Result<Self, AssessmentInformationError> {
@@ -502,20 +515,43 @@ impl AssessmentInformation {
     ///
     /// It guesses nothing: a flight test with no purpose, or with a purpose
     /// and no outcome, is refused, for its purposes to be filled in by hand,
-    /// as is information that cannot be read as version 1.
+    /// as is information that cannot be read as version 1. Information of
+    /// this version already, such as a flight test filled in so, is given
+    /// back as it is once it reads, so that a migration can be run again.
     pub fn migrate_from_version_1(
         information: &AuthoritySpecificInformation,
     ) -> Result<AuthoritySpecificInformation, MigrationError> {
-        let mut migrated = version_1::migrate(information)?.to_information();
-        Questions::new(Self::VERSION, Vec::new()).stamp(&mut migrated);
-        Ok(migrated)
+        if information.version() == Some(Self::VERSION) {
+            Self::read(information).map_err(MigrationError::Unreadable)?;
+            return Ok(information.clone());
+        }
+        let mut migrated = version_1::migrate(information)?
+            .to_information()
+            .into_value();
+        if let Some(answers) = migrated.as_object_mut() {
+            answers.insert(
+                AuthoritySpecificInformation::VERSION_KEY.into(),
+                Self::VERSION.into(),
+            );
+        }
+        Ok(AuthoritySpecificInformation::new(migrated))
     }
 
     fn read_with(
         information: &AuthoritySpecificInformation,
         stored: bool,
     ) -> Result<Self, AssessmentInformationError> {
-        Self::read_answers(information, stored).map_err(AssessmentInformationError::from_unreadable)
+        let read = Self::read_answers(information, stored)
+            .map_err(AssessmentInformationError::from_unreadable)?;
+        match read.check_type {
+            Some(CheckType::FlightTest) if read.outcome.is_some() => {
+                Err(AssessmentInformationError::NotOfItsCheck(OUTCOME))
+            }
+            Some(check) if check != CheckType::FlightTest && !read.check_purposes.is_empty() => {
+                Err(AssessmentInformationError::NotOfItsCheck(CHECK_PURPOSES))
+            }
+            _ => Ok(read),
+        }
     }
 
     fn read_answers(
@@ -580,9 +616,12 @@ fn purposes(value: &Value) -> Option<Vec<AssessedPurpose>> {
     for item in value.as_array()? {
         let item = item.as_object().filter(|item| item.len() == 3)?;
         let field = |key| item.get(key).and_then(Value::as_str);
-        let purpose = CheckPurpose::parse(field("kind")?, field("value")?)?;
+        let (kind, value) = (field("kind")?, field("value")?);
+        let position = CheckPurpose::ALL
+            .iter()
+            .position(|p| p.kind().as_str() == kind && p.as_str() == value)?;
+        let purpose = CheckPurpose::ALL[position];
         let outcome = CheckOutcome::parse(field("answer")?)?;
-        let position = CheckPurpose::ALL.iter().position(|p| *p == purpose)?;
         if previous.is_some_and(|previous| position <= previous) {
             return None;
         }

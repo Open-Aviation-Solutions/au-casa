@@ -267,7 +267,7 @@ mod tests {
     use time::macros::date;
 
     use super::*;
-    use crate::logbook::test_support::assessed;
+    use crate::logbook::test_support::{assessed, flight_test};
     use crate::logbook::{casa, AssessmentInformation};
 
     const REFERENCE: Date = date!(2024 - 09 - 01);
@@ -282,14 +282,11 @@ mod tests {
         check_purpose: Option<CheckPurpose>,
     ) -> Assessment {
         let information = if check_type == CheckType::FlightTest {
-            AssessmentInformation {
-                check_type: Some(check_type),
-                outcome: None,
-                check_purposes: check_purpose
-                    .map(|purpose| AssessedPurpose { purpose, outcome })
-                    .into_iter()
-                    .collect(),
-            }
+            let purposes: Vec<_> = check_purpose
+                .map(|purpose| (purpose, outcome))
+                .into_iter()
+                .collect();
+            flight_test(&purposes)
         } else {
             AssessmentInformation {
                 check_type: Some(check_type),
@@ -483,21 +480,8 @@ mod tests {
     fn a_flight_test_counts_by_its_instrument_purposes_outcomes() {
         use CheckOutcome::{Failed, Passed};
         let on = date!(2024 - 08 - 02);
-        let test = |purposes: &[(CheckPurpose, CheckOutcome)]| {
-            assessed(
-                "t",
-                on,
-                1,
-                AssessmentInformation {
-                    check_type: Some(CheckType::FlightTest),
-                    outcome: None,
-                    check_purposes: purposes
-                        .iter()
-                        .map(|&(purpose, outcome)| AssessedPurpose { purpose, outcome })
-                        .collect(),
-                },
-            )
-        };
+        let test =
+            |purposes: &[(CheckPurpose, CheckOutcome)]| assessed("t", on, 1, flight_test(purposes));
         let class = CheckPurpose::MultiEngineAeroplaneClassRating;
         let partly = test(&[(class, Passed), (CheckPurpose::InstrumentRating, Failed)]);
         assert!(!result(&[partly]).is_current());

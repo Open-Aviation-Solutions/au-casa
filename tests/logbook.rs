@@ -340,6 +340,10 @@ fn every_question_is_a_key_of_its_format() {
         let mut answers = serde_json::Map::new();
         for question in &questions {
             answers.insert(question.key.into(), an_answer(question));
+            let alone = json!({ question.key: an_answer(question) });
+            assert!(casa
+                .problems_for(record, &AuthoritySpecificInformation::new(alone))
+                .is_empty());
             if let Answer::Choice(choices) = &question.answer {
                 for choice in choices {
                     let one = json!({ question.key: choice.value });
@@ -350,9 +354,11 @@ fn every_question_is_a_key_of_its_format() {
             }
         }
         assert_eq!(answers.len(), questions.iter().count());
-        assert!(casa
-            .problems_for(record, &AuthoritySpecificInformation::new(answers.into()))
-            .is_empty());
+        // Together, once the host has removed the answers to questions that
+        // do not apply (an outcome of a flight test's own, for one).
+        let mut information = AuthoritySpecificInformation::new(answers.into());
+        questions.retain_applicable_answers_for(record, &mut information);
+        assert!(casa.problems_for(record, &information).is_empty());
     }
 }
 
@@ -950,6 +956,16 @@ const PURPOSES: AssessmentInformationError =
     {"kind": "licence", "value": "private_pilot_licence", "answer": "passed"},
     {"kind": "licence", "value": "private_pilot_licence", "answer": "failed"},
 ]}), PURPOSES)]
+#[case::a_flight_tests_own_outcome(json!({
+    "check_type": "flight_test",
+    "outcome": "passed",
+    "check_purposes": [{"kind": "licence", "value": "private_pilot_licence", "answer": "passed"}],
+}), AssessmentInformationError::NotOfItsCheck("outcome"))]
+#[case::another_checks_purposes(json!({
+    "check_type": "flight_review",
+    "outcome": "passed",
+    "check_purposes": [{"kind": "licence", "value": "private_pilot_licence", "answer": "passed"}],
+}), AssessmentInformationError::NotOfItsCheck("check_purposes"))]
 fn what_is_not_the_assessment_format_is_refused(
     #[case] stored: Value,
     #[case] error: AssessmentInformationError,
@@ -1034,7 +1050,8 @@ fn version_1s_purpose_on_another_check_is_left_out() {
 #[case::no_purpose(json!({"_version": 1, "check_type": "flight test", "outcome": "passed", "check_purpose": null}), MigrationError::NoPurpose)]
 #[case::no_outcome(json!({"_version": 1, "check_type": "flight test", "check_purpose": "instrument rating"}), MigrationError::NoOutcome)]
 #[case::not_an_object(json!(null), MigrationError::NotAnObject)]
-#[case::version_2(json!({"_version": 2, "check_type": "flight_review", "outcome": "passed"}), MigrationError::NotVersion1)]
+#[case::version_3(json!({"_version": 3, "check_type": "flight_review", "outcome": "passed"}), MigrationError::NotVersion1)]
+#[case::unreadable_version_2(json!({"_version": 2, "check_type": "flight test"}), MigrationError::Unreadable(AssessmentInformationError::InvalidAnswer("check_type")))]
 #[case::no_version(json!({"check_type": "flight review", "outcome": "passed"}), MigrationError::NotVersion1)]
 #[case::unknown_key(json!({"_version": 1, "check_purposes": []}), MigrationError::UnknownKey("check_purposes".into()))]
 #[case::another_purpose(json!({"_version": 1, "check_type": "flight test", "outcome": "passed", "check_purpose": "private pilot licence"}), MigrationError::InvalidAnswer("check_purpose"))]
@@ -1043,4 +1060,19 @@ fn what_cannot_be_migrated_is_refused_for_the_owner_to_fill_in(
     #[case] error: MigrationError,
 ) {
     assert_eq!(migrated(stored), Err(error));
+}
+
+/// Information of version 2 already, such as a flight test the owner has
+/// filled in, is given back as it is, so the migration can be run again.
+#[test]
+fn version_2_is_given_back_as_it_is() {
+    let filled_in = json!({
+        "_version": 2,
+        "check_type": "flight_test",
+        "check_purposes": [{"kind": "licence", "value": "private_pilot_licence", "answer": "passed"}],
+    });
+    assert_eq!(migrated(filled_in.clone()), Ok(filled_in));
+    let once = migrated(json!({"_version": 1, "check_type": "flight review", "outcome": "passed"}))
+        .unwrap();
+    assert_eq!(migrated(once.clone()), Ok(once));
 }
