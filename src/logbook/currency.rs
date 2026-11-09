@@ -2,8 +2,9 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! CASA's currency checks, one module for each regulation, written over the
-//! kernel's [`EventWindow`](logbook_shared_kernel::EventWindow), and the
+//! CASA's currency checks, a module for each regulation or for regulations
+//! whose checks differ only in their figures, written over the kernel's
+//! [`EventWindow`](logbook_shared_kernel::EventWindow), and the
 //! requirements they answer. Each sees only the entries
 //! [`Casa::counts`](crate::Casa) lets through, so none repeats that gate. A
 //! check over assessments ([`AssessmentCurrencyCheck`]) that reads their
@@ -15,10 +16,8 @@ mod instrument_approaches;
 mod instrument_approaches_2d;
 mod instrument_approaches_3d;
 mod instrument_proficiency_check;
-mod night_vfr;
-mod passenger_day;
-mod passenger_night;
 mod single_pilot_ifr;
+mod take_offs_and_landings;
 
 use logbook_shared_kernel::{
     run, run_assessments, AssessmentAccumulator, AssessmentCurrencyCheck, CurrencyCheck,
@@ -36,17 +35,19 @@ use instrument_approaches::InstrumentApproaches;
 use instrument_approaches_2d::InstrumentApproaches2D;
 use instrument_approaches_3d::InstrumentApproaches3D;
 use instrument_proficiency_check::InstrumentProficiencyCheck;
-use night_vfr::NightVfr;
-use passenger_day::PassengerDay;
-use passenger_night::PassengerNight;
 use single_pilot_ifr::SinglePilotIfr;
+use take_offs_and_landings::{TakeOffsAndLandings, TakeOffsOrLandings, TAKE_OFFS_AND_LANDINGS};
 
 /// A requirement CASA's rules check.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CasaRequirement {
-    PassengerDay,
-    PassengerNight,
-    NightVfr,
+    /// Reg 61.395(1)'s take-offs (paragraph (a)) or landings ((b)).
+    PassengerDay(TakeOffsOrLandings),
+    /// Reg 61.395(2)'s take-offs (paragraph (a)) or landings ((b)).
+    PassengerNight(TakeOffsOrLandings),
+    /// Reg 61.965(a)'s night take-off (subparagraph (i)) or night landing
+    /// ((ii)).
+    NightVfr(TakeOffsOrLandings),
     InstrumentApproaches,
     /// Reg 61.870(3)'s instrument approach operation in this category.
     InstrumentApproachesInCategory(AircraftCategory),
@@ -71,14 +72,18 @@ const CATEGORIES: [AircraftCategory; 5] = [
 ];
 
 /// The requirements, in the order they are reported. Aeroplane recency
-/// comes first, then instrument recency, then the flight reviews and the
-/// instrument proficiency check, as pilot-logbook listed them; instrument
+/// comes first, take-offs before landings for each regulation, then
+/// instrument recency, then the flight reviews and the instrument
+/// proficiency check, as pilot-logbook listed them; instrument
 /// recency is in reg 61.870's order, with a requirement of its subregulation
 /// (3) for each category in reg 61.015's.
-const REQUIREMENTS: [CasaRequirement; 17] = [
-    CasaRequirement::PassengerDay,
-    CasaRequirement::PassengerNight,
-    CasaRequirement::NightVfr,
+const REQUIREMENTS: [CasaRequirement; 20] = [
+    CasaRequirement::PassengerDay(TakeOffsOrLandings::TakeOffs),
+    CasaRequirement::PassengerDay(TakeOffsOrLandings::Landings),
+    CasaRequirement::PassengerNight(TakeOffsOrLandings::TakeOffs),
+    CasaRequirement::PassengerNight(TakeOffsOrLandings::Landings),
+    CasaRequirement::NightVfr(TakeOffsOrLandings::TakeOffs),
+    CasaRequirement::NightVfr(TakeOffsOrLandings::Landings),
     CasaRequirement::InstrumentApproaches,
     CasaRequirement::InstrumentApproachesInCategory(CATEGORIES[0]),
     CasaRequirement::InstrumentApproachesInCategory(CATEGORIES[1]),
@@ -96,12 +101,13 @@ const REQUIREMENTS: [CasaRequirement; 17] = [
 ];
 
 impl CasaRequirement {
-    /// The regulation that sets it, bare (`61.395(1)`).
+    /// The regulation that sets it, bare: `61.395(1)`, which sets
+    /// `61.395(1)(a)` and `(b)`.
     fn regulation(self) -> &'static str {
         match self {
-            Self::PassengerDay => "61.395(1)",
-            Self::PassengerNight => "61.395(2)",
-            Self::NightVfr => "61.965",
+            Self::PassengerDay(_) => "61.395(1)",
+            Self::PassengerNight(_) => "61.395(2)",
+            Self::NightVfr(_) => "61.965",
             Self::InstrumentApproaches => "61.870(2)",
             Self::InstrumentApproachesInCategory(_) => "61.870(3)",
             Self::InstrumentApproaches2D => "61.870(4)",
@@ -118,14 +124,29 @@ impl CasaRequirement {
     /// rating's stored name (`61.745|single-engine-aeroplane`), each
     /// pilot-logbook's key for it (its `wording.ts`); for reg 61.870(3), `|`
     /// and the category's stored name (`61.870(3)|aeroplane`), which
-    /// originate here, since pilot-logbook had no key for it. Stable: a
-    /// host may keep it.
+    /// originate here, since pilot-logbook had no key for it; for the
+    /// take-offs and landings of regs 61.395(1) and (2) and 61.965(a), the
+    /// paragraph that requires them (`61.395(1)(a)`, `61.965(a)(ii)`), which
+    /// originate here too (au-casa#67). Stable: a host may keep it.
     fn id(self) -> RequirementId {
         match self {
             Self::FlightReview(class_rating) => self.qualified(class_rating),
             Self::InstrumentApproachesInCategory(category) => self.qualified(category),
+            Self::PassengerDay(kind) | Self::PassengerNight(kind) => self.paragraph(match kind {
+                TakeOffsOrLandings::TakeOffs => "(a)",
+                TakeOffsOrLandings::Landings => "(b)",
+            }),
+            Self::NightVfr(kind) => self.paragraph(match kind {
+                TakeOffsOrLandings::TakeOffs => "(a)(i)",
+                TakeOffsOrLandings::Landings => "(a)(ii)",
+            }),
             _ => RequirementId::new(self.regulation()),
         }
+    }
+
+    /// The regulation, then `paragraph`.
+    fn paragraph(self, paragraph: &str) -> RequirementId {
+        RequirementId::new(format!("{}{paragraph}", self.regulation()))
     }
 
     /// The regulation, `|` and `value`'s stored name.
@@ -138,11 +159,18 @@ impl CasaRequirement {
     /// Its name, in its regulation's words.
     fn name(self) -> String {
         match self {
-            Self::PassengerDay => "Carrying a passenger by day in an aeroplane".to_owned(),
-            Self::PassengerNight => "Carrying a passenger at night in an aeroplane".to_owned(),
-            Self::NightVfr => {
-                "Recent experience for the night VFR rating in an aeroplane".to_owned()
-            }
+            Self::PassengerDay(kind) => format!(
+                "Carrying a passenger by day in an aeroplane: at least 3 {}, by day or night",
+                kind.plural()
+            ),
+            Self::PassengerNight(kind) => format!(
+                "Carrying a passenger at night in an aeroplane: at least 3 {} at night",
+                kind.plural()
+            ),
+            Self::NightVfr(kind) => format!(
+                "Recent experience for the night VFR rating in an aeroplane: at least one night {}",
+                kind.one()
+            ),
             Self::InstrumentApproaches => "At least 3 instrument approach operations".to_owned(),
             Self::InstrumentApproachesInCategory(category) => {
                 format!(
@@ -192,9 +220,12 @@ pub(super) fn currency(
     as_of: Date,
     logbook: &Logbook,
 ) -> Vec<(RequirementId, CurrencyResult)> {
-    let mut passenger_day = PassengerDay::new(as_of);
-    let mut passenger_night = PassengerNight::new(as_of);
-    let mut night_vfr = NightVfr::new(as_of);
+    let mut passenger_day =
+        TAKE_OFFS_AND_LANDINGS.map(|kind| TakeOffsAndLandings::passenger_day(as_of, kind));
+    let mut passenger_night =
+        TAKE_OFFS_AND_LANDINGS.map(|kind| TakeOffsAndLandings::passenger_night(as_of, kind));
+    let mut night_vfr =
+        TAKE_OFFS_AND_LANDINGS.map(|kind| TakeOffsAndLandings::night_vfr(as_of, kind));
     let mut approaches = InstrumentApproaches::new(as_of);
     let mut in_category =
         CATEGORIES.map(|category| InstrumentApproaches::in_category(as_of, category));
@@ -203,10 +234,16 @@ pub(super) fn currency(
     let mut azimuth_guidance = GuidanceOperations::azimuth_guidance(as_of);
     let mut course_deviation_indicator = GuidanceOperations::course_deviation_indicator(as_of);
     let mut single_pilot_ifr = SinglePilotIfr::new(as_of);
+    let [day_take_offs, day_landings] = &mut passenger_day;
+    let [night_take_offs, night_landings] = &mut passenger_night;
+    let [night_vfr_take_offs, night_vfr_landings] = &mut night_vfr;
     let mut accumulators: Vec<&mut dyn EntryAccumulator> = vec![
-        &mut passenger_day,
-        &mut passenger_night,
-        &mut night_vfr,
+        day_take_offs,
+        day_landings,
+        night_take_offs,
+        night_landings,
+        night_vfr_take_offs,
+        night_vfr_landings,
         &mut approaches,
         &mut approaches_2d,
         &mut approaches_3d,
@@ -246,51 +283,62 @@ pub(super) fn currency(
             )
         });
 
-    [
-        (CasaRequirement::PassengerDay, passenger_day.result()),
-        (CasaRequirement::PassengerNight, passenger_night.result()),
-        (CasaRequirement::NightVfr, night_vfr.result()),
-        (CasaRequirement::InstrumentApproaches, approaches.result()),
-    ]
-    .into_iter()
-    .chain(in_category)
-    .chain([
-        (
-            CasaRequirement::InstrumentApproaches2D,
-            approaches_2d.result(),
-        ),
-        (
-            CasaRequirement::InstrumentApproaches3D,
-            approaches_3d.result(),
-        ),
-        (CasaRequirement::AzimuthGuidance, azimuth_guidance.result()),
-        (
-            CasaRequirement::CourseDeviationIndicator,
-            course_deviation_indicator.result(),
-        ),
-        (CasaRequirement::SinglePilotIfr, single_pilot_ifr.result()),
-        (
-            CasaRequirement::FlightReview(single_engine),
-            single_engine_review.result(),
-        ),
-        (
-            CasaRequirement::FlightReview(multi_engine),
-            multi_engine_review.result(),
-        ),
-        (
-            CasaRequirement::InstrumentProficiencyCheck,
-            proficiency_check.result(),
-        ),
-    ])
-    .map(|(requirement, result)| (requirement.id(), result))
-    .collect()
+    /// Each check's result, paired with its requirement by what the check
+    /// counts.
+    fn by_what_they_count(
+        requirement: fn(TakeOffsOrLandings) -> CasaRequirement,
+        checks: &[TakeOffsAndLandings],
+    ) -> impl Iterator<Item = (CasaRequirement, CurrencyResult)> + '_ {
+        checks
+            .iter()
+            .map(move |check| (requirement(check.kind()), check.result()))
+    }
+
+    by_what_they_count(CasaRequirement::PassengerDay, &passenger_day)
+        .chain(by_what_they_count(
+            CasaRequirement::PassengerNight,
+            &passenger_night,
+        ))
+        .chain(by_what_they_count(CasaRequirement::NightVfr, &night_vfr))
+        .chain([(CasaRequirement::InstrumentApproaches, approaches.result())])
+        .chain(in_category)
+        .chain([
+            (
+                CasaRequirement::InstrumentApproaches2D,
+                approaches_2d.result(),
+            ),
+            (
+                CasaRequirement::InstrumentApproaches3D,
+                approaches_3d.result(),
+            ),
+            (CasaRequirement::AzimuthGuidance, azimuth_guidance.result()),
+            (
+                CasaRequirement::CourseDeviationIndicator,
+                course_deviation_indicator.result(),
+            ),
+            (CasaRequirement::SinglePilotIfr, single_pilot_ifr.result()),
+            (
+                CasaRequirement::FlightReview(single_engine),
+                single_engine_review.result(),
+            ),
+            (
+                CasaRequirement::FlightReview(multi_engine),
+                multi_engine_review.result(),
+            ),
+            (
+                CasaRequirement::InstrumentProficiencyCheck,
+                proficiency_check.result(),
+            ),
+        ])
+        .map(|(requirement, result)| (requirement.id(), result))
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
 
-    use logbook_shared_kernel::{ApproachType, Assessment, EntryParts};
+    use logbook_shared_kernel::{ApproachType, Assessment, DayNight, EntryParts};
     use time::macros::date;
 
     use super::*;
@@ -368,7 +416,8 @@ mod tests {
         assert_eq!(
             current,
             [
-                "61.395(1)",
+                "61.395(1)(a)",
+                "61.395(1)(b)",
                 "61.870(3)|aeroplane",
                 "61.870(5)",
                 "61.870(6)",
@@ -376,6 +425,36 @@ mod tests {
                 "61.880",
             ]
         );
+    }
+
+    /// Each requirement of regs 61.395(1), (2) and 61.965(a) is answered by
+    /// the check that counts its own take-offs or landings.
+    #[test]
+    fn take_offs_and_landings_answer_their_own_requirements() {
+        let flight = EntryParts {
+            take_offs: DayNight { day: 4, night: 1 },
+            landings: DayNight { day: 2, night: 0 },
+            ..aeroplane("e", ON)
+        };
+        let logbook = Logbook {
+            entries: vec![entry(flight)],
+            assessments: Vec::new(),
+        };
+        let found: Vec<(String, usize)> = currency(&Casa::new(), REFERENCE, &logbook)
+            .into_iter()
+            .take(6)
+            .map(|(id, result)| (id.as_str().to_owned(), result.found))
+            .collect();
+        let expected = [
+            ("61.395(1)(a)", 5),
+            ("61.395(1)(b)", 2),
+            ("61.395(2)(a)", 1),
+            ("61.395(2)(b)", 0),
+            ("61.965(a)(i)", 1),
+            ("61.965(a)(ii)", 0),
+        ]
+        .map(|(id, found)| (id.to_owned(), found));
+        assert_eq!(found, expected);
     }
 
     /// An approved session counts towards reg 61.870(3) for the category

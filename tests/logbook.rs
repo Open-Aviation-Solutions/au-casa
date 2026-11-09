@@ -457,12 +457,15 @@ fn each_requirement_has_its_result_and_each_figure_its_time() {
         assessments: vec![an_assessment()],
     };
     let requirements = casa.requirements();
-    assert_eq!(requirements.len(), 17);
+    assert_eq!(requirements.len(), 20);
     assert_eq!(
         requirements[0].name,
-        "Carrying a passenger by day in an aeroplane"
+        "Carrying a passenger by day in an aeroplane: at least 3 take-offs, by day or night"
     );
     assert_eq!(requirements[0].regulation, "61.395(1)");
+    assert_eq!(requirements[0].id.as_str(), "61.395(1)(a)");
+    assert_eq!(requirements[1].id.as_str(), "61.395(1)(b)");
+    assert_eq!(requirements[1].regulation, "61.395(1)");
     let answered: Vec<_> = casa
         .currency(date!(2026 - 11 - 06), &logbook)
         .into_iter()
