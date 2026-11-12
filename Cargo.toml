@@ -4,7 +4,7 @@
 
 [package]
 name = "au-casa"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2021"
 license = "MPL-2.0"
 description = "CASA (Australia) Part 61 rules that the ICAO-universal icao-shared-kernel leaves out: aircraft classification, simulator recognition, titles of licence and the rules for a pilot's logbook."
