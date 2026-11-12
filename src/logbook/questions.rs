@@ -9,7 +9,7 @@ use std::sync::LazyLock;
 
 use icao_shared_kernel::Capacity;
 use logbook_shared_kernel::{
-    Answer, Choice, ChoiceGroup, ChoiceKind, Condition, Question, Questions,
+    Answer, Choice, ChoiceGroup, ChoiceKind, ChoicesLabels, Condition, Question, Questions,
 };
 
 use super::assessment_information::{CHECK_PURPOSES, CHECK_TYPE, OUTCOME};
@@ -161,7 +161,10 @@ fn for_assessment() -> Questions {
             choice(CheckOutcome::Passed.as_str(), "passed", "61.745(3)"),
             // Reg 61.745(3) speaks only of passing; no one regulation
             // speaks of failing every kind of check.
-            choice(CheckOutcome::Failed.as_str(), "failed", ""),
+            Choice {
+                adverse: true,
+                ..choice(CheckOutcome::Failed.as_str(), "failed", "")
+            },
         ]
     };
     let questions = vec![
@@ -194,7 +197,7 @@ fn for_assessment() -> Questions {
         },
         Question {
             key: CHECK_PURPOSES,
-            label: "What was the flight test for, and what was its outcome for each?".into(),
+            label: "What was the flight test for?".into(),
             regulation: "61.010",
             answer: Answer::Choices {
                 groups: PurposeKind::ALL
@@ -214,6 +217,12 @@ fn for_assessment() -> Questions {
                     })
                     .collect(),
                 each: outcomes(),
+                // Reg 61.250: a flight test is for a "flight crew licence,
+                // rating or endorsement", and the applicant "passes" it.
+                labels: ChoicesLabels {
+                    item: "licence, rating or endorsement".into(),
+                    answer: "Passed or failed".into(),
+                },
             },
             applies_when: Some(is(FlightTest)),
             required: true,
@@ -227,6 +236,7 @@ fn route(route: SupervisionRoute, label: &str, regulation: &'static str) -> Choi
         value: route.as_str(),
         label: label.into(),
         regulation,
+        adverse: false,
     }
 }
 
@@ -236,6 +246,7 @@ fn choice(value: &'static str, label: &str, regulation: &'static str) -> Choice 
         value,
         label: capitalised(label),
         regulation,
+        adverse: false,
     }
 }
 
