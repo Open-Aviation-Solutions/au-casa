@@ -141,7 +141,7 @@ answers one such question:
   groups a flight's entries, asserts the same result for both orders.
 
 `icao-shared-kernel`, logbook-shared-kernel and aircraft-type-descriptions
-are taken by a caret range (`^0.5`, `^0.5` and `^0.1.0`), not pinned exactly
+are taken by a caret range (`^0.5`, `^0.6` and `^0.1.0`), not pinned exactly
 (au-casa#24): sibling country crates (nz-caa and the like) depend on them
 too, and a consumer such as a logbook imports several at once. Exact pins on
 different patches cannot be resolved together; with caret ranges Cargo builds
@@ -269,7 +269,7 @@ Breaking includes a change to the API; a change to the Part 61 reading
 that changes an existing designator's category, class or design features, or
 a title of licence's Part 61 term; and a requirement added or removed, or a
 change to what makes an existing one current. Consumers take au-casa by a
-caret range on the current minor (such as `^0.4.0`), so a `cargo update` takes up patches but not a breaking release,
+caret range on the current minor (such as `^0.6.0`), so a `cargo update` takes up patches but not a breaking release,
 which they move to on purpose.
 
 ## Commands

@@ -18,8 +18,8 @@ use icao_shared_kernel::{
 };
 use logbook_shared_kernel::{
     Answer, Approach, ApproachType, Assessment, AssessmentId, AuthorityId,
-    AuthoritySpecificInformation, DateRange, DayNight, Entry, EntryId, EntryParts, InstrumentTime,
-    LicensingAuthority, Logbook, ProblemAt, ProblemKind, Question, Record, Subject,
+    AuthoritySpecificInformation, Choice, DateRange, DayNight, Entry, EntryId, EntryParts,
+    InstrumentTime, LicensingAuthority, Logbook, ProblemAt, ProblemKind, Question, Record, Subject,
 };
 use rstest::rstest;
 use serde_json::{json, Value};
@@ -311,7 +311,7 @@ fn an_answer(question: &Question) -> Value {
         Answer::Choice(choices) => choices[0].value.into(),
         Answer::YesNo => false.into(),
         Answer::Count => 2.into(),
-        Answer::Choices { groups, each } => json!([{
+        Answer::Choices { groups, each, .. } => json!([{
             "kind": groups[0].kind.value,
             "value": groups[0].choices[0].value,
             "answer": each[0].value,
@@ -359,6 +359,58 @@ fn every_question_is_a_key_of_its_format() {
         let mut information = AuthoritySpecificInformation::new(answers.into());
         questions.retain_applicable_answers_for(record, &mut information);
         assert!(casa.problems_for(record, &information).is_empty());
+    }
+}
+
+#[test]
+fn a_flight_tests_purposes_are_asked_in_part_61s_words_and_only_failing_is_adverse() {
+    let assessment = an_assessment();
+    let questions = Casa::new().questions_for(Record::Assessment(&assessment));
+    let purposes = questions
+        .iter()
+        .find(|question| matches!(question.answer, Answer::Choices { .. }))
+        .expect("a question for the purposes");
+    assert_eq!(purposes.label, "What was the flight test for?");
+    let Answer::Choices {
+        groups,
+        each,
+        labels,
+    } = &purposes.answer
+    else {
+        panic!("purposes are several choices");
+    };
+    assert_eq!(labels.item, "licence, rating or endorsement");
+    assert_eq!(labels.answer, "Passed or failed");
+    let adverse = |choices: &[Choice]| -> Vec<&str> {
+        choices
+            .iter()
+            .filter(|choice| choice.adverse)
+            .map(|choice| choice.value)
+            .collect()
+    };
+    assert_eq!(adverse(each), ["failed"]);
+    for question in &questions {
+        match &question.answer {
+            Answer::Choice(choices) if choices.iter().any(|c| c.value == "failed") => {
+                assert_eq!(adverse(choices), ["failed"]);
+            }
+            Answer::Choice(choices) => assert!(adverse(choices).is_empty()),
+            _ => {}
+        }
+    }
+    let entry = Entry::new(flight_parts()).unwrap();
+    for question in &Casa::new().questions_for(Record::Entry(&entry)) {
+        match &question.answer {
+            Answer::Choice(choices) => assert!(adverse(choices).is_empty()),
+            Answer::Choices { groups, each, .. } => {
+                assert!(adverse(each).is_empty());
+                assert!(groups.iter().all(|g| adverse(&g.choices).is_empty()));
+            }
+            _ => {}
+        }
+    }
+    for group in groups {
+        assert!(adverse(&group.choices).is_empty());
     }
 }
 

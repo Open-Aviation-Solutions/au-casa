@@ -29,7 +29,7 @@ checksum = "d3fb67a6e08acf24fdeccbac2cb6ac4305825bd1f117462e0e6f2f193345ad56"
 
 [[package]]
 name = "au-casa"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "aircraft-type-descriptions",
  "icao-shared-kernel",
@@ -300,9 +300,9 @@ checksum = "65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a"
 
 [[package]]
 name = "logbook-shared-kernel"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f7036f7a2bcd0baf2d1084817238be6a6eb1129cdc53ef98fa7b829dc334590"
+checksum = "3d9516e3e3781ad23c5ab84e86ec5179565f30b32d9c913e6291fb869b29307f"
 dependencies = [
  "aircraft-type-descriptions",
  "icao-shared-kernel",
