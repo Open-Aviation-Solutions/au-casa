@@ -368,7 +368,7 @@ fn a_flight_tests_purposes_are_asked_in_part_61s_words_and_only_failing_is_adver
     let questions = Casa::new().questions_for(Record::Assessment(&assessment));
     let purposes = questions
         .iter()
-        .find(|question| question.key == "check_purposes")
+        .find(|question| matches!(question.answer, Answer::Choices { .. }))
         .expect("a question for the purposes");
     assert_eq!(purposes.label, "What was the flight test for?");
     let Answer::Choices {
@@ -391,10 +391,21 @@ fn a_flight_tests_purposes_are_asked_in_part_61s_words_and_only_failing_is_adver
     assert_eq!(adverse(each), ["failed"]);
     for question in &questions {
         match &question.answer {
-            Answer::Choice(choices) if question.key == "outcome" => {
+            Answer::Choice(choices) if choices.iter().any(|c| c.value == "failed") => {
                 assert_eq!(adverse(choices), ["failed"]);
             }
             Answer::Choice(choices) => assert!(adverse(choices).is_empty()),
+            _ => {}
+        }
+    }
+    let entry = Entry::new(flight_parts()).unwrap();
+    for question in &Casa::new().questions_for(Record::Entry(&entry)) {
+        match &question.answer {
+            Answer::Choice(choices) => assert!(adverse(choices).is_empty()),
+            Answer::Choices { groups, each, .. } => {
+                assert!(adverse(each).is_empty());
+                assert!(groups.iter().all(|g| adverse(&g.choices).is_empty()));
+            }
             _ => {}
         }
     }

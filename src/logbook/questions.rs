@@ -217,8 +217,9 @@ fn for_assessment() -> Questions {
                     })
                     .collect(),
                 each: outcomes(),
-                // Reg 61.250: a flight test is for a "flight crew licence,
-                // rating or endorsement", and the applicant "passes" it.
+                // The item's words are reg 61.010's definition of a flight
+                // test ("for the licence, rating or endorsement"); "passes"
+                // is reg 61.250's.
                 labels: ChoicesLabels {
                     item: "licence, rating or endorsement".into(),
                     answer: "Passed or failed".into(),
