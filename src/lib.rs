@@ -17,9 +17,9 @@
 //!   and the national titles, the pairs Part 61 grants that Annex 1 has no
 //!   title for.
 //! - [`logbook`] — CASA's rules for a pilot's logbook ([`Casa`], through
-//!   logbook-shared-kernel's `LicensingAuthority`), and CASA's information on
-//!   an entry ([`EntryInformation`]) and on an assessment
-//!   ([`AssessmentInformation`]), two stored formats.
+//!   logbook-shared-kernel's `LicensingAuthority`). CASA's information on an
+//!   entry and on an assessment is read only inside the crate: a host reads
+//!   it through that trait.
 
 pub mod aircraft;
 pub mod fstd;
@@ -32,11 +32,7 @@ pub use aircraft::{
 };
 pub use fstd::{counts_for_part61, FstdRecognition, RecognisedForeignState};
 pub use licence::{part61_term, FlightCrewLicence, IssuedNationalTitle, NationalTitle, Part61Term};
-pub use logbook::{
-    AssessedPurpose, AssessmentInformation, AssessmentInformationError, Casa, CheckOutcome,
-    CheckPurpose, CheckType, EntryInformation, InformationError, MigrationError, PurposeKind,
-    SupervisionRoute,
-};
+pub use logbook::Casa;
 
 // Compiles and runs the README's examples with the doc tests.
 #[cfg(doctest)]
