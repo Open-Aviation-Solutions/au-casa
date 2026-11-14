@@ -9,52 +9,27 @@ use std::collections::BTreeMap;
 
 use crate::logbook::assessment_information::AssessmentInformationError;
 use crate::logbook::entry_information::InformationError;
+use crate::logbook::test_support;
 use crate::logbook::{
     AssessedPurpose, AssessmentInformation, CheckOutcome, CheckPurpose, CheckType,
     EntryInformation, SupervisionRoute,
 };
 use crate::Casa;
 use aircraft_type_descriptions::{AircraftDescription, AirframeKind, EngineType};
-use icao_shared_kernel::{
-    Aircraft, AircraftRegistration, AircraftType, Capacity, FlightDuration, FlightRules,
-    LocationIndicator, NationalityMark,
-};
+use icao_shared_kernel::{Capacity, FlightRules, LocationIndicator};
 use logbook_shared_kernel::{
     Answer, Approach, ApproachType, Assessment, AssessmentId, AuthorityId,
-    AuthoritySpecificInformation, Choice, DateRange, DayNight, Entry, EntryId, EntryParts,
-    InstrumentTime, LicensingAuthority, Logbook, ProblemAt, ProblemKind, Question, Record, Subject,
+    AuthoritySpecificInformation, Choice, DateRange, Entry, EntryParts, LicensingAuthority,
+    Logbook, ProblemAt, ProblemKind, Question, Record, Subject,
 };
 use rstest::rstest;
 use serde_json::{json, Value};
 use time::macros::date;
 use uuid::Uuid;
 
+/// An hour's flight in a single-engine aeroplane on 6 November 2026.
 fn flight_parts() -> EntryParts {
-    EntryParts {
-        id: EntryId::new("e1"),
-        date: date!(2026 - 11 - 06),
-        subject: Subject::Flight {
-            flight: Uuid::nil(),
-            aircraft: Aircraft::new(
-                AircraftType::parse("C172").unwrap(),
-                AircraftRegistration::new(NationalityMark::parse("VH").unwrap(), "ABC").unwrap(),
-            ),
-            description: None,
-            sole_occupant: false,
-        },
-        route: None,
-        flight_rules: None,
-        flight_time: FlightDuration::new(60).unwrap(),
-        night: FlightDuration::new(0).unwrap(),
-        capacity: Capacity::PilotInCommand,
-        pilot_in_command: None,
-        flight_crew: Vec::new(),
-        instrument: InstrumentTime::default(),
-        approaches: Vec::new(),
-        take_offs: DayNight::default(),
-        landings: DayNight::default(),
-        authority_information: BTreeMap::new(),
-    }
+    test_support::aeroplane("e1", date!(2026 - 11 - 06))
 }
 
 /// A session, with `information` as the information of `authority`.
@@ -843,17 +818,6 @@ fn every_outcome_has_its_spelling(#[case] outcome: CheckOutcome, #[case] spelt: 
 }
 
 /// A flight test's purposes, each stored with its own outcome.
-fn with_purposes(purposes: &[(CheckPurpose, CheckOutcome)]) -> AssessmentInformation {
-    AssessmentInformation {
-        check_type: Some(CheckType::FlightTest),
-        check_purposes: purposes
-            .iter()
-            .map(|&(purpose, outcome)| AssessedPurpose { purpose, outcome })
-            .collect(),
-        ..AssessmentInformation::default()
-    }
-}
-
 #[rstest]
 #[case(
     CheckPurpose::RecreationalPilotLicence,
@@ -969,7 +933,7 @@ fn every_check_purpose_has_its_kind_and_spelling(
     #[case] kind: &str,
     #[case] spelt: &str,
 ) {
-    let information = with_purposes(&[(purpose, CheckOutcome::Failed)]);
+    let information = test_support::flight_test(&[(purpose, CheckOutcome::Failed)]);
     let stored = json!({
         "check_type": "flight_test",
         "check_purposes": [{"kind": kind, "value": spelt, "answer": "failed"}],
@@ -991,7 +955,7 @@ fn every_check_purpose_is_one_of_the_list_once() {
 /// the purposes, whatever order they are held in.
 #[test]
 fn each_purpose_is_stored_with_its_own_outcome_in_the_purposes_order() {
-    let information = with_purposes(&[
+    let information = test_support::flight_test(&[
         (CheckPurpose::InstrumentRating, CheckOutcome::Failed),
         (
             CheckPurpose::MultiEngineAeroplaneClassRating,

@@ -10,6 +10,17 @@
 //! requirements it checks and the pilot's currency against them, CASA's own
 //! totals, the questions CASA asks about an entry and an assessment, and
 //! the problems with the answers.
+//!
+//! CASA's information on an entry and on an assessment is not exported: a
+//! host reads it through [`LicensingAuthority`], and these keep it so.
+//!
+//! ```compile_fail
+//! use au_casa::logbook::EntryInformation;
+//! ```
+//!
+//! ```compile_fail
+//! use au_casa::logbook::AssessmentInformation;
+//! ```
 
 mod assessment_information;
 mod currency;
@@ -79,11 +90,7 @@ pub(crate) fn assessment_information(assessment: &Assessment) -> Option<Assessme
     AssessmentInformation::read(stored).ok()?;
     // Removing answers from information that reads leaves information that
     // reads.
-    AssessmentInformation::read(&assessment_information::applicable(
-        stored,
-        Some(assessment),
-    ))
-    .ok()
+    AssessmentInformation::read(&assessment_information::applicable(stored, assessment)).ok()
 }
 
 impl Default for Casa {

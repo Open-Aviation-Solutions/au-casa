@@ -46,8 +46,8 @@ answers one such question:
 - `logbook` (au-casa#29): CASA's rules for a pilot's logbook,
   as `Casa`, which implements logbook-shared-kernel's `LicensingAuthority`
   for `AU-CASA`; and CASA's authority-specific information on an entry
-  (`EntryInformation`) and on an assessment (`AssessmentInformation`, both
-  crate-private, see below: the
+  (`EntryInformation`) and on an assessment (`AssessmentInformation`; neither
+  is exported, see below: the
   check type of regs 61.745(3) and (3A), and its outcome or, for a flight
   test, which has no outcome of its own, its purposes, each a kind
   (`licence`, `category_rating`, `class_rating`, `operational_rating` or
@@ -100,9 +100,11 @@ the tests. A host reads CASA's information on a record only through
 compiler, and not only this file, keeps it to the trait: a host that read the
 typed information would depend on CASA's stored keys and spellings, which are
 the authority's to change, and a second authority could not be added without
-it. Before, a host could read, write and migrate the format directly; do not
-re-export a type to give it that again. Where a host needs something the trait
-lacks, add it to the trait.
+it. Before, a host could read and write the format directly; do not re-export
+a typed reader to give it that again (`compile_fail` doctests in `logbook`
+keep it). A migration is not a reader: it is offered on the kernel's types
+(see "Releasing"). Where a host needs something else the trait lacks, add it
+to the trait.
 
 ## Currency checks
 
@@ -263,18 +265,23 @@ key, a spelling, or what an answer means, is breaking: it bumps that format's
 `VERSION`, is released as a breaking release, and ships with a migration of
 the data repository's stored information.
 
-How that migration is offered is to be decided with the first such change.
-Until au-casa#68 it was a public function in au-casa that rewrote one
-record's stored information from the previous version, refused what it
-could not rewrite without guessing, and was run by the host's take-up of the
-release over the data repository (decided on au-casa#60; the only one,
-`AssessmentInformation::migrate_from_version_1`, was run by pilot-logbook#206's
-`make migrate-assessment-purposes`). It was removed in 0.7.0 with the types
-it was written over, as a crate-private function nothing calls is dead code;
-it is in the history, before 0.7.0. A migration still runs on a data
-repository branch merged with the host's take-up, not with au-casa's pull
-request, since a deployed page refuses records of a version it does not read
-until it takes up the release.
+The migration is in two parts (decided on au-casa#60, and kept on #68). au-casa
+ships a public, tested function that rewrites one record's stored
+information from the previous version to the new one, taking and returning
+the kernel's `AuthoritySpecificInformation`, so that it needs no reader to be
+public. It refuses, with the reason, what it cannot rewrite without
+guessing, so that the pilot fills it in by hand. Information of the new
+version already is given back as it is, once it reads, so the migration can
+be run again. It knows the format, and nothing of where a host keeps its
+records. The host's take-up of the release runs it over the data repository,
+on a data repository branch merged with the host's take-up, not with
+au-casa's pull request, since a deployed page refuses records of a version it
+does not read until it takes up the release.
+
+The only migration so far, `AssessmentInformation::migrate_from_version_1`
+(run by pilot-logbook#206's `make migrate-assessment-purposes`), was removed
+in 0.7.0: it was written over the typed reader, which is no longer public, and
+the data repository was past it. It is in the history before 0.7.0.
 
 While on `0.x`, a breaking release bumps the minor version (`0.2.0`) and a
 compatible one the patch, as the kernel's do (decided on au-casa#24).
