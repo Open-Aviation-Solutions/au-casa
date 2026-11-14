@@ -17,13 +17,13 @@ that are Australia's alone are kept here.
 
 ## Status
 
-Early: a `0.x` release. Take it by a caret range on its minor version (such as `"0.6"`): until `1.0`
+Early: a `0.x` release. Take it by a caret range on its minor version (such as `"0.7"`): until `1.0`
 a breaking release is a minor version (0.2 stopped re-exporting the aircraft
 description types; 0.3 moved to `icao-shared-kernel` 0.5; 0.4 counts every category in reg
 61.870's checks and adds reg 61.870(3) for each category; 0.5 moves to logbook-shared-kernel
 0.5, counts take-offs and landings separately, and changes CASA's information on an
 assessment to its format version 2; 0.6 moves to logbook-shared-kernel 0.6 and words the
-flight test's question in Part 61's words, marking a failed outcome as adverse), as
+flight test's question in Part 61's words, marking a failed outcome as adverse; 0.7 makes CASA's information on an entry and on an assessment crate-private, so a host reads it only through `LicensingAuthority`, and drops the assessment migration with it), as
 [`INSTRUCTIONS.md`, "Releasing"](INSTRUCTIONS.md#releasing) sets out. It takes `icao-shared-kernel` and
 [aircraft-type-descriptions](https://github.com/Open-Aviation-Solutions/aircraft-type-descriptions)
 by caret range; `0.1.0` pinned them exactly (`=0.1.3` and `=0.1.0`), `0.1.1`
@@ -64,7 +64,8 @@ What is covered:
   and the questions CASA asks about an entry and an assessment, with the
   problems with their answers (such as reg 61.095(3)(b)'s "not receiving
   flight training"). CASA's answers are kept as its information on an entry
-  (`EntryInformation`) and on an assessment (`AssessmentInformation`).
+  and on an assessment, which a host reads through `LicensingAuthority`, not
+  directly.
 
 What is not:
 
@@ -90,8 +91,8 @@ The types serialise with serde, but that JSON is not a stored format that is
 promised: it may change between versions, as the API may. CASA's information
 on an entry and on an assessment is the exception. From 0.3.0 each is a stored
 format: a JSON object whose every key and spelling is mapped by hand, with the
-version of its format under `_version` (each has its own,
-`EntryInformation::VERSION` and `AssessmentInformation::VERSION`). A change to
+version of its format under `_version` (each has its own). They are read inside
+the crate only, through `LicensingAuthority` (0.7). A change to
 either is a breaking release, and a consumer that stores them migrates its
 stored information with it. The open
 [issues](https://github.com/Open-Aviation-Solutions/au-casa/issues) are the
@@ -112,16 +113,16 @@ and what they fly.
 
 Add it from crates.io, with the kernel at a version it accepts. au-casa takes
 the kernel at a matching `0.x` minor (au-casa `0.1.x` with kernel `0.1.x`,
-`0.2.x` with `0.2.x`, `0.3.x` to `0.6.x` with `0.5.x`); mixing them builds two copies of `LicenceTitle`. From `0.3`, `Casa`
+`0.2.x` with `0.2.x`, `0.3.x` to `0.7.x` with `0.5.x`); mixing them builds two copies of `LicenceTitle`. From `0.3`, `Casa`
 implements logbook-shared-kernel's `LicensingAuthority`, so a consumer takes
 that crate at the minor au-casa takes too (`0.2` for au-casa `0.3` and `0.4`, `0.5` for
-au-casa `0.5`, `0.6` for `0.6`): with another,
+au-casa `0.5`, `0.6` for `0.6` and `0.7`): with another,
 `Casa` implements a different trait from the one the consumer names. The
 published set is:
 
 ```toml
 [dependencies]
-au-casa = "0.6"
+au-casa = "0.7"
 aircraft-type-descriptions = "0.1.0"
 icao-shared-kernel = "0.5"
 logbook-shared-kernel = "0.6"

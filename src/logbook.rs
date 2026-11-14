@@ -19,13 +19,14 @@ mod questions;
 mod stored;
 #[cfg(test)]
 mod test_support;
+#[cfg(test)]
+mod tests;
 mod totals;
 
-pub use assessment_information::{
-    AssessedPurpose, AssessmentInformation, AssessmentInformationError, CheckOutcome, CheckPurpose,
-    CheckType, MigrationError, PurposeKind,
+pub(crate) use assessment_information::{
+    AssessedPurpose, AssessmentInformation, CheckOutcome, CheckPurpose, CheckType, PurposeKind,
 };
-pub use entry_information::{EntryInformation, InformationError, SupervisionRoute};
+pub(crate) use entry_information::{EntryInformation, SupervisionRoute};
 
 use logbook_shared_kernel::{
     AircraftDescription, Assessment, AuthorityId, AuthoritySpecificInformation, Classification,
@@ -150,8 +151,8 @@ impl LicensingAuthority for Casa {
     }
 
     /// The questions for CASA's information on an entry, each key of
-    /// [`EntryInformation`], or on an assessment, each key of
-    /// [`AssessmentInformation`], at that format's version. Every entry is
+    /// `EntryInformation`, or on an assessment, each key of
+    /// `AssessmentInformation`, at that format's version. Every entry is
     /// asked the same questions, each with the condition on which it
     /// applies, so that the host removes an answer to one that no longer
     /// does: whether the device was an approved flight simulation training
@@ -170,13 +171,13 @@ impl LicensingAuthority for Casa {
     }
 
     /// A refusal at the information as a whole when it cannot be read
-    /// ([`EntryInformation::read_to_save`],
-    /// [`AssessmentInformation::read_to_save`]), so that the host does not
+    /// (`EntryInformation::read_to_save`,
+    /// `AssessmentInformation::read_to_save`), so that the host does not
     /// stamp it as this version and save it: one that is not this format's,
     /// or of another version. Information with no version is information not
     /// saved yet, which the host then stamps; stored information that has
     /// lost its version is refused where it is read
-    /// ([`EntryInformation::read`]), and so counts for nothing.
+    /// (`EntryInformation::read`), and so counts for nothing.
     ///
     /// And a refusal at `receiving_flight_training` when its answer is yes
     /// where the question applies, on the route of reg 61.095(3) for a pilot

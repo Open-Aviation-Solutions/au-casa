@@ -66,6 +66,7 @@ pub(crate) fn answer<T>(
 
 /// The answers given, each under its key, as information without a
 /// version: an answer not given has no key.
+#[cfg(test)]
 pub(crate) fn information<'a>(
     answers: impl IntoIterator<Item = (&'a str, Option<Value>)>,
 ) -> AuthoritySpecificInformation {

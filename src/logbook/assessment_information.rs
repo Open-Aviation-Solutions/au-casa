@@ -4,16 +4,12 @@
 
 //! CASA's authority-specific information on an assessment, as it is stored.
 
-mod version_1;
-
 use logbook_shared_kernel::{Assessment, AssessmentId, AuthoritySpecificInformation, Record};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value};
 use thiserror::Error;
 
 use super::questions;
 use super::stored::{self, Unreadable};
-
-pub use version_1::MigrationError;
 
 /// CASA's information on an assessment: what kind of check it was, and its
 /// outcome or, for a flight test, its purposes, each with its own outcome.
@@ -472,12 +468,6 @@ impl CheckPurpose {
         self.spelling().3
     }
 
-    /// The purpose a stored kind and spelling name; `None` for any other,
-    /// or for a spelling stored under a kind that is not its own.
-    pub fn parse(kind: &str, spelling: &str) -> Option<Self> {
-        Self::position(kind, spelling).map(|at| Self::ALL[at])
-    }
-
     /// Where in [`Self::ALL`] the purpose a stored kind and spelling name
     /// is.
     fn position(kind: &str, spelling: &str) -> Option<usize> {
@@ -562,38 +552,6 @@ impl AssessmentInformation {
         Self::read_with(information, false)
     }
 
-    /// Rewrite stored information of version 1 as this version, stamped
-    /// with it, for the migration of a host's stored records (au-casa#60):
-    /// the check type as its identifier, and a flight test's purpose moved,
-    /// with the flight test's outcome, into its list of purposes. A purpose
-    /// stored on a check that is not a flight test answered a question that
-    /// did not apply to it, and is left out, as the host would have removed
-    /// it on a save.
-    ///
-    /// It guesses nothing: a flight test with no purpose, or with a purpose
-    /// and no outcome, is refused, for its purposes to be filled in by hand,
-    /// as is information that cannot be read as version 1. Information of
-    /// this version already, such as a flight test filled in so, is given
-    /// back as it is once it reads, so that a migration can be run again;
-    /// one that is a flight test with no purposes is refused, as it is from
-    /// version 1.
-    pub fn migrate_from_version_1(
-        information: &AuthoritySpecificInformation,
-    ) -> Result<AuthoritySpecificInformation, MigrationError> {
-        if information.version() == Some(Self::VERSION) {
-            Self::read(information).map_err(MigrationError::Unreadable)?;
-            let read =
-                Self::read(&applicable(information, None)).map_err(MigrationError::Unreadable)?;
-            if read.check_type == Some(CheckType::FlightTest) && read.check_purposes.is_empty() {
-                return Err(MigrationError::NoPurpose);
-            }
-            return Ok(information.clone());
-        }
-        let mut migrated = version_1::migrate(information)?.to_information();
-        questions::ASSESSMENT.stamp(&mut migrated);
-        Ok(migrated)
-    }
-
     fn read_with(
         information: &AuthoritySpecificInformation,
         stored: bool,
@@ -619,6 +577,7 @@ impl AssessmentInformation {
     /// purposes are written in the order of [`CheckPurpose::ALL`], whatever
     /// order they are held in, and one held twice is written once, with its
     /// first outcome, so that what is written reads.
+    #[cfg(test)]
     pub fn to_information(&self) -> AuthoritySpecificInformation {
         let purposes: Vec<Value> = CheckPurpose::ALL
             .into_iter()
@@ -627,7 +586,7 @@ impl AssessmentInformation {
                     .check_purposes
                     .iter()
                     .find(|assessed| assessed.purpose == purpose)?;
-                Some(json!({
+                Some(serde_json::json!({
                     "kind": purpose.kind().as_str(),
                     "value": purpose.as_str(),
                     "answer": assessed.outcome.as_str(),

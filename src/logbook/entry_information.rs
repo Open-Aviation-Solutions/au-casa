@@ -178,6 +178,7 @@ impl EntryInformation {
     /// The answers as they are stored, without a version: the host writes
     /// that ([`Questions::stamp`](logbook_shared_kernel::Questions::stamp)).
     /// An answer not given has no key.
+    #[cfg(test)]
     pub fn to_information(&self) -> AuthoritySpecificInformation {
         // In the order of `KEYS`.
         let values: [Option<Value>; KEYS.len()] = [

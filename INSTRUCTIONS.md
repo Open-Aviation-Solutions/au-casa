@@ -46,7 +46,8 @@ answers one such question:
 - `logbook` (au-casa#29): CASA's rules for a pilot's logbook,
   as `Casa`, which implements logbook-shared-kernel's `LicensingAuthority`
   for `AU-CASA`; and CASA's authority-specific information on an entry
-  (`EntryInformation`) and on an assessment (`AssessmentInformation`: the
+  (`EntryInformation`) and on an assessment (`AssessmentInformation`, both
+  crate-private, see below: the
   check type of regs 61.745(3) and (3A), and its outcome or, for a flight
   test, which has no outcome of its own, its purposes, each a kind
   (`licence`, `category_rating`, `class_rating`, `operational_rating` or
@@ -88,6 +89,20 @@ answers one such question:
   (`read_to_save`), which is how `problems_for` reads what it is given. A `null` answer is no answer, as an
   absent key is. The currency checks are in `logbook::currency`, which
   also lists the requirements and runs them; see "Currency checks" below.
+
+**The information's readers are crate-private (au-casa#68).** Only `Casa` is
+exported from `logbook`. `EntryInformation`, `AssessmentInformation`, their
+error types, `CheckType`, `CheckOutcome`, `CheckPurpose`, `AssessedPurpose`,
+`PurposeKind` and `SupervisionRoute` are `pub(crate)`, with no writer outside
+the tests. A host reads CASA's information on a record only through
+`LicensingAuthority` (`counts`, `questions_for`, `problems_for`, `currency` and
+`totals`) and the kernel's `Questions`, as au-casa's own checks do, so that the
+compiler, and not only this file, keeps it to the trait: a host that read the
+typed information would depend on CASA's stored keys and spellings, which are
+the authority's to change, and a second authority could not be added without
+it. Before, a host could read, write and migrate the format directly; do not
+re-export a type to give it that again. Where a host needs something the trait
+lacks, add it to the trait.
 
 ## Currency checks
 
@@ -243,25 +258,23 @@ passing.
 
 CASA's information on an entry and on an assessment (`EntryInformation`,
 `AssessmentInformation`) are stored formats: a host stores them in its
-records. A change to either, to a key, a spelling, or what an answer means,
-is breaking: it bumps that format's `VERSION`, is released as a breaking
-release, and ships with a migration of the data repository's stored
-information.
+records, though it cannot read them (see above). A change to either, to a
+key, a spelling, or what an answer means, is breaking: it bumps that format's
+`VERSION`, is released as a breaking release, and ships with a migration of
+the data repository's stored information.
 
-The migration is in two parts (decided on au-casa#60). au-casa ships a
-public, tested function that rewrites one record's stored information from
-the previous version to the new one, and refuses, with the reason, what it
-cannot rewrite without guessing, so that the pilot fills it in by hand
-(`AssessmentInformation::migrate_from_version_1`, for the assessment
-format's version 2). Information of the new version already is given back
-as it is, once it reads, so the migration can be run again. It knows the format, and nothing of where a host
-keeps its records. The host's take-up of the release runs it over the data
-repository: for version 2 of the assessment format, pilot-logbook#206's
-`make migrate-assessment-purposes` (with `--report`) calls the function
-through the module, and lists the flight tests stored with no purpose. It
-runs on a data repository branch merged with the host's take-up, not with
-au-casa's pull request, since the deployed page refuses records of a
-version it does not read until it takes up the release.
+How that migration is offered is to be decided with the first such change.
+Until au-casa#68 it was a public function in au-casa that rewrote one
+record's stored information from the previous version, refused what it
+could not rewrite without guessing, and was run by the host's take-up of the
+release over the data repository (decided on au-casa#60; the only one,
+`AssessmentInformation::migrate_from_version_1`, was run by pilot-logbook#206's
+`make migrate-assessment-purposes`). It was removed in 0.7.0 with the types
+it was written over, as a crate-private function nothing calls is dead code;
+it is in the history, before 0.7.0. A migration still runs on a data
+repository branch merged with the host's take-up, not with au-casa's pull
+request, since a deployed page refuses records of a version it does not read
+until it takes up the release.
 
 While on `0.x`, a breaking release bumps the minor version (`0.2.0`) and a
 compatible one the patch, as the kernel's do (decided on au-casa#24).
@@ -269,7 +282,7 @@ Breaking includes a change to the API; a change to the Part 61 reading
 that changes an existing designator's category, class or design features, or
 a title of licence's Part 61 term; and a requirement added or removed, or a
 change to what makes an existing one current. Consumers take au-casa by a
-caret range on the current minor (such as `^0.6.0`), so a `cargo update` takes up patches but not a breaking release,
+caret range on the current minor (such as `^0.7.0`), so a `cargo update` takes up patches but not a breaking release,
 which they move to on purpose.
 
 ## Commands
