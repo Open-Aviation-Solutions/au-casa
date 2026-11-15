@@ -15,8 +15,7 @@ use serde::{Deserialize, Serialize};
 /// Not every aircraft has one. Multi-engine helicopters and gyroplanes are
 /// absent from the regulation's list (they are type-rated instead), and a
 /// registered sailplane has no class rating at all — hence
-/// [`CasaAircraftClassification::class`](crate::aircraft::CasaAircraftClassification::class)
-/// being optional.
+/// [`classify`](crate::aircraft::classify)'s class being optional.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum AircraftClassRating {

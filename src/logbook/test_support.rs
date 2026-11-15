@@ -9,7 +9,7 @@
 //! them to [`entry`]. A type is described by the real table in
 //! aircraft-type-descriptions, as a host would describe it.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use icao_shared_kernel::{
     Aircraft, AircraftRegistration, AircraftType, Capacity, FlightDuration, LocationIndicator,
@@ -72,7 +72,7 @@ fn parts(id: &str, on: Date, subject: Subject) -> EntryParts {
 }
 
 /// A flight in a type, described by the table (no description if it does
-/// not catalogue the designator).
+/// not catalogue the designator), with no characteristics recorded.
 pub(crate) fn flown(id: &str, on: Date, designator: &str) -> EntryParts {
     parts(
         id,
@@ -84,6 +84,7 @@ pub(crate) fn flown(id: &str, on: Date, designator: &str) -> EntryParts {
                 AircraftRegistration::new(NationalityMark::parse("VH").unwrap(), "ABC").unwrap(),
             ),
             description: tabled(designator),
+            characteristics: BTreeSet::new(),
             sole_occupant: false,
         },
     )

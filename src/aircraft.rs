@@ -2,105 +2,61 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! CASA Part 61 aircraft classification, derived from an aircraft type
-//! designator.
+//! CASA Part 61 aircraft classification, from the description of an
+//! aircraft's type and its airframe's characteristics.
 //!
 //! Two layers:
 //!
 //! - **Layer A** — `designator -> `[`AircraftDescription`]: country-agnostic
 //!   facts about the type, from the `aircraft-type-descriptions` crate, which
 //!   holds the table and cites each row's sources. [`AircraftDescription`],
-//!   [`AirframeKind`], [`EngineType`](aircraft_type_descriptions::EngineType) and [`Confidence`] are that crate's
+//!   [`AirframeKind`], [`EngineType`](aircraft_type_descriptions::EngineType) and
+//!   [`Confidence`](aircraft_type_descriptions::Confidence) are that crate's
 //!   types, the vocabulary shared with sibling country crates. They are named
 //!   from that crate, not from here; a consumer takes it by a caret range
 //!   compatible with au-casa's own dependency on it (the same 0.x minor; see
 //!   `Cargo.toml`), so that Cargo builds one copy.
-//! - **Layer B** — [`AircraftDescription`]` -> `[`CasaAircraftClassification`]:
-//!   the Part 61 reading of those facts (regs 61.015, 61.020, 61.755).
+//! - **Layer B** — the Part 61 reading of those facts and of the
+//!   characteristics recorded for the airframe (logbook-shared-kernel's
+//!   [`AircraftCharacteristic`]): the category and class ([`classify`], regs
+//!   61.015 and 61.020) and the design features that require an endorsement
+//!   (reg 61.755). A host has them through `Casa`'s `classify`.
 //!
 //! Resolution is a pure function, not a stored aggregate. Nothing here has an
-//! identity, an `aircraft_id`, or a lifecycle; per-airframe overrides are
-//! stored by whichever consumer owns them and passed back in.
+//! identity, an `aircraft_id`, or a lifecycle: the characteristics are
+//! recorded by whichever consumer owns the aircraft and passed in.
+//!
+//! The design features are not exported: a host has them through `Casa`.
+//!
+//! ```compile_fail
+//! use au_casa::aircraft::DesignFeature;
+//! ```
 
 pub mod category;
 pub mod class_rating;
-pub mod design_feature;
+mod design_feature;
 
 pub use category::AircraftCategory;
 pub use class_rating::AircraftClassRating;
-pub use design_feature::DesignFeature;
+pub(crate) use design_feature::DesignFeature;
 
-use aircraft_type_descriptions::{AircraftDescription, AirframeKind, Confidence, DesignatorTable};
-use serde::{Deserialize, Serialize};
-use thiserror::Error;
+use std::collections::BTreeSet;
 
-/// Everything that can go wrong resolving a classification.
-#[derive(Debug, Clone, PartialEq, Eq, Error)]
-pub enum ClassificationError {
-    /// The designator is not in the aircraft-type-descriptions table and the
-    /// override did not supply a category to fall back on.
-    #[error(
-        "aircraft type '{0}' is not in the aircraft-type-descriptions table; \
-         supply a category override to classify it"
-    )]
-    UnknownDesignator(String),
+use aircraft_type_descriptions::{AircraftDescription, AirframeKind};
+use logbook_shared_kernel::AircraftCharacteristic;
 
-    /// An override named a design feature that does not require an
-    /// endorsement for the resolved category (reg 61.755).
-    #[error("design feature {feature:?} does not apply to category {category:?} (reg 61.755)")]
-    FeatureNotValidForCategory {
-        feature: DesignFeature,
-        category: AircraftCategory,
-    },
-}
-
-/// The Part 61 classification of an aircraft type.
+/// Layer B: the category (reg 61.015, or reg 61.007(2) for a registered
+/// sailplane) and the class (reg 61.020) of an aircraft of this description
+/// with these characteristics.
 ///
-/// A value object: no identity, no lifecycle, nothing persisted. Consumers
-/// store their own per-airframe overrides keyed by their own aircraft id and
-/// call [`resolve_classification`] to get the effective classification.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CasaAircraftClassification {
-    /// Reg 61.015 (or reg 61.007(2) for a registered sailplane).
-    pub category: AircraftCategory,
-    /// Reg 61.020. `None` where the regulation defines no class — a
-    /// registered sailplane, or a multi-engine helicopter or gyroplane
-    /// (type-rated rather than class-rated).
-    pub class: Option<AircraftClassRating>,
-    /// Reg 61.755 features derivable from the description alone. Always a
-    /// *default* pending a consumer's override: undercarriage configuration,
-    /// float fitment and propeller controls vary between airframes of the
-    /// same type.
-    pub design_features: Vec<DesignFeature>,
-    /// How far to trust this classification. Carried once for the whole
-    /// value, not per field: the uncertainty originates entirely in the Layer
-    /// A lookup, and Layer B is deterministic given a correct description.
-    pub confidence: Confidence,
-    /// Where the Layer A facts came from. `None` when the classification came
-    /// wholly from an override.
-    pub source: Option<&'static str>,
-}
-
-/// A consumer-supplied correction to the derived classification.
-///
-/// Needed routinely rather than exceptionally — `design_features` especially,
-/// since two airframes of the same type designator can differ on tailwheel
-/// versus tricycle undercarriage, floats versus wheels, or retractable versus
-/// fixed gear. Storage of an override belongs to the consuming application,
-/// keyed by its own aircraft id; this package never sees one.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ClassificationOverride {
-    pub category: Option<AircraftCategory>,
-    pub class: Option<AircraftClassRating>,
-    pub design_features: Option<Vec<DesignFeature>>,
-}
-
-/// Layer B: read a description under Part 61.
-///
-/// Deterministic given a correct description, and public so each category's
-/// derivation can be exercised without inventing a designator for it.
+/// An aeroplane with two or more engines is in the multi-engine class unless
+/// [`AircraftCharacteristic::MultiEngineCentreLineThrust`] is recorded for
+/// it: reg 61.020(2)(a) puts a multi-engine centre-line thrust aeroplane in
+/// the single-engine class. Its other characteristics do not change the
+/// class.
 pub fn classify(
     description: AircraftDescription,
+    characteristics: &BTreeSet<AircraftCharacteristic>,
 ) -> (AircraftCategory, Option<AircraftClassRating>) {
     let category = match description.airframe {
         AirframeKind::LandPlane | AirframeKind::SeaPlane | AirframeKind::Amphibian => {
@@ -114,8 +70,12 @@ pub fn classify(
     };
 
     let single = description.engine_count <= 1;
+    let centre_line_thrust =
+        characteristics.contains(&AircraftCharacteristic::MultiEngineCentreLineThrust);
     let class = match category {
-        AircraftCategory::Aeroplane if single => Some(AircraftClassRating::SingleEngineAeroplane),
+        AircraftCategory::Aeroplane if single || centre_line_thrust => {
+            Some(AircraftClassRating::SingleEngineAeroplane)
+        }
         AircraftCategory::Aeroplane => Some(AircraftClassRating::MultiEngineAeroplane),
         // Reg 61.020 lists only *single-engine* helicopter and gyroplane
         // classes; multi-engine ones are type-rated, so they have no class.
@@ -129,103 +89,36 @@ pub fn classify(
     (category, class)
 }
 
-/// Design features derivable from the description alone.
-///
-/// Only two are: a gas turbine powerplant, and float fitment implied by a
-/// seaplane or amphibian airframe. Everything else in the reg 61.755 table
-/// varies per airframe and must come from an override.
-fn derived_features(
-    description: AircraftDescription,
+/// The design features on an aircraft of this category, description and
+/// characteristics that require a design feature endorsement (reg 61.755),
+/// in the regulation's order for its category. Gas turbine engine is read
+/// from the description's engine type; every other is recorded, and a
+/// characteristic the category's list does not have requires nothing.
+pub(crate) fn design_features(
     category: AircraftCategory,
+    description: AircraftDescription,
+    characteristics: &BTreeSet<AircraftCharacteristic>,
 ) -> Vec<DesignFeature> {
-    let mut features = Vec::new();
-
-    if description.engine_type.is_gas_turbine() && category.allows(DesignFeature::GasTurbineEngine)
-    {
-        features.push(DesignFeature::GasTurbineEngine);
-    }
-
-    if matches!(
-        description.airframe,
-        AirframeKind::SeaPlane | AirframeKind::Amphibian
-    ) {
-        // Floatplane and floating hull are indistinguishable from the
-        // description alone; the more common fitment is the default and an
-        // override corrects it.
-        match category {
-            AircraftCategory::Aeroplane => features.push(DesignFeature::Floatplane),
-            AircraftCategory::Helicopter => features.push(DesignFeature::FloatAlightingGear),
-            _ => {}
-        }
-    }
-
-    features
+    category
+        .design_features()
+        .iter()
+        .copied()
+        .filter(|feature| feature.is_on(description, characteristics))
+        .collect()
 }
 
-/// Resolve the effective Part 61 classification of an aircraft type.
-///
-/// The only public way to build a [`CasaAircraftClassification`], and so the
-/// one place (category, design feature) validity is enforced — an override
-/// naming a feature that does not apply to the resolved category is rejected
-/// here rather than being made unrepresentable in the type structure.
-///
-/// An uncatalogued designator is not guessed at: it is an error unless the
-/// override supplies a category to classify by instead.
-pub fn resolve_classification(
-    designator: &str,
-    classification_override: Option<&ClassificationOverride>,
-) -> Result<CasaAircraftClassification, ClassificationError> {
-    let facts = DesignatorTable::packaged().lookup(designator);
-
-    let (mut category, mut class, mut design_features, confidence, source) = match facts {
-        Some(facts) => {
-            let (category, class) = classify(facts.description);
-            let features = derived_features(facts.description, category);
-            (
-                category,
-                class,
-                features,
-                facts.confidence,
-                Some(facts.citation),
-            )
-        }
-        None => {
-            let category = classification_override
-                .and_then(|o| o.category)
-                .ok_or_else(|| ClassificationError::UnknownDesignator(designator.to_string()))?;
-            (category, None, Vec::new(), Confidence::Overridden, None)
-        }
-    };
-
-    if let Some(over) = classification_override {
-        if let Some(overridden) = over.category {
-            category = overridden;
-            // A category override invalidates a class derived under the old
-            // category; the override must restate it.
-            class = None;
-            design_features.retain(|f| category.allows(*f));
-        }
-        if let Some(overridden) = over.class {
-            class = Some(overridden);
-        }
-        if let Some(features) = &over.design_features {
-            for feature in features {
-                if !category.allows(*feature) {
-                    return Err(ClassificationError::FeatureNotValidForCategory {
-                        feature: *feature,
-                        category,
-                    });
-                }
-            }
-            design_features = features.clone();
-        }
-    }
-
-    Ok(CasaAircraftClassification {
-        category,
-        class,
-        design_features,
-        confidence,
-        source,
-    })
+/// Whether the aircraft operates on water (a seaplane or an amphibian, both
+/// aeroplanes under [`classify`]) with
+/// neither float alighting gear nor a floating hull recorded. Its
+/// description cannot say which it has, so nothing is required for either
+/// until one is recorded.
+pub(crate) fn lacks_water_alighting_gear(
+    description: AircraftDescription,
+    characteristics: &BTreeSet<AircraftCharacteristic>,
+) -> bool {
+    matches!(
+        description.airframe,
+        AirframeKind::SeaPlane | AirframeKind::Amphibian
+    ) && !characteristics.contains(&AircraftCharacteristic::FloatAlightingGear)
+        && !characteristics.contains(&AircraftCharacteristic::FloatingHull)
 }

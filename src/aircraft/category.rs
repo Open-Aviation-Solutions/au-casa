@@ -2,8 +2,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! Aircraft categories under CASA Part 61, and the design features each may
-//! carry.
+//! Aircraft categories under CASA Part 61, and the design features that
+//! require an endorsement in each.
 
 use std::fmt;
 
@@ -44,11 +44,11 @@ pub enum AircraftCategory {
 
 impl AircraftCategory {
     /// The design features that require an endorsement for this category,
-    /// per the reg 61.755 table.
+    /// in reg 61.755's order.
     ///
     /// Empty for [`RegisteredSailplane`](Self::RegisteredSailplane), which
-    /// does not appear in that table at all.
-    pub fn design_features(self) -> &'static [DesignFeature] {
+    /// does not appear in that regulation at all.
+    pub(crate) fn design_features(self) -> &'static [DesignFeature] {
         use DesignFeature::*;
         match self {
             Self::Aeroplane => &[
@@ -80,11 +80,6 @@ impl AircraftCategory {
             Self::Airship => &[PressurisationSystem, GasTurbineEngine],
             Self::RegisteredSailplane => &[],
         }
-    }
-
-    /// Whether `feature` requires an endorsement for this category.
-    pub fn allows(self, feature: DesignFeature) -> bool {
-        self.design_features().contains(&feature)
     }
 }
 

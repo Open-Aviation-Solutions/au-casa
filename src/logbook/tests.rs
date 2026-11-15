@@ -5,7 +5,7 @@
 //! CASA's rules for a pilot's logbook, and CASA's information on an entry
 //! and on an assessment.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::logbook::assessment_information::AssessmentInformationError;
 use crate::logbook::entry_information::InformationError;
@@ -18,7 +18,7 @@ use crate::Casa;
 use aircraft_type_descriptions::{AircraftDescription, AirframeKind, EngineType};
 use icao_shared_kernel::{Capacity, FlightRules, LocationIndicator};
 use logbook_shared_kernel::{
-    Answer, Approach, ApproachType, Assessment, AssessmentId, AuthorityId,
+    AircraftCharacteristic, Answer, Approach, ApproachType, Assessment, AssessmentId, AuthorityId,
     AuthoritySpecificInformation, Choice, DateRange, Entry, EntryParts, LicensingAuthority,
     Logbook, ProblemAt, ProblemKind, Question, Record, Subject,
 };
@@ -93,27 +93,289 @@ fn another_authoritys_information_does_not_make_a_session_count() {
     assert!(!Casa::new().counts(&entry));
 }
 
+/// Terms, each `(id, name)`.
+type Terms = Vec<(String, String)>;
+
+/// What an aircraft of this description and these characteristics counts as
+/// and requires, each `(id, name)`, and its cautions.
+fn classified(
+    airframe: AirframeKind,
+    engines: u8,
+    engine_type: EngineType,
+    characteristics: &[AircraftCharacteristic],
+) -> (Terms, Terms, Vec<String>) {
+    let classification = Casa::new()
+        .classify(
+            &AircraftDescription::new(airframe, engines, engine_type),
+            &characteristics.iter().copied().collect::<BTreeSet<_>>(),
+        )
+        .unwrap();
+    let terms = |terms: Vec<logbook_shared_kernel::Term>| {
+        terms
+            .into_iter()
+            .map(|term| (term.id.as_str().to_owned(), term.name))
+            .collect()
+    };
+    (
+        terms(classification.counts_as),
+        terms(classification.requires),
+        classification.cautions,
+    )
+}
+
 /// Regs 61.015 and 61.020, and 61.007(2) for a registered sailplane.
 #[rstest]
-#[case(AirframeKind::LandPlane, 1, EngineType::Piston, &["aeroplane", "single-engine aeroplane"])]
-#[case(AirframeKind::SeaPlane, 2, EngineType::TurboProp, &["aeroplane", "multi-engine aeroplane"])]
-#[case(AirframeKind::Helicopter, 1, EngineType::TurboProp, &["helicopter", "single-engine helicopter"])]
-#[case(AirframeKind::Helicopter, 2, EngineType::TurboProp, &["helicopter"])]
-#[case(AirframeKind::Gyrocopter, 1, EngineType::Piston, &["gyroplane", "single-engine gyroplane"])]
-#[case(AirframeKind::TiltRotor, 2, EngineType::TurboProp, &["powered-lift aircraft", "powered-lift aircraft"])]
-#[case(AirframeKind::Airship, 2, EngineType::Piston, &["airship", "airship"])]
-#[case(AirframeKind::Glider, 0, EngineType::None, &["registered sailplane"])]
+#[case(AirframeKind::LandPlane, 1, &[("aeroplane", "aeroplane"), ("single-engine-aeroplane", "single-engine aeroplane")])]
+#[case(AirframeKind::LandPlane, 2, &[("aeroplane", "aeroplane"), ("multi-engine-aeroplane", "multi-engine aeroplane")])]
+#[case(AirframeKind::Helicopter, 1, &[("helicopter", "helicopter"), ("single-engine-helicopter", "single-engine helicopter")])]
+#[case(AirframeKind::Helicopter, 2, &[("helicopter", "helicopter")])]
+#[case(AirframeKind::Gyrocopter, 1, &[("gyroplane", "gyroplane"), ("single-engine-gyroplane", "single-engine gyroplane")])]
+#[case(AirframeKind::TiltRotor, 2, &[("powered-lift", "powered-lift aircraft"), ("powered-lift-aircraft", "powered-lift aircraft")])]
+#[case(AirframeKind::Airship, 2, &[("airship", "airship"), ("airship-class", "airship")])]
+#[case(AirframeKind::Glider, 0, &[("registered-sailplane", "registered sailplane")])]
 fn a_type_counts_as_its_category_and_class(
     #[case] airframe: AirframeKind,
     #[case] engines: u8,
-    #[case] engine_type: EngineType,
-    #[case] counts_as: &[&str],
+    #[case] counts_as: &[(&str, &str)],
 ) {
-    let classification = Casa::new()
-        .classify(&AircraftDescription::new(airframe, engines, engine_type))
-        .unwrap();
-    assert_eq!(classification.counts_as, counts_as);
-    assert!(classification.cautions.is_empty());
+    let (terms, requires, cautions) = classified(airframe, engines, EngineType::Piston, &[]);
+    let expected: Vec<_> = counts_as
+        .iter()
+        .map(|&(id, name)| (id.to_owned(), name.to_owned()))
+        .collect();
+    assert_eq!(terms, expected);
+    assert!(requires.is_empty());
+    assert!(cautions.is_empty());
+}
+
+/// Reg 61.755's design features for each category, each from the
+/// characteristic recorded for it; one its category does not list requires
+/// nothing. A piston engine, so that gas turbine engine is not required.
+#[rstest]
+#[case(
+    AirframeKind::LandPlane,
+    AircraftCharacteristic::TailwheelUndercarriage,
+    Some("tailwheel-undercarriage")
+)]
+#[case(
+    AirframeKind::LandPlane,
+    AircraftCharacteristic::RetractableUndercarriage,
+    Some("retractable-undercarriage")
+)]
+#[case(
+    AirframeKind::LandPlane,
+    AircraftCharacteristic::ManualPropellerPitchControl,
+    Some("manual-propeller-pitch-control")
+)]
+#[case(
+    AirframeKind::LandPlane,
+    AircraftCharacteristic::MultiEngineCentreLineThrust,
+    Some("multi-engine-centre-line-thrust")
+)]
+#[case(
+    AirframeKind::LandPlane,
+    AircraftCharacteristic::PressurisationSystem,
+    Some("pressurisation-system")
+)]
+#[case(
+    AirframeKind::SeaPlane,
+    AircraftCharacteristic::FloatAlightingGear,
+    Some("floatplane")
+)]
+#[case(
+    AirframeKind::Amphibian,
+    AircraftCharacteristic::FloatingHull,
+    Some("floating-hull")
+)]
+#[case(
+    AirframeKind::LandPlane,
+    AircraftCharacteristic::SkiLandingGear,
+    Some("ski-landing-gear")
+)]
+#[case(
+    AirframeKind::Helicopter,
+    AircraftCharacteristic::FloatAlightingGear,
+    Some("float-alighting-gear")
+)]
+#[case(
+    AirframeKind::Helicopter,
+    AircraftCharacteristic::RetractableUndercarriage,
+    Some("retractable-undercarriage")
+)]
+#[case(AirframeKind::Helicopter, AircraftCharacteristic::SkiLandingGear, None)]
+#[case(
+    AirframeKind::Helicopter,
+    AircraftCharacteristic::PressurisationSystem,
+    None
+)]
+#[case(
+    AirframeKind::TiltRotor,
+    AircraftCharacteristic::RetractableUndercarriage,
+    Some("retractable-undercarriage")
+)]
+#[case(
+    AirframeKind::TiltRotor,
+    AircraftCharacteristic::PressurisationSystem,
+    Some("pressurisation-system")
+)]
+#[case(
+    AirframeKind::Gyrocopter,
+    AircraftCharacteristic::RetractableUndercarriage,
+    Some("retractable-undercarriage")
+)]
+#[case(
+    AirframeKind::Gyrocopter,
+    AircraftCharacteristic::PressurisationSystem,
+    Some("pressurisation-system")
+)]
+#[case(
+    AirframeKind::Gyrocopter,
+    AircraftCharacteristic::TailwheelUndercarriage,
+    None
+)]
+#[case(
+    AirframeKind::Airship,
+    AircraftCharacteristic::PressurisationSystem,
+    Some("pressurisation-system")
+)]
+#[case(
+    AirframeKind::Airship,
+    AircraftCharacteristic::RetractableUndercarriage,
+    None
+)]
+#[case(
+    AirframeKind::Glider,
+    AircraftCharacteristic::RetractableUndercarriage,
+    None
+)]
+fn a_recorded_characteristic_requires_its_categorys_design_feature(
+    #[case] airframe: AirframeKind,
+    #[case] characteristic: AircraftCharacteristic,
+    #[case] requires: Option<&str>,
+) {
+    let (_, required, _) = classified(airframe, 1, EngineType::Piston, &[characteristic]);
+    let ids: Vec<_> = required.iter().map(|(id, _)| id.as_str()).collect();
+    assert_eq!(ids, Vec::from_iter(requires));
+}
+
+/// Gas turbine engine is read from the description, for each of reg
+/// 61.015's categories, and the features come in reg 61.755's order.
+#[rstest]
+#[case(AirframeKind::LandPlane, &["tailwheel-undercarriage", "gas-turbine-engine", "ski-landing-gear"])]
+#[case(AirframeKind::Helicopter, &["gas-turbine-engine"])]
+#[case(AirframeKind::TiltRotor, &["gas-turbine-engine"])]
+#[case(AirframeKind::Gyrocopter, &["gas-turbine-engine"])]
+#[case(AirframeKind::Airship, &["gas-turbine-engine"])]
+#[case(AirframeKind::Glider, &[])]
+fn a_gas_turbine_engine_is_read_from_the_description(
+    #[case] airframe: AirframeKind,
+    #[case] requires: &[&str],
+) {
+    let recorded = [
+        AircraftCharacteristic::SkiLandingGear,
+        AircraftCharacteristic::TailwheelUndercarriage,
+    ];
+    let (_, required, _) = classified(airframe, 1, EngineType::TurboProp, &recorded);
+    let ids: Vec<_> = required.iter().map(|(id, _)| id.as_str()).collect();
+    assert_eq!(ids, requires);
+}
+
+/// Each design feature is named in reg 61.755's words.
+#[test]
+fn a_design_feature_is_named_as_the_regulation_words_it() {
+    let (_, required, _) = classified(
+        AirframeKind::LandPlane,
+        1,
+        EngineType::Piston,
+        &[AircraftCharacteristic::ManualPropellerPitchControl],
+    );
+    assert_eq!(
+        required[0].1,
+        "manual propeller pitch control (piston engine)"
+    );
+}
+
+/// Reg 61.755(2)(c) is manual propeller pitch control "(piston engine)":
+/// with any other engine, recording it requires nothing.
+#[rstest]
+#[case(EngineType::Piston, &["manual-propeller-pitch-control"])]
+#[case(EngineType::TurboProp, &["gas-turbine-engine"])]
+#[case(EngineType::None, &[])]
+fn manual_propeller_pitch_control_is_required_only_with_a_piston_engine(
+    #[case] engine_type: EngineType,
+    #[case] requires: &[&str],
+) {
+    let (_, required, _) = classified(
+        AirframeKind::LandPlane,
+        1,
+        engine_type,
+        &[AircraftCharacteristic::ManualPropellerPitchControl],
+    );
+    let ids: Vec<_> = required.iter().map(|(id, _)| id.as_str()).collect();
+    assert_eq!(ids, requires);
+}
+
+/// A category's and a class's id is its stored name, as the requirements'
+/// ids have it, but for the airship class's.
+#[test]
+fn the_ids_are_the_stored_names() {
+    use crate::aircraft::{AircraftCategory as Category, AircraftClassRating as Class};
+    use crate::logbook::{category_id, class_id};
+    let stored = |value: Value| value.as_str().unwrap().to_owned();
+    for category in [
+        Category::Aeroplane,
+        Category::Helicopter,
+        Category::PoweredLift,
+        Category::Gyroplane,
+        Category::Airship,
+        Category::RegisteredSailplane,
+    ] {
+        assert_eq!(category_id(category), stored(json!(category)));
+    }
+    for class in [
+        Class::SingleEngineAeroplane,
+        Class::MultiEngineAeroplane,
+        Class::SingleEngineHelicopter,
+        Class::PoweredLiftAircraft,
+        Class::SingleEngineGyroplane,
+    ] {
+        assert_eq!(class_id(class), stored(json!(class)));
+    }
+    assert_eq!(class_id(Class::Airship), "airship-class");
+}
+
+/// Reg 61.020(2)(a), au-casa#13.
+#[test]
+fn a_centre_line_thrust_aeroplane_counts_as_single_engine() {
+    let (counts_as, required, _) = classified(
+        AirframeKind::LandPlane,
+        2,
+        EngineType::Piston,
+        &[AircraftCharacteristic::MultiEngineCentreLineThrust],
+    );
+    assert_eq!(counts_as[1].0, "single-engine-aeroplane");
+    assert_eq!(required[0].0, "multi-engine-centre-line-thrust");
+}
+
+/// A seaplane or amphibian's description cannot say whether it has float
+/// alighting gear or a floating hull, so it is cautioned until one is
+/// recorded, and requires neither.
+#[rstest]
+#[case(AirframeKind::SeaPlane, &[], &[], true)]
+#[case(AirframeKind::Amphibian, &[AircraftCharacteristic::RetractableUndercarriage], &["retractable-undercarriage"], true)]
+#[case(AirframeKind::SeaPlane, &[AircraftCharacteristic::FloatAlightingGear], &["floatplane"], false)]
+#[case(AirframeKind::Amphibian, &[AircraftCharacteristic::FloatingHull], &["floating-hull"], false)]
+#[case(AirframeKind::LandPlane, &[], &[], false)]
+fn a_type_on_water_is_cautioned_until_its_gear_is_recorded(
+    #[case] airframe: AirframeKind,
+    #[case] recorded: &[AircraftCharacteristic],
+    #[case] requires: &[&str],
+    #[case] cautioned: bool,
+) {
+    let (_, required, cautions) = classified(airframe, 1, EngineType::Piston, recorded);
+    let ids: Vec<_> = required.iter().map(|(id, _)| id.as_str()).collect();
+    assert_eq!(ids, requires);
+    assert_eq!(cautions.len(), usize::from(cautioned));
 }
 
 /// The keys of the questions about `record`, and of those that apply to it
@@ -567,7 +829,7 @@ fn receiving_flight_training_is_refused_only_where_it_is_asked() {
 }
 
 #[test]
-fn each_requirement_has_its_result_and_each_figure_its_time() {
+fn each_requirement_has_its_result_and_each_total_its_time() {
     let casa = Casa::new();
     let logbook = Logbook {
         entries: vec![Entry::new(flight_parts()).unwrap()],
@@ -591,13 +853,13 @@ fn each_requirement_has_its_result_and_each_figure_its_time() {
     let ids: Vec<_> = requirements.into_iter().map(|r| r.id).collect();
     assert_eq!(answered, ids);
     // The hour in a C172.
-    let figures: Vec<_> = casa
+    let totals: Vec<_> = casa
         .totals(&logbook, DateRange::default())
         .into_iter()
-        .map(|figure| (figure.name, figure.time.total_minutes()))
+        .map(|total| (total.id.as_str().to_owned(), total.time.total_minutes()))
         .collect();
-    assert_eq!(figures[0], ("Aeroplane".to_owned(), 60));
-    assert_eq!(figures.len(), 6);
+    assert_eq!(totals[0], ("aeroplane".to_owned(), 60));
+    assert_eq!(totals.len(), 6);
 }
 
 /// Read as information about to be saved, which may have no version yet.

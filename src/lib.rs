@@ -8,8 +8,10 @@
 //! deliberately does not carry. Stateless: pure functions and value objects,
 //! with no persistence and no identity-keyed storage.
 //!
-//! - [`aircraft`] — CASA category, class rating and design features, derived
-//!   from an aircraft type designator (task `0001`).
+//! - [`aircraft`] — CASA category and class rating, from the description of
+//!   an aircraft's type and its airframe's characteristics (task `0001`);
+//!   what an aircraft requires (its design feature endorsements) is
+//!   [`Casa`]'s `classify`.
 //! - [`fstd`] — recognition of a flight simulation training device under reg
 //!   61.010, and whether time on it counts for Part 61 (task `0002`).
 //! - [`licence`] — the Part 61 term (licence and category rating) for each of
@@ -26,10 +28,7 @@ pub mod fstd;
 pub mod licence;
 pub mod logbook;
 
-pub use aircraft::{
-    classify, resolve_classification, AircraftCategory, AircraftClassRating,
-    CasaAircraftClassification, ClassificationError, ClassificationOverride, DesignFeature,
-};
+pub use aircraft::{classify, AircraftCategory, AircraftClassRating};
 pub use fstd::{counts_for_part61, FstdRecognition, RecognisedForeignState};
 pub use licence::{part61_term, FlightCrewLicence, IssuedNationalTitle, NationalTitle, Part61Term};
 pub use logbook::Casa;

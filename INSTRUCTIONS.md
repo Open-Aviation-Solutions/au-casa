@@ -15,9 +15,19 @@ deliberately does not carry, because they aren't ICAO-universal (the
 kernel's `INSTRUCTIONS.md` keeps a State's own rules out of it). Each module
 answers one such question:
 
-- `aircraft` (implemented, task `0001`): CASA category/class/design-feature
-  classification, derived from an aircraft type designator, with the
-  table of types in aircraft-type-descriptions.
+- `aircraft` (implemented, task `0001`): CASA category and class (regs
+  61.015 and 61.020), from the description of an aircraft's type (the table
+  of types in aircraft-type-descriptions) and the characteristics recorded
+  for its airframe (logbook-shared-kernel's `AircraftCharacteristic`), and
+  the design features that require an endorsement (reg 61.755), which only
+  `Casa::classify` gives (au-casa#80). Gas turbine engine is read from the
+  description's engine type; every other design feature is the
+  characteristic recorded for it, and nothing is implied from the
+  description: a seaplane or amphibian with neither float alighting gear
+  nor a floating hull recorded is cautioned, not given one. A multi-engine
+  centre-line thrust aeroplane is in the single-engine class (reg
+  61.020(2)(a), au-casa#13); reg 61.020(2)(b)'s prescribed aeroplanes are
+  not read.
 - `fstd` (implemented, task `0002`): recognition of a flight simulation
   training device under reg 61.010, and whether a device is one at all
   (`counts_for_part61`). Builds on the `FlightSimulationTrainingDevice` /
@@ -63,12 +73,14 @@ answers one such question:
   `instrument_rating`), and its wording is its choice's label, so a value
   does not change when its wording does. `Casa` says which entries count (`counts`: a session
   only in an approved flight simulation training device, reg 61.010), what
-  a type counts as (`classify`), which requirements it checks, each with a
+  an aircraft counts as and requires (`classify`, each term with a stable
+  id; see "Term ids" below), which requirements it checks, each with a
   stable id and a name in its regulation's words (`requirements`), the
   pilot's currency against them (`currency`), and CASA's own totals
-  (`totals`, over the entries that count; solo flight time is the flights
-  whose `sole_occupant` is true, and no rule makes solo count as pilot in
-  command); the questions it asks for its information on an entry and on
+  (`totals`, over the entries that count, each with a stable id and the
+  total it is part of, the classes of aeroplane under aeroplane time; solo
+  flight time is the flights whose `sole_occupant` is true, and no rule
+  makes solo count as pilot in command); the questions it asks for its information on an entry and on
   an assessment (`questions_for`, in `logbook::questions`: one for each key
   of the format, every one in the list whatever the record, and one that
   applies only to some records has a kernel `Condition`, never left out,
@@ -158,7 +170,7 @@ to the trait.
   groups a flight's entries, asserts the same result for both orders.
 
 `icao-shared-kernel`, logbook-shared-kernel and aircraft-type-descriptions
-are taken by a caret range (`^0.5`, `^0.6` and `^0.1.0`), not pinned exactly
+are taken by a caret range (`^0.5`, `^0.7` and `^0.1.0`), not pinned exactly
 (au-casa#24): sibling country crates (nz-caa and the like) depend on them
 too, and a consumer such as a logbook imports several at once. Exact pins on
 different patches cannot be resolved together; with caret ranges Cargo builds
@@ -180,6 +192,26 @@ before the work; it then needs an au-casa minor release of its own, as above.
 An issue can settle otherwise: au-casa#29 takes icao-shared-kernel 0.5 and
 logbook-shared-kernel 0.2 in the first pull request of its stack, which
 releases once, at its end.
+
+## Term ids
+
+`Casa::classify` and `Casa::totals` give each term a logbook-shared-kernel
+`TermId`, which a host may keep (pilot-logbook stores them), so once
+released an id does not change; a name may. Each is mapped by hand
+(`category_id` and `class_id` in `logbook`, `DesignFeature::id`; a test
+holds the first two to the stored names):
+
+- A category's is its stored name, as a requirement of reg 61.870(3) has it
+  (`aeroplane`, `powered-lift`, `registered-sailplane`).
+- A class's is its stored name, as a flight review's requirement has it
+  (`single-engine-aeroplane`), but for the airship class, `airship-class`,
+  since `airship` is the category's.
+- A design feature's is pilot-logbook's stored spelling of it
+  (`tailwheel-undercarriage`, `floatplane` for an aeroplane's float
+  alighting gear, `float-alighting-gear` for a helicopter's,
+  `gas-turbine-engine`).
+- A total that is a category's or a class's time has that term's id; the
+  others are `simulated-flight-time` and `solo-flight-time`.
 
 ## Reading Part 61 for licences and category ratings
 
@@ -214,14 +246,15 @@ redefine or re-export its types (`AircraftDescription`, `AirframeKind`,
 `EngineType` and `Confidence`): a consumer names them from that crate. Only Layer B, the derivation to CASA category/class/design
 features, is regulatory interpretation, and it is what stays here. A type is
 added to the table there, not here; a type the table lacks is
-`UnknownDesignator` until it is, or the caller overrides the category.
+classified from the description the host gives for it until it is.
 
 ## Conventions
 
 - **Stateless capabilities only.** This package provides pure derivation
   functions and value objects — no repository protocols, no persistence, no
   identity-keyed storage. Per the Dependency Inversion Principle, storage of
-  any consumer-specific data (e.g. a per-aircraft category override) belongs
+  any consumer-specific data (e.g. the characteristics recorded for an
+  aircraft) belongs
   to the consuming application that owns that data's lifecycle, not here —
   the same reasoning that kept repository protocols out of
   `icao-shared-kernel`.

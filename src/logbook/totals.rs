@@ -9,12 +9,13 @@
 
 use icao_shared_kernel::FlightDuration;
 use logbook_shared_kernel::{
-    run, DateRange, Entry, EntryAccumulator, Figure, Logbook, Measure, Subject, Total,
+    run, AuthorityTotal, DateRange, Entry, EntryAccumulator, Logbook, Measure, Subject, TermId,
+    Total,
 };
 
 use crate::aircraft::{AircraftCategory, AircraftClassRating};
 use crate::logbook::guards::{is_category, is_class_rating};
-use crate::logbook::Casa;
+use crate::logbook::{category_id, class_id, Casa};
 
 /// An entry's flight time, in minutes, when `counts`; otherwise none.
 fn flight_time_if(entry: &Entry, counts: bool) -> u64 {
@@ -99,12 +100,13 @@ impl Measure for SoloFlightTime {
 /// CASA's totals of the entries dated in `range`, through the kernel's
 /// `run`, so over the entries `Casa::counts` lets through: aeroplane time,
 /// then single-engine and multi-engine aeroplane time, registered
-/// sailplane time, simulated flight time and solo flight time.
+/// sailplane time, simulated flight time and solo flight time. A category's
+/// or a class's total has its id, and each class is part of aeroplane time.
 ///
 /// A session counts towards the category and class of the type its device
 /// represented, as pilot-logbook counted it, as well as towards simulated
 /// flight time.
-pub(super) fn totals(casa: &Casa, logbook: &Logbook, range: DateRange) -> Vec<Figure> {
+pub(super) fn totals(casa: &Casa, logbook: &Logbook, range: DateRange) -> Vec<AuthorityTotal> {
     let mut aeroplane = Total::<Aeroplane>::new(range);
     let mut single_engine = Total::<SingleEngineAeroplane>::new(range);
     let mut multi_engine = Total::<MultiEngineAeroplane>::new(range);
@@ -123,27 +125,47 @@ pub(super) fn totals(casa: &Casa, logbook: &Logbook, range: DateRange) -> Vec<Fi
             &mut solo,
         ],
     );
+    let aeroplane_id = category_id(AircraftCategory::Aeroplane);
+    let class = |class| (class_id(class), Some(aeroplane_id));
     [
-        ("Aeroplane", aeroplane.total()),
-        ("Single-engine aeroplane", single_engine.total()),
-        ("Multi-engine aeroplane", multi_engine.total()),
-        ("Registered sailplane", sailplane.total()),
-        ("Simulated flight time", simulated.total()),
-        ("Solo flight time", solo.total()),
+        ((aeroplane_id, None), "Aeroplane", aeroplane.total()),
+        (
+            class(AircraftClassRating::SingleEngineAeroplane),
+            "Single-engine aeroplane",
+            single_engine.total(),
+        ),
+        (
+            class(AircraftClassRating::MultiEngineAeroplane),
+            "Multi-engine aeroplane",
+            multi_engine.total(),
+        ),
+        (
+            (category_id(AircraftCategory::RegisteredSailplane), None),
+            "Registered sailplane",
+            sailplane.total(),
+        ),
+        (
+            ("simulated-flight-time", None),
+            "Simulated flight time",
+            simulated.total(),
+        ),
+        (("solo-flight-time", None), "Solo flight time", solo.total()),
     ]
     .into_iter()
-    .map(|(name, minutes)| Figure {
+    .map(|((id, part_of), name, minutes)| AuthorityTotal {
+        id: TermId::new(id),
         name: name.to_owned(),
         // A sum more than a duration can hold is held at the most it can.
         time: FlightDuration::new(i64::try_from(minutes).unwrap_or(i64::MAX))
             .expect("not negative"),
+        part_of: part_of.map(TermId::new),
     })
     .collect()
 }
 
 #[cfg(test)]
 mod tests {
-    use logbook_shared_kernel::EntryParts;
+    use logbook_shared_kernel::{AircraftCharacteristic, EntryParts};
     use time::macros::date;
     use time::Date;
 
@@ -155,21 +177,21 @@ mod tests {
 
     const ON: Date = date!(2024 - 08 - 20);
 
-    /// Each figure's minutes, by name.
-    fn figures(entries: Vec<Entry>, range: DateRange) -> Vec<(String, i64)> {
+    /// Each total's minutes, by name.
+    fn named_totals(entries: Vec<Entry>, range: DateRange) -> Vec<(String, i64)> {
         let logbook = Logbook {
             entries,
             assessments: Vec::new(),
         };
         totals(&Casa::new(), &logbook, range)
             .into_iter()
-            .map(|figure| (figure.name, figure.time.total_minutes()))
+            .map(|total| (total.name, total.time.total_minutes()))
             .collect()
     }
 
-    /// The minutes of each figure, in their order.
+    /// The minutes of each total, in their order.
     fn minutes(entries: Vec<Entry>) -> Vec<i64> {
-        figures(entries, DateRange::default())
+        named_totals(entries, DateRange::default())
             .into_iter()
             .map(|(_, minutes)| minutes)
             .collect()
@@ -186,8 +208,8 @@ mod tests {
     }
 
     #[test]
-    fn the_figures_are_named_in_order() {
-        let names: Vec<String> = figures(Vec::new(), DateRange::default())
+    fn the_totals_are_named_in_order() {
+        let names: Vec<String> = named_totals(Vec::new(), DateRange::default())
             .into_iter()
             .map(|(name, _)| name)
             .collect();
@@ -202,6 +224,45 @@ mod tests {
                 "Solo flight time",
             ]
         );
+    }
+
+    #[test]
+    fn each_total_has_its_id_and_the_classes_are_part_of_aeroplane_time() {
+        let layout: Vec<(String, Option<String>)> =
+            totals(&Casa::new(), &Logbook::default(), DateRange::default())
+                .into_iter()
+                .map(|total| {
+                    (
+                        total.id.as_str().to_owned(),
+                        total.part_of.map(|id| id.as_str().to_owned()),
+                    )
+                })
+                .collect();
+        let aeroplane = || Some("aeroplane".to_owned());
+        assert_eq!(
+            layout,
+            [
+                ("aeroplane".to_owned(), None),
+                ("single-engine-aeroplane".to_owned(), aeroplane()),
+                ("multi-engine-aeroplane".to_owned(), aeroplane()),
+                ("registered-sailplane".to_owned(), None),
+                ("simulated-flight-time".to_owned(), None),
+                ("solo-flight-time".to_owned(), None),
+            ]
+        );
+    }
+
+    /// Reg 61.020(2)(a), from the characteristics the flight records.
+    #[test]
+    fn a_centre_line_thrust_flight_counts_as_single_engine() {
+        let mut parts = flown("a", ON, "PA44");
+        if let Subject::Flight {
+            characteristics, ..
+        } = &mut parts.subject
+        {
+            characteristics.insert(AircraftCharacteristic::MultiEngineCentreLineThrust);
+        }
+        assert_eq!(minutes(vec![entry(parts)]), [60, 60, 0, 0, 0, 0]);
     }
 
     #[test]
@@ -254,6 +315,9 @@ mod tests {
             entry(aeroplane("b", ON)),
             entry(aeroplane("c", ON.next_day().unwrap())),
         ];
-        assert_eq!(figures(entries, range)[0], ("Aeroplane".to_owned(), 60));
+        assert_eq!(
+            named_totals(entries, range)[0],
+            ("Aeroplane".to_owned(), 60)
+        );
     }
 }
