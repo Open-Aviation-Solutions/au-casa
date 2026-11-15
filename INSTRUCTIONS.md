@@ -56,7 +56,7 @@ answers one such question:
   with their minimum ages. `minimum_ages` is Annex 1's own table
   (`MinimumAges::default()`), which CASA's regs 61.515(1), 61.580(1),
   61.655(1), 61.700(1) and 61.1540(1) agree with; a test holds each to its
-  regulation, so a change to the kernel's default cannot move CASA's.
+  regulation, so the test fails when au-casa takes up a kernel whose default differs from Part 61 (a consumer resolving a newer kernel patch is not stopped by it).
   `FlightCrewLicence::is_pilot_licence` says which licences are pilot
   licences (reg 61.010), so no caller matches on the licences' names for it.
 - `logbook` (au-casa#29): CASA's rules for a pilot's logbook,

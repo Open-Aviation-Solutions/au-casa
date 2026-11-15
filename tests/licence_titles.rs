@@ -125,7 +125,8 @@ fn issues_every_annex_1_title_but_the_free_balloon() {
     }
 }
 
-/// What a host relies on: no title twice, and no two titles with an id.
+/// What a host relies on: no title is listed twice, and no two titles share
+/// an id.
 #[test]
 fn no_two_titles_share_an_id() {
     let titles = titles();
@@ -135,7 +136,8 @@ fn no_two_titles_share_an_id() {
     assert_eq!(titled.len(), titles.len());
 }
 
-/// The own titles' ids are pilot-logbook's stored pairs, joined.
+/// The national titles' minimum ages are their licences': regs 61.475(1),
+/// 61.515(1) and 61.580(1).
 #[test]
 fn national_titles_carry_their_licences_minimum_ages() {
     let ages: Vec<(String, u8)> = titles()

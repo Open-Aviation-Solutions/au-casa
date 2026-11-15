@@ -9,13 +9,16 @@
 //! the pairs Annex 1 has no title for are the [`NationalTitle`]s, each with
 //! its licence's minimum age.
 //!
-//! Each title has a stable id, which a host keeps for the own titles (it
-//! stores them with the licence), so once released one does not change: the
-//! licence's and the category's stored names joined by `-`, as pilot-logbook
-//! stores a title's pair (`recreational-aeroplane`, `private-gyroplane`), or
-//! the licence's alone for the glider pilot licence, which has no category
-//! rating (`glider`). A pair belongs to one licence and one category rating,
-//! so no two titles share an id.
+//! Each title has a stable id, which a host may keep, so once released one
+//! does not change: the licence's name and the category rating's joined by
+//! `-`, or the licence's alone for the glider pilot licence, which has no
+//! category rating (`glider`). The five national titles' ids are
+//! pilot-logbook's stored licence and category pair joined
+//! (`recreational-aeroplane`, `private-gyroplane`). Annex 1's follow Part 61's
+//! names (`air-transport-aeroplane`, where pilot-logbook stores
+//! `airline-transport`) and are not stored by pilot-logbook, which stores the
+//! kernel's `LicenceTitle`. A pair belongs to one licence and one category
+//! rating, so no two titles share an id.
 
 use icao_shared_kernel::{
     AirlineTransportCategory, LicenceTitle, MinimumAges, PrivateOrCommercialCategory,
@@ -100,8 +103,9 @@ fn id(part61: Part61Term) -> String {
     }
 }
 
-/// A licence's stored name, as pilot-logbook spells it (`air-transport` for
-/// what the kernel calls airline transport, in Part 61's words).
+/// A licence's name in an id: Part 61's (`air-transport`, where the kernel
+/// says airline transport). For the recreational, private and commercial
+/// pilot licences it is also pilot-logbook's stored spelling.
 fn licence_id(licence: FlightCrewLicence) -> &'static str {
     match licence {
         FlightCrewLicence::AirTransport => "air-transport",
@@ -110,5 +114,55 @@ fn licence_id(licence: FlightCrewLicence) -> &'static str {
         FlightCrewLicence::Private => "private",
         FlightCrewLicence::Recreational => "recreational",
         FlightCrewLicence::Glider => "glider",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A title's place in [`ANNEX_1_TITLES`]. Exhaustive, with no wildcard,
+    /// so a title the kernel adds does not compile until it is listed.
+    fn annex_1_position(title: LicenceTitle) -> usize {
+        use LicenceTitle as T;
+        type Pc = PrivateOrCommercialCategory;
+        type At = AirlineTransportCategory;
+        match title {
+            T::Private(Pc::Aeroplane) => 0,
+            T::Private(Pc::Airship) => 1,
+            T::Private(Pc::Helicopter) => 2,
+            T::Private(Pc::PoweredLift) => 3,
+            T::Commercial(Pc::Aeroplane) => 4,
+            T::Commercial(Pc::Airship) => 5,
+            T::Commercial(Pc::Helicopter) => 6,
+            T::Commercial(Pc::PoweredLift) => 7,
+            T::MultiCrew => 8,
+            T::AirlineTransport(At::Aeroplane) => 9,
+            T::AirlineTransport(At::Helicopter) => 10,
+            T::AirlineTransport(At::PoweredLift) => 11,
+            T::Glider => 12,
+            T::FreeBalloon => 13,
+        }
+    }
+
+    /// A national title's place in [`NATIONAL_TITLES`], exhaustive as above.
+    fn national_position(title: NationalTitle) -> usize {
+        match title {
+            NationalTitle::CommercialGyroplane => 0,
+            NationalTitle::PrivateGyroplane => 1,
+            NationalTitle::RecreationalAeroplane => 2,
+            NationalTitle::RecreationalHelicopter => 3,
+            NationalTitle::RecreationalGyroplane => 4,
+        }
+    }
+
+    #[test]
+    fn the_lists_hold_every_title_where_the_matches_say() {
+        for (at, title) in ANNEX_1_TITLES.into_iter().enumerate() {
+            assert_eq!(annex_1_position(title), at);
+        }
+        for (at, title) in NATIONAL_TITLES.into_iter().enumerate() {
+            assert_eq!(national_position(title), at);
+        }
     }
 }
