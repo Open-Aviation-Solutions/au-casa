@@ -51,6 +51,12 @@ answers one such question:
   `IssuedNationalTitle` is one held from a date of first issue. They sit
   beside the kernel's titles: a consumer stores them with the licence, keyed
   by its identity, and the kernel stays the source for what Annex 1 can say.
+  `Casa` supplies them through `LicensingAuthority::licence_titles`: Annex 1's
+  titles CASA issues, each under its Part 61 name, then the `NationalTitle`s
+  with their minimum ages. `minimum_ages` is Annex 1's own table
+  (`MinimumAges::default()`), which CASA's regs 61.515(1), 61.580(1),
+  61.655(1), 61.700(1) and 61.1540(1) agree with; a test holds each to its
+  regulation, so the test fails when au-casa takes up a kernel whose default differs from Part 61 (a consumer resolving a newer kernel patch is not stopped by it).
   `FlightCrewLicence::is_pilot_licence` says which licences are pilot
   licences (reg 61.010), so no caller matches on the licences' names for it.
 - `logbook` (au-casa#29): CASA's rules for a pilot's logbook,
@@ -170,7 +176,7 @@ to the trait.
   groups a flight's entries, asserts the same result for both orders.
 
 `icao-shared-kernel`, logbook-shared-kernel and aircraft-type-descriptions
-are taken by a caret range (`^0.5`, `^0.7` and `^0.1.0`), not pinned exactly
+are taken by a caret range (`^0.5`, `^0.8` and `^0.1.0`), not pinned exactly
 (au-casa#24): sibling country crates (nz-caa and the like) depend on them
 too, and a consumer such as a logbook imports several at once. Exact pins on
 different patches cannot be resolved together; with caret ranges Cargo builds
@@ -210,6 +216,13 @@ holds the first two to the stored names):
   (`tailwheel-undercarriage`, `floatplane` for an aeroplane's float
   alighting gear, `float-alighting-gear` for a helicopter's,
   `gas-turbine-engine`).
+- A title of licence's (`licence_titles`, in `logbook::licence_titles`) is
+  its licence's name and its category rating's, joined by `-`, which is how
+  pilot-logbook spells a stored title's pair, so its own titles read without
+  a migration (`recreational-aeroplane`, `private-gyroplane`;
+  `air-transport-aeroplane`, `multi-crew-aeroplane`; `glider` alone, as it has
+  no category rating). The category's is `category_id`'s. A host stores the
+  ids of the national titles, so they do not change; a test lists them all.
 - A total that is a category's or a class's time has that term's id; the
   others are `simulated-flight-time` and `solo-flight-time`.
 
