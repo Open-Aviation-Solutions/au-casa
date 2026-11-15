@@ -8,31 +8,38 @@
 //! classified it: from the table's description of its type designator (the
 //! flight's aircraft, or the type a session's device represented) or, for a
 //! designator the table does not catalogue, from the description the entry
-//! carries. Where a guard *requires* a category, an entry with neither does
+//! carries, with the characteristics the flight records (a session records
+//! none). Where a guard *requires* a category, an entry with neither does
 //! not have it: a currency claim needs positive evidence, and "the type
 //! could not be described" is not evidence that it was an aeroplane.
+
+use std::collections::BTreeSet;
 
 use aircraft_type_descriptions::DesignatorTable;
 use logbook_shared_kernel::{AircraftDescription, Entry, Subject};
 
 use crate::aircraft::{classify, AircraftCategory, AircraftClassRating};
 
-/// The description of the type the entry was flown in, or that its session
-/// represented: the table's, else the entry's; `None` when neither has one,
-/// or a session's type was not recorded.
-fn description(entry: &Entry) -> Option<AircraftDescription> {
-    let (designator, description) = match entry.subject() {
+/// The category and class of the aircraft the entry was flown in, or of
+/// the type its session represented, from the type's description (the
+/// table's, else the entry's) and the flight's characteristics; `None` when
+/// neither has a description, or a session's type was not recorded.
+fn classified(entry: &Entry) -> Option<(AircraftCategory, Option<AircraftClassRating>)> {
+    let none = BTreeSet::new();
+    let (designator, description, characteristics) = match entry.subject() {
         Subject::Flight {
             aircraft,
             description,
+            characteristics,
             ..
-        } => (&aircraft.aircraft_type, *description),
+        } => (&aircraft.aircraft_type, *description, characteristics),
         Subject::Session { simulated, .. } => {
             let (designator, description) = simulated.as_ref()?;
-            (designator, *description)
+            (designator, *description, &none)
         }
     };
-    tabled(designator.as_str()).or(description)
+    let description = tabled(designator.as_str()).or(description)?;
+    Some(classify(description, characteristics))
 }
 
 /// The table's description of a type designator.
@@ -45,14 +52,14 @@ pub(crate) fn tabled(designator: &str) -> Option<AircraftDescription> {
 /// Whether the type is *known* to be of this category (reg 61.015, or reg
 /// 61.007(2) for a registered sailplane).
 pub(crate) fn is_category(entry: &Entry, category: AircraftCategory) -> bool {
-    description(entry).is_some_and(|description| classify(description).0 == category)
+    classified(entry).is_some_and(|(of, _)| of == category)
 }
 
 /// Whether the type is *known* to be of this class (reg 61.020). Also false
 /// when the category is known but has no class: reg 61.020 lists no
 /// multi-engine helicopter or gyroplane class.
 pub(crate) fn is_class_rating(entry: &Entry, class_rating: AircraftClassRating) -> bool {
-    description(entry).is_some_and(|description| classify(description).1 == Some(class_rating))
+    classified(entry).is_some_and(|(_, class)| class == Some(class_rating))
 }
 
 #[cfg(test)]

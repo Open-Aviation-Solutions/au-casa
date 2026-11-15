@@ -39,14 +39,19 @@ pub(crate) use assessment_information::{
 };
 pub(crate) use entry_information::{EntryInformation, SupervisionRoute};
 
+use std::collections::BTreeSet;
+
 use logbook_shared_kernel::{
-    AircraftDescription, Assessment, AuthorityId, AuthoritySpecificInformation, Classification,
-    CurrencyResult, DateRange, Entry, Figure, LicensingAuthority, Logbook, Problem, ProblemAt,
-    ProblemKind, Questions, Record, Requirement, RequirementId, Subject,
+    AircraftCharacteristic, AircraftDescription, Assessment, AuthorityId,
+    AuthoritySpecificInformation, AuthorityTotal, Classification, CurrencyResult, DateRange, Entry,
+    LicensingAuthority, Logbook, Problem, ProblemAt, ProblemKind, Questions, Record, Requirement,
+    RequirementId, Subject, Term, TermId,
 };
 use time::Date;
 
-use crate::aircraft::{classify, AircraftClassRating};
+use crate::aircraft::{
+    classify, design_features, lacks_water_alighting_gear, AircraftCategory, AircraftClassRating,
+};
 
 /// CASA's rules, as the logbook calls them.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -118,15 +123,43 @@ impl LicensingAuthority for Casa {
     }
 
     /// The category (reg 61.015, or reg 61.007(2) for a registered
-    /// sailplane), and the class (reg 61.020) where there is one, in Part
-    /// 61's words.
-    fn classify(&self, aircraft: &AircraftDescription) -> Option<Classification> {
-        let (category, class) = classify(*aircraft);
-        let mut counts_as = vec![category.to_string()];
-        counts_as.extend(class.map(|class| class_name(class).to_owned()));
+    /// sailplane), and the class (reg 61.020) where there is one, in that
+    /// order; and the design features that require a design feature
+    /// endorsement (reg 61.755), in its order for the category. Each is in
+    /// Part 61's words, with a stable id.
+    ///
+    /// A multi-engine aeroplane with centre-line thrust recorded is in the
+    /// single-engine class (reg 61.020(2)(a)). Gas turbine engine is read
+    /// from the description; every other design feature from the
+    /// characteristic recorded for it. A seaplane or amphibian with neither
+    /// float alighting gear nor a floating hull recorded is cautioned to
+    /// record the one it has, and nothing is required for either: nothing
+    /// is implied from the description.
+    fn classify(
+        &self,
+        aircraft: &AircraftDescription,
+        characteristics: &BTreeSet<AircraftCharacteristic>,
+    ) -> Option<Classification> {
+        let (category, class) = classify(*aircraft, characteristics);
+        let mut counts_as = vec![term(category_id(category), category.to_string())];
+        counts_as.extend(class.map(|class| term(class_id(class), class_name(class))));
+        let requires = design_features(*aircraft, characteristics)
+            .into_iter()
+            .map(|feature| term(feature.id(), feature.name()))
+            .collect();
+        let cautions = lacks_water_alighting_gear(*aircraft, characteristics)
+            .then(|| {
+                "It operates on water: record whether it has float alighting gear or a \
+                 floating hull, as each requires its own design feature endorsement \
+                 (reg 61.755(2)(g), (h))"
+                    .to_owned()
+            })
+            .into_iter()
+            .collect();
         Some(Classification {
             counts_as,
-            cautions: Vec::new(),
+            requires,
+            cautions,
         })
     }
 
@@ -153,7 +186,11 @@ impl LicensingAuthority for Casa {
     /// time, of the entries that count. Solo flight time is the flights
     /// whose pilot was the sole occupant; no rule makes it count as pilot in
     /// command.
-    fn totals(&self, logbook: &Logbook, range: DateRange) -> Vec<Figure> {
+    ///
+    /// Each has a stable id. Aeroplane time's is the aeroplane category's,
+    /// and each class's is its class's, as `classify` gives them; the two
+    /// classes are part of aeroplane time, which comes before them.
+    fn totals(&self, logbook: &Logbook, range: DateRange) -> Vec<AuthorityTotal> {
         totals::totals(self, logbook, range)
     }
 
@@ -237,6 +274,41 @@ fn unreadable(text: String) -> Problem {
         text,
         // A stored format's rule, not a regulation's.
         regulation: "",
+    }
+}
+
+/// One of CASA's terms.
+fn term(id: &str, name: impl Into<String>) -> Term {
+    Term {
+        id: TermId::new(id),
+        name: name.into(),
+    }
+}
+
+/// A category's stable id, which a host may keep: its stored name, as a
+/// requirement of reg 61.870(3) has it.
+pub(crate) fn category_id(category: AircraftCategory) -> &'static str {
+    match category {
+        AircraftCategory::Aeroplane => "aeroplane",
+        AircraftCategory::Helicopter => "helicopter",
+        AircraftCategory::PoweredLift => "powered-lift",
+        AircraftCategory::Gyroplane => "gyroplane",
+        AircraftCategory::Airship => "airship",
+        AircraftCategory::RegisteredSailplane => "registered-sailplane",
+    }
+}
+
+/// A class's stable id, which a host may keep: its stored name, as a flight
+/// review's requirement has it, but for the airship class, whose stored name
+/// is the airship category's id.
+pub(crate) fn class_id(class: AircraftClassRating) -> &'static str {
+    match class {
+        AircraftClassRating::SingleEngineAeroplane => "single-engine-aeroplane",
+        AircraftClassRating::MultiEngineAeroplane => "multi-engine-aeroplane",
+        AircraftClassRating::SingleEngineHelicopter => "single-engine-helicopter",
+        AircraftClassRating::PoweredLiftAircraft => "powered-lift-aircraft",
+        AircraftClassRating::SingleEngineGyroplane => "single-engine-gyroplane",
+        AircraftClassRating::Airship => "airship-class",
     }
 }
 

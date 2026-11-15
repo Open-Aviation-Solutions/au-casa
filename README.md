@@ -23,22 +23,26 @@ description types; 0.3 moved to `icao-shared-kernel` 0.5; 0.4 counts every categ
 61.870's checks and adds reg 61.870(3) for each category; 0.5 moves to logbook-shared-kernel
 0.5, counts take-offs and landings separately, and changes CASA's information on an
 assessment to its format version 2; 0.6 moves to logbook-shared-kernel 0.6 and words the
-flight test's question in Part 61's words, marking a failed outcome as adverse; 0.7 makes CASA's information on an entry and on an assessment crate-private, so a host reads it only through `LicensingAuthority`, and drops the assessment migration with it), as
+flight test's question in Part 61's words, marking a failed outcome as adverse; 0.7 makes CASA's information on an entry and on an assessment crate-private, so a host reads it only through `LicensingAuthority`, and drops the assessment migration with it; 0.8 moves to logbook-shared-kernel 0.7, classifies an aircraft from its recorded characteristics as well as its type's description, giving the design features it requires and an id for each term and total, puts a multi-engine centre-line thrust aeroplane in the single-engine class, and drops the classification override and the public design features), as
 [`INSTRUCTIONS.md`, "Releasing"](INSTRUCTIONS.md#releasing) sets out. It takes `icao-shared-kernel` and
 [aircraft-type-descriptions](https://github.com/Open-Aviation-Solutions/aircraft-type-descriptions)
 by caret range; `0.1.0` pinned them exactly (`=0.1.3` and `=0.1.0`), `0.1.1`
 takes `^0.1.3` and `^0.1.0`, `0.2.0` takes `^0.2.0` and `^0.1.0`, and `0.3.0`
 and `0.4.0` take `^0.5` and `^0.1.0`, with
 [logbook-shared-kernel](https://github.com/Open-Aviation-Solutions/logbook-shared-kernel)
-at `^0.2`, `0.5.0` takes it at `^0.5`, and `0.6.0` at `^0.6`.
+at `^0.2`, `0.5.0` takes it at `^0.5`, `0.6.0` and `0.7.0` at `^0.6`, and
+`0.8.0` at `^0.7`.
 
 What is covered:
 
-- **Aircraft classification** (`resolve_classification`, `classify`): an
-  aircraft type's Part 61 category (reg 61.015, or reg 61.007(2) for a
-  registered sailplane), class (reg 61.020) and design features (reg 61.755),
-  from its aircraft type designator, with a caller's override for what varies
-  between airframes of one type. The table of designators is small and grows
+- **Aircraft classification** (`classify`, and `Casa`'s): an aircraft's
+  Part 61 category (reg 61.015, or reg 61.007(2) for a registered
+  sailplane), class (reg 61.020) and the design features that require an
+  endorsement (reg 61.755), from the description of its type and the
+  characteristics recorded for its airframe (logbook-shared-kernel's
+  `AircraftCharacteristic`), which vary between airframes of one type.
+  Only `Casa::classify` gives the design features, each with a stable id.
+  The table of designators is small and grows
   as types are needed; it is kept in
   [aircraft-type-descriptions](https://github.com/Open-Aviation-Solutions/aircraft-type-descriptions),
   which this crate depends on, and each row cites its sources. A row checked
@@ -76,16 +80,14 @@ What is not:
 
 Known not to work:
 
-- A designator that is not in the table is refused (`UnknownDesignator`)
-  unless the caller supplies a category, so a type that
+- A type that
   [aircraft-type-descriptions](https://github.com/Open-Aviation-Solutions/aircraft-type-descriptions)
-  does not yet describe cannot be classified from its designator alone. That
-  table grows in batches; a type is added there, not here.
-- An aeroplane with two or more engines is always put in the multi-engine
-  class, though reg 61.020(2) puts a multi-engine centre-line thrust
-  aeroplane, and any prescribed under reg 61.050, in the single-engine class
-  ([#13](https://github.com/Open-Aviation-Solutions/au-casa/issues/13)).
-  The same holds for `Casa::classify`, which has no override.
+  does not yet describe cannot be classified from its designator alone: the
+  host describes it. That table grows in batches; a type is added there, not
+  here.
+- An aeroplane with two or more engines is put in the multi-engine class
+  unless centre-line thrust is recorded for it, though reg 61.020(2)(b) puts
+  any prescribed under reg 61.050 in the single-engine class too.
 
 The types serialise with serde, but that JSON is not a stored format that is
 promised: it may change between versions, as the API may. CASA's information
@@ -103,8 +105,8 @@ work still to do.
 It is not the regulations. It follows CASR Part 61's terms and cites the
 regulation behind each rule, in order to classify and name a pilot's records;
 it does not reproduce, replace or interpret the regulations with any
-authority. A classification it gives is a default, from facts about the type,
-that an individual aircraft may need to override, and a `Provisional` row has
+authority. A classification it gives is only as good as the facts about the
+type and the characteristics recorded for the aircraft, and a `Provisional` row has
 not been checked against its type certificate data sheet. Nothing in it
 changes a pilot's own responsibility under the regulations for what they log
 and what they fly.
@@ -113,19 +115,19 @@ and what they fly.
 
 Add it from crates.io, with the kernel at a version it accepts. au-casa takes
 the kernel at a matching `0.x` minor (au-casa `0.1.x` with kernel `0.1.x`,
-`0.2.x` with `0.2.x`, `0.3.x` to `0.7.x` with `0.5.x`); mixing them builds two copies of `LicenceTitle`. From `0.3`, `Casa`
+`0.2.x` with `0.2.x`, `0.3.x` to `0.8.x` with `0.5.x`); mixing them builds two copies of `LicenceTitle`. From `0.3`, `Casa`
 implements logbook-shared-kernel's `LicensingAuthority`, so a consumer takes
 that crate at the minor au-casa takes too (`0.2` for au-casa `0.3` and `0.4`, `0.5` for
-au-casa `0.5`, `0.6` for `0.6` and `0.7`): with another,
+au-casa `0.5`, `0.6` for `0.6` and `0.7`, `0.7` for `0.8`): with another,
 `Casa` implements a different trait from the one the consumer names. The
 published set is:
 
 ```toml
 [dependencies]
-au-casa = "0.7"
+au-casa = "0.8"
 aircraft-type-descriptions = "0.1.0"
 icao-shared-kernel = "0.5"
-logbook-shared-kernel = "0.6"
+logbook-shared-kernel = "0.7"
 ```
 
 The aircraft description types (`AircraftDescription`, `AirframeKind`,
@@ -135,21 +137,29 @@ range compatible with au-casa's own dependency on it (the same 0.x minor; see
 `Cargo.toml`), so that Cargo builds one copy.
 
 ```rust
-use au_casa::{
-    part61_term, resolve_classification, AircraftCategory, AircraftClassRating,
-    ClassificationError,
-};
-use aircraft_type_descriptions::Confidence;
+use std::collections::BTreeSet;
+
+use au_casa::{part61_term, Casa};
+use aircraft_type_descriptions::DesignatorTable;
 use icao_shared_kernel::{LicenceTitle, PrivateOrCommercialCategory};
+use logbook_shared_kernel::{AircraftCharacteristic, LicensingAuthority, Term};
 
-fn main() -> Result<(), ClassificationError> {
-    let c172 = resolve_classification("C172", None)?;
-    assert_eq!(c172.category, AircraftCategory::Aeroplane);
-    assert_eq!(c172.class, Some(AircraftClassRating::SingleEngineAeroplane));
-    assert_eq!(c172.confidence, Confidence::Confirmed);
-
-    // A designator that is not in the table is refused, not guessed at.
-    assert!(resolve_classification("ZZZZ", None).is_err());
+fn main() {
+    let c172 = DesignatorTable::packaged()
+        .lookup("C172")
+        .expect("the table describes the C172")
+        .description;
+    // This one has a tailwheel, as recorded for the aircraft.
+    let recorded = BTreeSet::from([AircraftCharacteristic::TailwheelUndercarriage]);
+    let classification = Casa::new()
+        .classify(&c172, &recorded)
+        .expect("CASA classifies every description");
+    let ids = |terms: &[Term]| terms.iter().map(|t| t.id.as_str().to_owned()).collect::<Vec<_>>();
+    assert_eq!(
+        ids(&classification.counts_as),
+        ["aeroplane", "single-engine-aeroplane"]
+    );
+    assert_eq!(ids(&classification.requires), ["tailwheel-undercarriage"]);
 
     let title = LicenceTitle::Private(PrivateOrCommercialCategory::Aeroplane);
     let term = part61_term(title).expect("CASA issues this title");
@@ -157,7 +167,6 @@ fn main() -> Result<(), ClassificationError> {
         term.to_string(),
         "private pilot licence, aeroplane category rating"
     );
-    Ok(())
 }
 ```
 
