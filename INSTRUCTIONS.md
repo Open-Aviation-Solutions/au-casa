@@ -198,7 +198,8 @@ releases once, at its end.
 `Casa::classify` and `Casa::totals` give each term a logbook-shared-kernel
 `TermId`, which a host may keep (pilot-logbook stores them), so once
 released an id does not change; a name may. Each is mapped by hand
-(`category_id` and `class_id` in `logbook`, `DesignFeature::id`):
+(`category_id` and `class_id` in `logbook`, `DesignFeature::id`; a test
+holds the first two to the stored names):
 
 - A category's is its stored name, as a requirement of reg 61.870(3) has it
   (`aeroplane`, `powered-lift`, `registered-sailplane`).
@@ -252,7 +253,8 @@ classified from the description the host gives for it until it is.
 - **Stateless capabilities only.** This package provides pure derivation
   functions and value objects — no repository protocols, no persistence, no
   identity-keyed storage. Per the Dependency Inversion Principle, storage of
-  any consumer-specific data (e.g. a per-aircraft category override) belongs
+  any consumer-specific data (e.g. the characteristics recorded for an
+  aircraft) belongs
   to the consuming application that owns that data's lifecycle, not here —
   the same reasoning that kept repository protocols out of
   `icao-shared-kernel`.

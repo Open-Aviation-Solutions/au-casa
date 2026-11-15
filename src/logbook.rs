@@ -143,7 +143,7 @@ impl LicensingAuthority for Casa {
         let (category, class) = classify(*aircraft, characteristics);
         let mut counts_as = vec![term(category_id(category), category.to_string())];
         counts_as.extend(class.map(|class| term(class_id(class), class_name(class))));
-        let requires = design_features(*aircraft, characteristics)
+        let requires = design_features(category, *aircraft, characteristics)
             .into_iter()
             .map(|feature| term(feature.id(), feature.name()))
             .collect();

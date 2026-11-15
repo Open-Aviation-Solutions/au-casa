@@ -6,7 +6,7 @@
 
 use std::collections::BTreeSet;
 
-use aircraft_type_descriptions::AircraftDescription;
+use aircraft_type_descriptions::{AircraftDescription, EngineType};
 use logbook_shared_kernel::AircraftCharacteristic;
 
 /// A design feature for which reg 61.755 requires a design feature
@@ -41,7 +41,8 @@ impl DesignFeature {
     /// Whether an aircraft of this description with these characteristics
     /// has the feature: gas turbine engine from the description's engine
     /// type, and every other from the characteristic recorded for it, as
-    /// nothing is implied from the description.
+    /// nothing is implied from the description. Manual propeller pitch
+    /// control is reg 61.755(2)(c)'s only with a piston engine.
     pub(crate) fn is_on(
         self,
         description: AircraftDescription,
@@ -52,6 +53,9 @@ impl DesignFeature {
             Self::GasTurbineEngine => return description.engine_type.is_gas_turbine(),
             Self::TailwheelUndercarriage => C::TailwheelUndercarriage,
             Self::RetractableUndercarriage => C::RetractableUndercarriage,
+            Self::ManualPropellerPitchControl if description.engine_type != EngineType::Piston => {
+                return false
+            }
             Self::ManualPropellerPitchControl => C::ManualPropellerPitchControl,
             Self::MultiEngineCentreLineThrust => C::MultiEngineCentreLineThrust,
             Self::PressurisationSystem => C::PressurisationSystem,

@@ -177,21 +177,21 @@ mod tests {
 
     const ON: Date = date!(2024 - 08 - 20);
 
-    /// Each figure's minutes, by name.
-    fn figures(entries: Vec<Entry>, range: DateRange) -> Vec<(String, i64)> {
+    /// Each total's minutes, by name.
+    fn named_totals(entries: Vec<Entry>, range: DateRange) -> Vec<(String, i64)> {
         let logbook = Logbook {
             entries,
             assessments: Vec::new(),
         };
         totals(&Casa::new(), &logbook, range)
             .into_iter()
-            .map(|figure| (figure.name, figure.time.total_minutes()))
+            .map(|total| (total.name, total.time.total_minutes()))
             .collect()
     }
 
-    /// The minutes of each figure, in their order.
+    /// The minutes of each total, in their order.
     fn minutes(entries: Vec<Entry>) -> Vec<i64> {
-        figures(entries, DateRange::default())
+        named_totals(entries, DateRange::default())
             .into_iter()
             .map(|(_, minutes)| minutes)
             .collect()
@@ -209,7 +209,7 @@ mod tests {
 
     #[test]
     fn the_totals_are_named_in_order() {
-        let names: Vec<String> = figures(Vec::new(), DateRange::default())
+        let names: Vec<String> = named_totals(Vec::new(), DateRange::default())
             .into_iter()
             .map(|(name, _)| name)
             .collect();
@@ -315,6 +315,9 @@ mod tests {
             entry(aeroplane("b", ON)),
             entry(aeroplane("c", ON.next_day().unwrap())),
         ];
-        assert_eq!(figures(entries, range)[0], ("Aeroplane".to_owned(), 60));
+        assert_eq!(
+            named_totals(entries, range)[0],
+            ("Aeroplane".to_owned(), 60)
+        );
     }
 }

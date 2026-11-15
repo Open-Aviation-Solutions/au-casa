@@ -295,6 +295,55 @@ fn a_design_feature_is_named_as_the_regulation_words_it() {
     );
 }
 
+/// Reg 61.755(2)(c) is manual propeller pitch control "(piston engine)":
+/// with any other engine, recording it requires nothing.
+#[rstest]
+#[case(EngineType::Piston, &["manual-propeller-pitch-control"])]
+#[case(EngineType::TurboProp, &["gas-turbine-engine"])]
+#[case(EngineType::None, &[])]
+fn manual_propeller_pitch_control_is_required_only_with_a_piston_engine(
+    #[case] engine_type: EngineType,
+    #[case] requires: &[&str],
+) {
+    let (_, required, _) = classified(
+        AirframeKind::LandPlane,
+        1,
+        engine_type,
+        &[AircraftCharacteristic::ManualPropellerPitchControl],
+    );
+    let ids: Vec<_> = required.iter().map(|(id, _)| id.as_str()).collect();
+    assert_eq!(ids, requires);
+}
+
+/// A category's and a class's id is its stored name, as the requirements'
+/// ids have it, but for the airship class's.
+#[test]
+fn the_ids_are_the_stored_names() {
+    use crate::aircraft::{AircraftCategory as Category, AircraftClassRating as Class};
+    use crate::logbook::{category_id, class_id};
+    let stored = |value: Value| value.as_str().unwrap().to_owned();
+    for category in [
+        Category::Aeroplane,
+        Category::Helicopter,
+        Category::PoweredLift,
+        Category::Gyroplane,
+        Category::Airship,
+        Category::RegisteredSailplane,
+    ] {
+        assert_eq!(category_id(category), stored(json!(category)));
+    }
+    for class in [
+        Class::SingleEngineAeroplane,
+        Class::MultiEngineAeroplane,
+        Class::SingleEngineHelicopter,
+        Class::PoweredLiftAircraft,
+        Class::SingleEngineGyroplane,
+    ] {
+        assert_eq!(class_id(class), stored(json!(class)));
+    }
+    assert_eq!(class_id(Class::Airship), "airship-class");
+}
+
 /// Reg 61.020(2)(a), au-casa#13.
 #[test]
 fn a_centre_line_thrust_aeroplane_counts_as_single_engine() {

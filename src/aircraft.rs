@@ -89,16 +89,16 @@ pub fn classify(
     (category, class)
 }
 
-/// The design features on an aircraft of this description and these
+/// The design features on an aircraft of this category, description and
 /// characteristics that require a design feature endorsement (reg 61.755),
 /// in the regulation's order for its category. Gas turbine engine is read
 /// from the description's engine type; every other is recorded, and a
 /// characteristic the category's list does not have requires nothing.
 pub(crate) fn design_features(
+    category: AircraftCategory,
     description: AircraftDescription,
     characteristics: &BTreeSet<AircraftCharacteristic>,
 ) -> Vec<DesignFeature> {
-    let (category, _) = classify(description, characteristics);
     category
         .design_features()
         .iter()
@@ -107,7 +107,8 @@ pub(crate) fn design_features(
         .collect()
 }
 
-/// Whether the aircraft operates on water (a seaplane or an amphibian) with
+/// Whether the aircraft operates on water (a seaplane or an amphibian, both
+/// aeroplanes under [`classify`]) with
 /// neither float alighting gear nor a floating hull recorded. Its
 /// description cannot say which it has, so nothing is required for either
 /// until one is recorded.
