@@ -26,6 +26,7 @@ mod assessment_information;
 mod currency;
 mod entry_information;
 mod guards;
+mod licence_titles;
 mod questions;
 mod stored;
 #[cfg(test)]
@@ -41,11 +42,12 @@ pub(crate) use entry_information::{EntryInformation, SupervisionRoute};
 
 use std::collections::BTreeSet;
 
+use icao_shared_kernel::MinimumAges;
 use logbook_shared_kernel::{
     AircraftCharacteristic, AircraftDescription, Assessment, AuthorityId,
     AuthoritySpecificInformation, AuthorityTotal, Classification, CurrencyResult, DateRange, Entry,
-    LicensingAuthority, Logbook, Problem, ProblemAt, ProblemKind, Questions, Record, Requirement,
-    RequirementId, Subject, Term, TermId,
+    LicenceTitleTerm, LicensingAuthority, Logbook, Problem, ProblemAt, ProblemKind, Questions,
+    Record, Requirement, RequirementId, Subject, Term, TermId,
 };
 use time::Date;
 
@@ -161,6 +163,20 @@ impl LicensingAuthority for Casa {
             requires,
             cautions,
         })
+    }
+
+    /// Annex 1's titles CASA issues, each under its Part 61 name (every one
+    /// but the free balloon licence, which CASA does not issue), and then
+    /// the five national titles, each with its licence's minimum age (regs
+    /// 61.475(1), 61.515(1) and 61.580(1)). Each has a stable id.
+    fn licence_titles(&self) -> Vec<LicenceTitleTerm> {
+        licence_titles::licence_titles()
+    }
+
+    /// Annex 1's, as CASA's are the same (regs 61.515(1), 61.580(1),
+    /// 61.655(1), 61.700(1) and 61.1540(1)).
+    fn minimum_ages(&self) -> MinimumAges {
+        licence_titles::minimum_ages()
     }
 
     /// Twenty: carrying a passenger by day and at night (reg 61.395(1),
