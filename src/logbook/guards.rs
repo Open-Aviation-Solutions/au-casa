@@ -8,12 +8,10 @@
 //! classified it: from the table's description of its type designator (the
 //! flight's aircraft, or the type a session's device represented) or, for a
 //! designator the table does not catalogue, from the description the entry
-//! carries, with the characteristics the flight records (a session records
-//! none). Where a guard *requires* a category, an entry with neither does
+//! carries, with the characteristics the entry records (a flight's, or those
+//! of the configuration a session's device represented). Where a guard *requires* a category, an entry with neither does
 //! not have it: a currency claim needs positive evidence, and "the type
 //! could not be described" is not evidence that it was an aeroplane.
-
-use std::collections::BTreeSet;
 
 use aircraft_type_descriptions::DesignatorTable;
 use logbook_shared_kernel::{AircraftDescription, Entry, Subject};
@@ -22,10 +20,10 @@ use crate::aircraft::{classify, AircraftCategory, AircraftClassRating};
 
 /// The category and class of the aircraft the entry was flown in, or of
 /// the type its session represented, from the type's description (the
-/// table's, else the entry's) and the flight's characteristics; `None` when
+/// table's, else the entry's) and the entry's characteristics (a session's
+/// are those of the configuration its device represented); `None` when
 /// neither has a description, or a session's type was not recorded.
 fn classified(entry: &Entry) -> Option<(AircraftCategory, Option<AircraftClassRating>)> {
-    let none = BTreeSet::new();
     let (designator, description, characteristics) = match entry.subject() {
         Subject::Flight {
             aircraft,
@@ -34,8 +32,12 @@ fn classified(entry: &Entry) -> Option<(AircraftCategory, Option<AircraftClassRa
             ..
         } => (&aircraft.aircraft_type, *description, characteristics),
         Subject::Session { simulated, .. } => {
-            let (designator, description) = simulated.as_ref()?;
-            (designator, *description, &none)
+            let simulated = simulated.as_ref()?;
+            (
+                &simulated.aircraft_type,
+                simulated.description,
+                &simulated.characteristics,
+            )
         }
     };
     let description = tabled(designator.as_str()).or(description)?;

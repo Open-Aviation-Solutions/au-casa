@@ -17,7 +17,7 @@ use icao_shared_kernel::{
 };
 use logbook_shared_kernel::{
     Approach, ApproachType, Assessment, AssessmentId, DayNight, Entry, EntryId, EntryParts,
-    InstrumentTime, Questions, Subject,
+    InstrumentTime, Questions, Simulated, Subject,
 };
 use time::Date;
 use uuid::Uuid;
@@ -118,7 +118,11 @@ pub(crate) fn simulated(id: &str, on: Date, designator: &str) -> EntryParts {
         Subject::Session {
             session: Uuid::nil(),
             device: Uuid::nil(),
-            simulated: Some((AircraftType::parse(designator).unwrap(), tabled(designator))),
+            simulated: Some(Simulated {
+                aircraft_type: AircraftType::parse(designator).unwrap(),
+                description: tabled(designator),
+                characteristics: BTreeSet::new(),
+            }),
         },
     )
 }
