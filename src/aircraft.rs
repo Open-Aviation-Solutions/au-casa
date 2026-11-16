@@ -17,14 +17,15 @@
 //!   compatible with au-casa's own dependency on it (the same 0.x minor; see
 //!   `Cargo.toml`), so that Cargo builds one copy.
 //! - **Layer B** — the Part 61 reading of those facts and of the
-//!   characteristics recorded for the airframe (logbook-shared-kernel's
+//!   characteristics recorded for the airframe, or for the configuration a
+//!   session's device represented (logbook-shared-kernel's
 //!   [`AircraftCharacteristic`]): the category and class ([`classify`], regs
 //!   61.015 and 61.020) and the design features that require an endorsement
 //!   (reg 61.755). A host has them through `Casa`'s `classify`.
 //!
 //! Resolution is a pure function, not a stored aggregate. Nothing here has an
 //! identity, an `aircraft_id`, or a lifecycle: the characteristics are
-//! recorded by whichever consumer owns the aircraft and passed in.
+//! recorded by whichever consumer owns the aircraft or the session and passed in.
 //!
 //! The design features are not exported: a host has them through `Casa`.
 //!

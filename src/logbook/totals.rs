@@ -104,6 +104,7 @@ impl Measure for SoloFlightTime {
 /// or a class's total has its id, and each class is part of aeroplane time.
 ///
 /// A session counts towards the category and class of the type its device
+/// represented, with the characteristics recorded for the configuration it
 /// represented, as pilot-logbook counted it, as well as towards simulated
 /// flight time.
 pub(super) fn totals(casa: &Casa, logbook: &Logbook, range: DateRange) -> Vec<AuthorityTotal> {
@@ -263,6 +264,28 @@ mod tests {
             characteristics.insert(AircraftCharacteristic::MultiEngineCentreLineThrust);
         }
         assert_eq!(minutes(vec![entry(parts)]), [60, 60, 0, 0, 0, 0]);
+    }
+
+    /// Reg 61.020(2)(a), from the characteristics the session's device
+    /// represented: the same type is the same class, flown or simulated.
+    #[test]
+    fn a_session_of_a_centre_line_thrust_configuration_counts_as_single_engine() {
+        let session = |characteristics: &[AircraftCharacteristic]| {
+            let mut parts = approved(simulated("s", ON, "PA44"));
+            if let Subject::Session {
+                simulated: Some(simulated),
+                ..
+            } = &mut parts.subject
+            {
+                simulated.characteristics.extend(characteristics);
+            }
+            minutes(vec![entry(parts)])
+        };
+        assert_eq!(session(&[]), [60, 0, 60, 0, 60, 0]);
+        assert_eq!(
+            session(&[AircraftCharacteristic::MultiEngineCentreLineThrust]),
+            [60, 60, 0, 0, 60, 0]
+        );
     }
 
     #[test]

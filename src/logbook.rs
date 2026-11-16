@@ -131,9 +131,11 @@ impl LicensingAuthority for Casa {
     /// Part 61's words, with a stable id.
     ///
     /// A multi-engine aeroplane with centre-line thrust recorded is in the
-    /// single-engine class (reg 61.020(2)(a)). Gas turbine engine is read
-    /// from the description; every other design feature from the
-    /// characteristic recorded for it. A seaplane or amphibian with neither
+    /// single-engine class (reg 61.020(2)(a)). The caller passes the
+    /// characteristics: a flight's, or, for a session, the
+    /// `Simulated::characteristics` of the configuration its device
+    /// represented. Gas turbine engine is read from the description; every
+    /// other design feature from the characteristic recorded for it. A seaplane or amphibian with neither
     /// float alighting gear nor a floating hull recorded is cautioned to
     /// record the one it has, and nothing is required for either: nothing
     /// is implied from the description.

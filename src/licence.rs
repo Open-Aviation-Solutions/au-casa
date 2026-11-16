@@ -21,7 +21,9 @@
 
 use std::fmt;
 
-use icao_shared_kernel::{AirlineTransportCategory, LicenceTitle, PrivateOrCommercialCategory};
+use icao_shared_kernel::{
+    age_on, AirlineTransportCategory, LicenceTitle, PrivateOrCommercialCategory,
+};
 use time::Date;
 
 use crate::aircraft::AircraftCategory;
@@ -331,12 +333,6 @@ impl IssuedNationalTitle {
     /// counts it: someone born on 29 February completes a year on 1 March in a
     /// year that is not a leap year.
     pub fn holder_of_age(&self, date_of_birth: Date) -> bool {
-        let on = self.date_of_first_issue;
-        let mut age = on.year() - date_of_birth.year();
-        if (u8::from(on.month()), on.day()) < (u8::from(date_of_birth.month()), date_of_birth.day())
-        {
-            age -= 1;
-        }
-        age >= i32::from(self.title.minimum_age())
+        age_on(date_of_birth, self.date_of_first_issue) >= i32::from(self.title.minimum_age())
     }
 }
