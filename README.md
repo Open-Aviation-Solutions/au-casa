@@ -31,7 +31,7 @@ takes `^0.1.3` and `^0.1.0`, `0.2.0` takes `^0.2.0` and `^0.1.0`, and `0.3.0`
 and `0.4.0` take `^0.5` and `^0.1.0`, with
 [logbook-shared-kernel](https://github.com/Open-Aviation-Solutions/logbook-shared-kernel)
 at `^0.2`, `0.5.0` takes it at `^0.5`, `0.6.0` and `0.7.0` at `^0.6`, and
-`0.8.0` at `^0.8`, and `0.9.0` at `^0.9`, with the kernel at `^0.6`.
+`0.8.0` at `^0.8` and `0.9.0` at `^0.9`; `0.9.0` takes icao-shared-kernel at `^0.6`.
 
 What is covered:
 

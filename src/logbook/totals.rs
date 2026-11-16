@@ -104,6 +104,7 @@ impl Measure for SoloFlightTime {
 /// or a class's total has its id, and each class is part of aeroplane time.
 ///
 /// A session counts towards the category and class of the type its device
+/// represented, with the characteristics recorded for the configuration it
 /// represented, as pilot-logbook counted it, as well as towards simulated
 /// flight time.
 pub(super) fn totals(casa: &Casa, logbook: &Logbook, range: DateRange) -> Vec<AuthorityTotal> {

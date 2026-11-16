@@ -9,9 +9,10 @@
 //! flight's aircraft, or the type a session's device represented) or, for a
 //! designator the table does not catalogue, from the description the entry
 //! carries, with the characteristics the entry records (a flight's, or those
-//! of the configuration a session's device represented). Where a guard *requires* a category, an entry with neither does
-//! not have it: a currency claim needs positive evidence, and "the type
-//! could not be described" is not evidence that it was an aeroplane.
+//! of the configuration a session's device represented). Where a guard
+//! *requires* a category, an entry with neither does not have it: a currency
+//! claim needs positive evidence, and "the type could not be described" is
+//! not evidence that it was an aeroplane.
 
 use aircraft_type_descriptions::DesignatorTable;
 use logbook_shared_kernel::{AircraftDescription, Entry, Subject};

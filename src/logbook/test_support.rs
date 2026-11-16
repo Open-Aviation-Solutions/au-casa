@@ -110,7 +110,7 @@ pub(crate) fn unclassified(id: &str, on: Date) -> EntryParts {
 /// A session in a device that represented a type, described by the table.
 /// Whether the device was approved is CASA's information, which
 /// `Casa::counts` reads before any check sees the entry, so
-/// it is not set here.
+/// it is not set here. No characteristics are recorded for the session.
 pub(crate) fn simulated(id: &str, on: Date, designator: &str) -> EntryParts {
     parts(
         id,
