@@ -129,7 +129,7 @@ published set is:
 au-casa = "0.10"
 aircraft-type-descriptions = "0.1.0"
 icao-shared-kernel = "0.6"
-logbook-shared-kernel = "0.9"
+logbook-shared-kernel = "0.9.1"
 ```
 
 The aircraft description types (`AircraftDescription`, `AirframeKind`,
