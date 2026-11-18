@@ -10,6 +10,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::logbook::assessment_information::AssessmentInformationError;
 use crate::logbook::entry_information::InformationError;
 use crate::logbook::test_support;
+use crate::logbook::{migrate_entry_information_from_version_1, EntryMigrationError};
 use crate::logbook::{
     AssessedPurpose, AssessmentInformation, CheckOutcome, CheckPurpose, CheckType,
     EntryInformation, SupervisionRoute,
@@ -63,11 +64,11 @@ fn a_flight_counts() {
 
 /// Reg 61.010, "approved flight simulation training device".
 #[rstest]
-#[case::approved(Some(json!({"_version": 1, "approved_fstd": true})), true)]
-#[case::not_approved(Some(json!({"_version": 1, "approved_fstd": false})), false)]
-#[case::unanswered(Some(json!({"_version": 1})), false)]
+#[case::approved(Some(json!({"_version": 2, "approved_fstd": true})), true)]
+#[case::not_approved(Some(json!({"_version": 2, "approved_fstd": false})), false)]
+#[case::unanswered(Some(json!({"_version": 2})), false)]
 #[case::no_information(None, false)]
-#[case::unreadable(Some(json!({"_version": 1, "approved_fstd": "yes"})), false)]
+#[case::unreadable(Some(json!({"_version": 2, "approved_fstd": "yes"})), false)]
 #[case::unversioned(Some(json!({"approved_fstd": true})), false)]
 fn a_session_counts_only_in_an_approved_device(
     #[case] information: Option<Value>,
@@ -80,7 +81,7 @@ fn a_session_counts_only_in_an_approved_device(
 /// stored, even to a question that does not apply to the entry.
 #[test]
 fn a_badly_typed_answer_to_a_question_that_does_not_apply_still_makes_the_information_unreadable() {
-    let answers = json!({"_version": 1, "approved_fstd": true, "route": 42});
+    let answers = json!({"_version": 2, "approved_fstd": true, "route": 42});
     let entry = session("CASA", Some(answers.clone()));
     let (_, applicable) = asked_and_applicable(Record::Entry(&entry), answers);
     assert!(!applicable.contains(&"route"));
@@ -89,7 +90,7 @@ fn a_badly_typed_answer_to_a_question_that_does_not_apply_still_makes_the_inform
 
 #[test]
 fn another_authoritys_information_does_not_make_a_session_count() {
-    let entry = session("OTHER", Some(json!({"_version": 1, "approved_fstd": true})));
+    let entry = session("OTHER", Some(json!({"_version": 2, "approved_fstd": true})));
     assert!(!Casa::new().counts(&entry));
 }
 
@@ -391,24 +392,28 @@ fn asked_and_applicable(record: Record, answers: Value) -> (Vec<&'static str>, V
 }
 
 /// Every key of the entry format, in the order asked.
-const ENTRY_KEYS: [&str; 6] = [
+const ENTRY_KEYS: [&str; 7] = [
     "approved_fstd",
     "route",
     "receiving_flight_training",
+    "cross_country_flight",
     "dme_or_gnss_arrivals",
     "azimuth_guidance_operation",
     "course_deviation_indicator_operation",
 ];
 
 #[test]
-fn only_the_arrivals_apply_to_a_flight() {
+fn only_whether_it_was_cross_country_and_the_arrivals_apply_to_a_flight() {
     let entry = Entry::new(flight_parts()).unwrap();
     let questions = Casa::new().questions_for(Record::Entry(&entry));
     assert_eq!(questions.version(), EntryInformation::VERSION);
     let (asked, applicable) = asked_and_applicable(Record::Entry(&entry), json!({}));
     assert_eq!(asked, ENTRY_KEYS);
-    assert_eq!(applicable, ["dme_or_gnss_arrivals"]);
+    assert_eq!(applicable, FLIGHT_KEYS);
 }
+
+/// The questions that apply to every flight.
+const FLIGHT_KEYS: [&str; 2] = ["cross_country_flight", "dme_or_gnss_arrivals"];
 
 #[test]
 fn whether_its_device_was_approved_applies_to_a_session() {
@@ -443,9 +448,11 @@ fn approaches_are_asked_about_and_arrivals_whatever_the_flight_rules(
     assert_eq!(applicable, GUIDANCE_KEYS);
 }
 
-/// The arrivals, and the guidance operations of reg 61.870(6) and (7)
-/// after them.
-const GUIDANCE_KEYS: [&str; 3] = [
+/// The questions that apply to a flight with an approach or an arrival:
+/// whether it was cross-country, the arrivals, and the guidance operations
+/// of reg 61.870(6) and (7) after them.
+const GUIDANCE_KEYS: [&str; 4] = [
+    "cross_country_flight",
     "dme_or_gnss_arrivals",
     "azimuth_guidance_operation",
     "course_deviation_indicator_operation",
@@ -457,8 +464,8 @@ const GUIDANCE_KEYS: [&str; 3] = [
 #[rstest]
 #[case::one(json!({"dme_or_gnss_arrivals": 1}), &GUIDANCE_KEYS)]
 #[case::two(json!({"dme_or_gnss_arrivals": 2}), &GUIDANCE_KEYS)]
-#[case::none(json!({"dme_or_gnss_arrivals": 0}), &["dme_or_gnss_arrivals"])]
-#[case::unanswered(json!({}), &["dme_or_gnss_arrivals"])]
+#[case::none(json!({"dme_or_gnss_arrivals": 0}), &FLIGHT_KEYS)]
+#[case::unanswered(json!({}), &FLIGHT_KEYS)]
 fn arrivals_are_asked_about_as_approaches_are(#[case] answers: Value, #[case] expected: &[&str]) {
     let entry = Entry::new(flight_parts()).unwrap();
     let (_, applicable) = asked_and_applicable(Record::Entry(&entry), answers);
@@ -470,7 +477,7 @@ fn arrivals_are_asked_about_as_approaches_are(#[case] answers: Value, #[case] ex
 #[test]
 fn the_host_drops_only_the_answers_that_no_longer_apply() {
     let answers = json!({
-        "_version": 1,
+        "_version": 2,
         "approved_fstd": true,
         "azimuth_guidance_operation": true,
         "course_deviation_indicator_operation": true,
@@ -487,7 +494,7 @@ fn the_host_drops_only_the_answers_that_no_longer_apply() {
     assert_eq!(
         kept(&flight, &answers),
         json!({
-            "_version": 1,
+            "_version": 2,
             "azimuth_guidance_operation": true,
             "course_deviation_indicator_operation": true,
             "dme_or_gnss_arrivals": 2,
@@ -498,7 +505,7 @@ fn the_host_drops_only_the_answers_that_no_longer_apply() {
         .as_object_mut()
         .unwrap()
         .remove("dme_or_gnss_arrivals");
-    assert_eq!(kept(&flight, &no_arrivals), json!({"_version": 1}));
+    assert_eq!(kept(&flight, &no_arrivals), json!({"_version": 2}));
     let session_with_an_approach = Entry::new(EntryParts {
         approaches: vec![Approach::new(
             ApproachType::Vor,
@@ -514,11 +521,14 @@ fn the_host_drops_only_the_answers_that_no_longer_apply() {
 
 /// Reg 61.095(1)(c), (2) and (3).
 #[rstest]
-#[case::unanswered(json!({}), &["route", "dme_or_gnss_arrivals"])]
-#[case::operator(json!({"route": "operator"}), &["route", "dme_or_gnss_arrivals"])]
+#[case::unanswered(json!({}), &["route", "cross_country_flight", "dme_or_gnss_arrivals"])]
+#[case::operator(
+    json!({"route": "operator"}),
+    &["route", "cross_country_flight", "dme_or_gnss_arrivals"]
+)]
 #[case::instructor(
     json!({"route": "instructor"}),
-    &["route", "receiving_flight_training", "dme_or_gnss_arrivals"]
+    &["route", "receiving_flight_training", "cross_country_flight", "dme_or_gnss_arrivals"]
 )]
 fn a_pilot_in_command_under_supervision_is_asked_the_route(
     #[case] answers: Value,
@@ -799,7 +809,7 @@ fn information_with_no_version_is_information_not_saved_yet() {
     );
     let refused = casa.problems_for(
         Record::Entry(&without_it),
-        &AuthoritySpecificInformation::new(json!({"_version": 2, "approved_fstd": true})),
+        &AuthoritySpecificInformation::new(json!({"_version": 3, "approved_fstd": true})),
     );
     assert_eq!(refused.len(), 1);
     assert_eq!(refused[0].at, ProblemAt::Information);
@@ -859,7 +869,7 @@ fn each_requirement_has_its_result_and_each_total_its_time() {
         .map(|total| (total.id.as_str().to_owned(), total.time.total_minutes()))
         .collect();
     assert_eq!(totals[0], ("aeroplane".to_owned(), 60));
-    assert_eq!(totals.len(), 6);
+    assert_eq!(totals.len(), 7);
 }
 
 /// Read as information about to be saved, which may have no version yet.
@@ -879,7 +889,7 @@ fn stored_information_must_carry_its_version() {
         Some(true)
     );
     assert_eq!(
-        stored(json!({"_version": 1, "approved_fstd": true}))
+        stored(json!({"_version": 2, "approved_fstd": true}))
             .unwrap()
             .approved_fstd,
         Some(true)
@@ -897,8 +907,8 @@ fn information_that_cannot_be_read_is_refused_before_it_is_saved() {
         )
     };
     assert!(problems(json!({"route": "operator"})).is_empty());
-    assert!(problems(json!({"_version": 1, "route": "operator"})).is_empty());
-    let refused = problems(json!({"_version": 2}));
+    assert!(problems(json!({"_version": 2, "route": "operator"})).is_empty());
+    let refused = problems(json!({"_version": 3}));
     assert_eq!(refused.len(), 1);
     assert_eq!(refused[0].at, ProblemAt::Information);
     assert_eq!(refused[0].kind, ProblemKind::Refusal);
@@ -913,6 +923,7 @@ fn every_answer_has_its_spelling() {
         azimuth_guidance_operation: Some(true),
         course_deviation_indicator_operation: Some(false),
         dme_or_gnss_arrivals: Some(2),
+        cross_country_flight: Some(true),
     };
     let stored = json!({
         "approved_fstd": true,
@@ -921,6 +932,7 @@ fn every_answer_has_its_spelling() {
         "azimuth_guidance_operation": true,
         "course_deviation_indicator_operation": false,
         "dme_or_gnss_arrivals": 2,
+        "cross_country_flight": true,
     });
     assert_eq!(information.to_information().into_value(), stored);
     assert_eq!(read(stored), Ok(information));
@@ -966,15 +978,15 @@ fn a_count_is_any_whole_number_the_kernel_accepts() {
 
 #[test]
 fn the_version_is_read_when_it_is_this_formats() {
-    assert_eq!(EntryInformation::VERSION, 1);
-    let information = read(json!({"_version": 1, "approved_fstd": true})).unwrap();
+    assert_eq!(EntryInformation::VERSION, 2);
+    let information = read(json!({"_version": 2, "approved_fstd": true})).unwrap();
     assert_eq!(information.approved_fstd, Some(true));
 }
 
 #[rstest]
 #[case::not_an_object(json!([]), InformationError::NotAnObject)]
-#[case::another_version(json!({"_version": 2}), InformationError::UnsupportedVersion)]
-#[case::version_as_text(json!({"_version": "1"}), InformationError::UnsupportedVersion)]
+#[case::another_version(json!({"_version": 3}), InformationError::UnsupportedVersion)]
+#[case::version_as_text(json!({"_version": "2"}), InformationError::UnsupportedVersion)]
 #[case::unknown_key(json!({"notes": "x"}), InformationError::UnknownKey("notes".into()))]
 #[case::yes_no_as_text(json!({"approved_fstd": "yes"}), InformationError::InvalidAnswer("approved_fstd"))]
 #[case::unknown_route(json!({"route": "pilot"}), InformationError::InvalidAnswer("route"))]
@@ -982,6 +994,60 @@ fn the_version_is_read_when_it_is_this_formats() {
 #[case::negative_count(json!({"dme_or_gnss_arrivals": -1}), InformationError::InvalidAnswer("dme_or_gnss_arrivals"))]
 fn what_is_not_this_format_is_refused(#[case] stored: Value, #[case] error: InformationError) {
     assert_eq!(read(stored), Err(error));
+}
+
+/// Migrated from version 1, as its value.
+fn migrated(value: Value) -> Result<Value, EntryMigrationError> {
+    migrate_entry_information_from_version_1(&AuthoritySpecificInformation::new(value))
+        .map(AuthoritySpecificInformation::into_value)
+}
+
+#[test]
+fn version_1_is_restamped_with_every_answer_kept() {
+    let answers = json!({
+        "approved_fstd": true,
+        "route": "instructor",
+        "receiving_flight_training": false,
+        "azimuth_guidance_operation": true,
+        "course_deviation_indicator_operation": null,
+        "dme_or_gnss_arrivals": 2,
+    });
+    let mut version_1 = answers.clone();
+    version_1["_version"] = 1.into();
+    let mut version_2 = answers;
+    version_2["_version"] = 2.into();
+    assert_eq!(migrated(version_1), Ok(version_2.clone()));
+    assert!(EntryInformation::read(&AuthoritySpecificInformation::new(version_2)).is_ok());
+    assert_eq!(migrated(json!({"_version": 1})), Ok(json!({"_version": 2})));
+}
+
+#[test]
+fn version_2_is_given_back_as_it_is() {
+    let version_2 = json!({"_version": 2, "approved_fstd": true, "cross_country_flight": true});
+    assert_eq!(migrated(version_2.clone()), Ok(version_2));
+}
+
+#[rstest]
+#[case::not_an_object(json!([]), EntryMigrationError::NotAnObject)]
+#[case::no_version(json!({"approved_fstd": true}), EntryMigrationError::UnsupportedVersion)]
+#[case::another_version(json!({"_version": 3}), EntryMigrationError::UnsupportedVersion)]
+#[case::a_key_version_1_has_not(
+    json!({"_version": 1, "cross_country_flight": true}),
+    EntryMigrationError::UnknownKey("cross_country_flight".into())
+)]
+#[case::version_1_badly_typed(
+    json!({"_version": 1, "approved_fstd": "yes"}),
+    EntryMigrationError::InvalidAnswer("approved_fstd")
+)]
+#[case::version_2_badly_typed(
+    json!({"_version": 2, "cross_country_flight": "yes"}),
+    EntryMigrationError::InvalidAnswer("cross_country_flight")
+)]
+fn what_reads_as_neither_version_is_refused(
+    #[case] stored: Value,
+    #[case] error: EntryMigrationError,
+) {
+    assert_eq!(migrated(stored), Err(error));
 }
 
 fn an_assessment() -> Assessment {

@@ -5,8 +5,8 @@
 //! CASA's authority-specific information on a logbook entry, as it is
 //! stored.
 
-use logbook_shared_kernel::AuthoritySpecificInformation;
-use serde_json::Value;
+use logbook_shared_kernel::{AuthoritySpecificInformation, Questions};
+use serde_json::{Map, Value};
 use thiserror::Error;
 
 use super::stored::{self, Unreadable};
@@ -47,6 +47,9 @@ pub struct EntryInformation {
     /// arrival procedure"). Stored as a JSON integer, as the kernel's
     /// `Answer::Count` is.
     pub dme_or_gnss_arrivals: Option<u64>,
+    /// `cross_country_flight`: whether a flight was a "cross-country
+    /// flight" (reg 61.010), for the whole flight. Added in version 2.
+    pub cross_country_flight: Option<bool>,
 }
 
 /// Which subregulation makes a flight time as pilot in command under
@@ -116,10 +119,23 @@ pub(super) const AZIMUTH_GUIDANCE_OPERATION: &str = "azimuth_guidance_operation"
 pub(super) const COURSE_DEVIATION_INDICATOR_OPERATION: &str =
     "course_deviation_indicator_operation";
 pub(super) const DME_OR_GNSS_ARRIVALS: &str = "dme_or_gnss_arrivals";
+pub(super) const CROSS_COUNTRY_FLIGHT: &str = "cross_country_flight";
 
 /// Every key of the format, in the order [`EntryInformation::to_information`]
 /// writes them: the one list both reading and writing go by.
-const KEYS: [&str; 6] = [
+const KEYS: [&str; 7] = [
+    APPROVED_FSTD,
+    ROUTE,
+    RECEIVING_FLIGHT_TRAINING,
+    AZIMUTH_GUIDANCE_OPERATION,
+    COURSE_DEVIATION_INDICATOR_OPERATION,
+    DME_OR_GNSS_ARRIVALS,
+    CROSS_COUNTRY_FLIGHT,
+];
+
+/// Version 1's keys: every key of version 2 but `cross_country_flight`,
+/// each meaning the same.
+const VERSION_1_KEYS: [&str; 6] = [
     APPROVED_FSTD,
     ROUTE,
     RECEIVING_FLIGHT_TRAINING,
@@ -128,9 +144,56 @@ const KEYS: [&str; 6] = [
     DME_OR_GNSS_ARRIVALS,
 ];
 
+/// Why stored information cannot be migrated to the current version of
+/// CASA's information on an entry.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[non_exhaustive]
+pub enum EntryMigrationError {
+    #[error("CASA's information on an entry is not a JSON object")]
+    NotAnObject,
+    #[error("CASA's information on an entry is not of version 1 or 2")]
+    UnsupportedVersion,
+    #[error("CASA's information on an entry has no key {0:?} in its version")]
+    UnknownKey(String),
+    #[error("CASA's information on an entry holds no answer of its kind under {0:?}")]
+    InvalidAnswer(&'static str),
+}
+
+impl From<Unreadable> for EntryMigrationError {
+    fn from(unreadable: Unreadable) -> Self {
+        match unreadable {
+            Unreadable::NotAnObject => Self::NotAnObject,
+            Unreadable::UnsupportedVersion => Self::UnsupportedVersion,
+            Unreadable::UnknownKey(key) => Self::UnknownKey(key),
+            Unreadable::InvalidAnswer(key) => Self::InvalidAnswer(key),
+        }
+    }
+}
+
+// The migration reads version 2 with this version's reader: a new version
+// writes a migration of its own.
+const _: () = assert!(EntryInformation::VERSION == 2);
+
+/// [`super::migrate_entry_information_from_version_1`]: each answer of
+/// version 1 is read as version 2 reads it, as it means the same.
+pub(super) fn migrate_from_version_1(
+    information: &AuthoritySpecificInformation,
+) -> Result<AuthoritySpecificInformation, EntryMigrationError> {
+    let (version, keys) = match information.version() {
+        Some(1) => (1, &VERSION_1_KEYS[..]),
+        Some(2) => (2, &KEYS[..]),
+        _ if !information.value().is_object() => return Err(EntryMigrationError::NotAnObject),
+        _ => return Err(EntryMigrationError::UnsupportedVersion),
+    };
+    EntryInformation::from_answers(stored::answers(information, version, keys, true)?)?;
+    let mut migrated = information.clone();
+    Questions::new(2, Vec::new()).stamp(&mut migrated);
+    Ok(migrated)
+}
+
 impl EntryInformation {
     /// The version of this format.
-    pub const VERSION: u32 = 1;
+    pub const VERSION: u32 = 2;
 
     /// Read stored information, which carries its version: it must be
     /// [`Self::VERSION`]. A key that is not this format's, or an answer not
@@ -161,7 +224,10 @@ impl EntryInformation {
         information: &AuthoritySpecificInformation,
         stored: bool,
     ) -> Result<Self, Unreadable> {
-        let answers = stored::answers(information, Self::VERSION, &KEYS, stored)?;
+        Self::from_answers(stored::answers(information, Self::VERSION, &KEYS, stored)?)
+    }
+
+    fn from_answers(answers: &Map<String, Value>) -> Result<Self, Unreadable> {
         let yes_no = |key| stored::answer(answers, key, Value::as_bool);
         Ok(Self {
             approved_fstd: yes_no(APPROVED_FSTD)?,
@@ -172,6 +238,7 @@ impl EntryInformation {
             azimuth_guidance_operation: yes_no(AZIMUTH_GUIDANCE_OPERATION)?,
             course_deviation_indicator_operation: yes_no(COURSE_DEVIATION_INDICATOR_OPERATION)?,
             dme_or_gnss_arrivals: stored::answer(answers, DME_OR_GNSS_ARRIVALS, Value::as_u64)?,
+            cross_country_flight: yes_no(CROSS_COUNTRY_FLIGHT)?,
         })
     }
 
@@ -188,6 +255,7 @@ impl EntryInformation {
             self.azimuth_guidance_operation.map(Value::from),
             self.course_deviation_indicator_operation.map(Value::from),
             self.dme_or_gnss_arrivals.map(Value::from),
+            self.cross_country_flight.map(Value::from),
         ];
         stored::information(KEYS.into_iter().zip(values))
     }

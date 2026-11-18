@@ -15,7 +15,7 @@ use logbook_shared_kernel::{
 use super::assessment_information::{CHECK_PURPOSES, CHECK_TYPE, OUTCOME};
 use super::entry_information::{
     APPROVED_FSTD, AZIMUTH_GUIDANCE_OPERATION, COURSE_DEVIATION_INDICATOR_OPERATION,
-    DME_OR_GNSS_ARRIVALS, RECEIVING_FLIGHT_TRAINING, ROUTE,
+    CROSS_COUNTRY_FLIGHT, DME_OR_GNSS_ARRIVALS, RECEIVING_FLIGHT_TRAINING, ROUTE,
 };
 use super::{
     AssessmentInformation, CheckOutcome, CheckPurpose, CheckType, EntryInformation, PurposeKind,
@@ -31,7 +31,8 @@ pub(super) static ASSESSMENT: LazyLock<Questions> = LazyLock::new(for_assessment
 /// The questions about an entry. Each is in the list whatever the entry,
 /// and one that applies only to some entries has a kernel [`Condition`], so
 /// that the host removes its answer when the entry no longer meets it:
-/// whether the device was approved for a session, the guidance operations
+/// whether the device was approved for a session, whether a flight was a
+/// cross-country flight, the guidance operations
 /// for an entry with an approach or a DME or GNSS arrival
 /// ([`guidance_applies`]), the route for a pilot in command under
 /// supervision, and its follow-up on the route's answer. The DME or GNSS
@@ -82,6 +83,19 @@ fn for_entry() -> Questions {
                 is: SupervisionRoute::Instructor.as_str().into(),
             }),
             required: true,
+        },
+        // Not required: an unanswered flight is not a cross-country flight,
+        // and no flight stored before it was asked has an answer.
+        Question {
+            key: CROSS_COUNTRY_FLIGHT,
+            label: "Was it a cross-country flight (along a pre-planned route, during which the \
+                    pilot used geometry, topography or radio navigation aids to determine the \
+                    aircraft's position and course)?"
+                .into(),
+            regulation: "61.010",
+            answer: Answer::YesNo,
+            applies_when: Some(Condition::Flight),
+            required: false,
         },
         Question {
             key: DME_OR_GNSS_ARRIVALS,

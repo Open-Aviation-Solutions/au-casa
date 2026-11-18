@@ -12,7 +12,10 @@
 //! the problems with the answers.
 //!
 //! CASA's information on an entry and on an assessment is not exported: a
-//! host reads it through [`LicensingAuthority`], and these keep it so.
+//! host reads it through [`LicensingAuthority`], and these keep it so. The
+//! migration of stored information on an entry
+//! ([`migrate_entry_information_from_version_1`]) takes and gives the
+//! kernel's [`AuthoritySpecificInformation`].
 //!
 //! ```compile_fail
 //! use au_casa::logbook::EntryInformation;
@@ -38,6 +41,7 @@ mod totals;
 pub(crate) use assessment_information::{
     AssessedPurpose, AssessmentInformation, CheckOutcome, CheckPurpose, CheckType, PurposeKind,
 };
+pub use entry_information::EntryMigrationError;
 pub(crate) use entry_information::{EntryInformation, SupervisionRoute};
 
 use std::collections::BTreeSet;
@@ -98,6 +102,19 @@ pub(crate) fn assessment_information(assessment: &Assessment) -> Option<Assessme
     // Removing answers from information that reads leaves information that
     // reads.
     AssessmentInformation::read(&assessment_information::applicable(stored, assessment)).ok()
+}
+
+/// Rewrite one entry's stored CASA information of version 1 as version 2,
+/// for the migration of a host's stored records: restamped as version 2,
+/// with every answer kept, since version 2 only adds `cross_country_flight`,
+/// which no version 1 information holds. Information of version 2 already
+/// is given back as it is, once it reads, so the migration can be run
+/// again. Nothing in it needs guessing, so it refuses only information
+/// that reads as neither version.
+pub fn migrate_entry_information_from_version_1(
+    information: &AuthoritySpecificInformation,
+) -> Result<AuthoritySpecificInformation, EntryMigrationError> {
+    entry_information::migrate_from_version_1(information)
 }
 
 impl Default for Casa {
@@ -200,10 +217,12 @@ impl LicensingAuthority for Casa {
     }
 
     /// Aeroplane time, single-engine and multi-engine aeroplane time,
-    /// registered sailplane time, simulated flight time and solo flight
-    /// time, of the entries that count. Solo flight time is the flights
-    /// whose pilot was the sole occupant; no rule makes it count as pilot in
-    /// command.
+    /// registered sailplane time, simulated flight time, solo flight time
+    /// and cross-country flight time, of the entries that count. Solo flight
+    /// time is the flights whose pilot was the sole occupant; no rule makes
+    /// it count as pilot in command. Cross-country flight time is the
+    /// flights CASA's information answers were cross-country flights (reg
+    /// 61.010), whatever the capacity; an unanswered flight is not one.
     ///
     /// Each has a stable id. Aeroplane time's is the aeroplane category's,
     /// and each class's is its class's, as `classify` gives them; the two
@@ -218,7 +237,8 @@ impl LicensingAuthority for Casa {
     /// asked the same questions, each with the condition on which it
     /// applies, so that the host removes an answer to one that no longer
     /// does: whether the device was an approved flight simulation training
-    /// device applies to a session, the two guidance operations to an entry
+    /// device applies to a session, whether it was a cross-country flight
+    /// to a flight, the two guidance operations to an entry
     /// with an approach or a DME or GNSS arrival, the route to a pilot in
     /// command under supervision, and whether the person was receiving
     /// flight training on the instructor's route. The DME or GNSS arrivals

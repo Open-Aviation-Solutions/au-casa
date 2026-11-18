@@ -15,7 +15,7 @@ use logbook_shared_kernel::{
 
 use crate::aircraft::{AircraftCategory, AircraftClassRating};
 use crate::logbook::guards::{is_category, is_class_rating};
-use crate::logbook::{category_id, class_id, Casa};
+use crate::logbook::{category_id, class_id, information, Casa};
 
 /// An entry's flight time, in minutes, when `counts`; otherwise none.
 fn flight_time_if(entry: &Entry, counts: bool) -> u64 {
@@ -97,10 +97,25 @@ impl Measure for SoloFlightTime {
     }
 }
 
+/// A flight's time when it was a "cross-country flight" (reg 61.010), as
+/// CASA's information on it answers: "cross-country flight time means
+/// flight time accrued during a cross-country flight". An unanswered flight
+/// is not one, and a session's answer, to a question that does not apply to
+/// it, is not read. Whatever the entry's capacity, as solo flight time is.
+struct CrossCountryFlightTime;
+impl Measure for CrossCountryFlightTime {
+    fn measure(entry: &Entry) -> u64 {
+        let cross_country = information(entry)
+            .is_some_and(|information| information.cross_country_flight == Some(true));
+        flight_time_if(entry, cross_country)
+    }
+}
+
 /// CASA's totals of the entries dated in `range`, through the kernel's
 /// `run`, so over the entries `Casa::counts` lets through: aeroplane time,
 /// then single-engine and multi-engine aeroplane time, registered
-/// sailplane time, simulated flight time and solo flight time. A category's
+/// sailplane time, simulated flight time, solo flight time and
+/// cross-country flight time. A category's
 /// or a class's total has its id, and each class is part of aeroplane time.
 ///
 /// A session counts towards the category and class of the type its device
@@ -114,6 +129,7 @@ pub(super) fn totals(casa: &Casa, logbook: &Logbook, range: DateRange) -> Vec<Au
     let mut sailplane = Total::<RegisteredSailplane>::new(range);
     let mut simulated = Total::<SimulatedFlightTime>::new(range);
     let mut solo = Total::<SoloFlightTime>::new(range);
+    let mut cross_country = Total::<CrossCountryFlightTime>::new(range);
     run(
         casa,
         &logbook.entries,
@@ -124,6 +140,7 @@ pub(super) fn totals(casa: &Casa, logbook: &Logbook, range: DateRange) -> Vec<Au
             &mut sailplane,
             &mut simulated,
             &mut solo,
+            &mut cross_country,
         ],
     );
     let aeroplane_id = category_id(AircraftCategory::Aeroplane);
@@ -151,6 +168,11 @@ pub(super) fn totals(casa: &Casa, logbook: &Logbook, range: DateRange) -> Vec<Au
             simulated.total(),
         ),
         (("solo-flight-time", None), "Solo flight time", solo.total()),
+        (
+            ("cross-country-flight-time", None),
+            "Cross-country flight time",
+            cross_country.total(),
+        ),
     ]
     .into_iter()
     .map(|((id, part_of), name, minutes)| AuthorityTotal {
@@ -166,6 +188,7 @@ pub(super) fn totals(casa: &Casa, logbook: &Logbook, range: DateRange) -> Vec<Au
 
 #[cfg(test)]
 mod tests {
+    use icao_shared_kernel::Capacity;
     use logbook_shared_kernel::{AircraftCharacteristic, EntryParts};
     use time::macros::date;
     use time::Date;
@@ -223,6 +246,7 @@ mod tests {
                 "Registered sailplane",
                 "Simulated flight time",
                 "Solo flight time",
+                "Cross-country flight time",
             ]
         );
     }
@@ -249,6 +273,7 @@ mod tests {
                 ("registered-sailplane".to_owned(), None),
                 ("simulated-flight-time".to_owned(), None),
                 ("solo-flight-time".to_owned(), None),
+                ("cross-country-flight-time".to_owned(), None),
             ]
         );
     }
@@ -263,7 +288,7 @@ mod tests {
         {
             characteristics.insert(AircraftCharacteristic::MultiEngineCentreLineThrust);
         }
-        assert_eq!(minutes(vec![entry(parts)]), [60, 60, 0, 0, 0, 0]);
+        assert_eq!(minutes(vec![entry(parts)]), [60, 60, 0, 0, 0, 0, 0]);
     }
 
     /// Reg 61.020(2)(a), from the characteristics the session's device
@@ -281,40 +306,41 @@ mod tests {
             }
             minutes(vec![entry(parts)])
         };
-        assert_eq!(session(&[]), [60, 0, 60, 0, 60, 0]);
+        assert_eq!(session(&[]), [60, 0, 60, 0, 60, 0, 0]);
         assert_eq!(
             session(&[AircraftCharacteristic::MultiEngineCentreLineThrust]),
-            [60, 60, 0, 0, 60, 0]
+            [60, 60, 0, 0, 60, 0, 0]
         );
     }
 
     #[test]
     fn each_type_counts_towards_its_category_and_class_only() {
-        // (aeroplane, single-engine, multi-engine, sailplane, simulated, solo)
+        // (aeroplane, single-engine, multi-engine, sailplane, simulated, solo,
+        // cross-country)
         assert_eq!(
             minutes(vec![entry(aeroplane("a", ON))]),
-            [60, 60, 0, 0, 0, 0]
+            [60, 60, 0, 0, 0, 0, 0]
         );
         assert_eq!(
             minutes(vec![entry(flown("a", ON, "PA44"))]),
-            [60, 0, 60, 0, 0, 0]
+            [60, 0, 60, 0, 0, 0, 0]
         );
         assert_eq!(
             minutes(vec![entry(sailplane("a", ON))]),
-            [0, 0, 0, 60, 0, 0]
+            [0, 0, 0, 60, 0, 0, 0]
         );
         // A helicopter, and a type of no known category.
-        assert_eq!(minutes(vec![entry(flown("a", ON, "R44"))]), [0; 6]);
-        assert_eq!(minutes(vec![entry(unclassified("a", ON))]), [0; 6]);
+        assert_eq!(minutes(vec![entry(flown("a", ON, "R44"))]), [0; 7]);
+        assert_eq!(minutes(vec![entry(unclassified("a", ON))]), [0; 7]);
     }
 
     #[test]
     fn a_session_counts_only_in_an_approved_device() {
         let session = || simulated("s", ON, "C172");
-        assert_eq!(minutes(vec![entry(session())]), [0; 6]);
+        assert_eq!(minutes(vec![entry(session())]), [0; 7]);
         assert_eq!(
             minutes(vec![entry(approved(session()))]),
-            [60, 60, 0, 0, 60, 0]
+            [60, 60, 0, 0, 60, 0, 0]
         );
     }
 
@@ -324,7 +350,42 @@ mod tests {
         if let Subject::Flight { sole_occupant, .. } = &mut parts.subject {
             *sole_occupant = true;
         }
-        assert_eq!(minutes(vec![entry(parts)]), [60, 60, 0, 0, 0, 60]);
+        assert_eq!(minutes(vec![entry(parts)]), [60, 60, 0, 0, 0, 60, 0]);
+    }
+
+    /// Reg 61.010, *cross-country flight time*: the flight time of a flight
+    /// answered as a cross-country flight, whatever the capacity, and none
+    /// of an unanswered one or of a session.
+    #[test]
+    fn cross_country_flight_time_is_the_flights_answered_cross_country() {
+        let cross_country = |answer, parts| {
+            informed(
+                EntryInformation {
+                    approved_fstd: Some(true),
+                    cross_country_flight: answer,
+                    ..EntryInformation::default()
+                },
+                parts,
+            )
+        };
+        let mut dual = cross_country(Some(true), aeroplane("a", ON));
+        dual.capacity = Capacity::DualInstruction;
+        assert_eq!(minutes(vec![entry(dual)]), [60, 60, 0, 0, 0, 0, 60]);
+        assert_eq!(
+            minutes(vec![entry(cross_country(Some(false), aeroplane("a", ON)))]),
+            [60, 60, 0, 0, 0, 0, 0]
+        );
+        assert_eq!(
+            minutes(vec![entry(cross_country(None, aeroplane("a", ON)))]),
+            [60, 60, 0, 0, 0, 0, 0]
+        );
+        assert_eq!(
+            minutes(vec![entry(cross_country(
+                Some(true),
+                simulated("s", ON, "C172")
+            ))]),
+            [60, 60, 0, 0, 60, 0, 0]
+        );
     }
 
     #[test]

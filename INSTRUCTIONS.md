@@ -86,7 +86,9 @@ answers one such question:
   (`totals`, over the entries that count, each with a stable id and the
   total it is part of, the classes of aeroplane under aeroplane time; solo
   flight time is the flights whose `sole_occupant` is true, and no rule
-  makes solo count as pilot in command); the questions it asks for its information on an entry and on
+  makes solo count as pilot in command; cross-country flight time is the
+  flights CASA's information answers were cross-country flights, whatever
+  the capacity, as solo flight time is); the questions it asks for its information on an entry and on
   an assessment (`questions_for`, in `logbook::questions`: one for each key
   of the format, every one in the list whatever the record, and one that
   applies only to some records has a kernel `Condition`, never left out,
@@ -94,8 +96,13 @@ answers one such question:
   answer when it saves a record it no longer applies to; the checks read an
   entry's information through `information`, which removes those answers
   too, so an answer already stored to a question that does not apply counts
-  for nothing; the DME or GNSS arrivals are asked whatever the flight
-  rules, and before the azimuth guidance and course deviation indicator
+  for nothing; whether a flight was a cross-country flight
+  (`cross_country_flight`, reg 61.010) is asked of a flight
+  (`Condition::Flight`, since a session has simulated flight time, not
+  flight time), for the whole flight, first of the questions that apply to
+  every flight, and is not required: an unanswered flight is not one, and
+  the pilot answers it for a flight stored before it was asked; the DME or
+  GNSS arrivals are asked whatever the flight rules, and before the azimuth guidance and course deviation indicator
   operations, which apply to an entry that records an approach or a DME or
   GNSS arrival (`Condition::Any` of `AnyApproach` and a `CountAtLeast` of
   one on the arrivals), as an arrival is an instrument approach operation
@@ -108,9 +115,12 @@ answers one such question:
   absent key is. The currency checks are in `logbook::currency`, which
   also lists the requirements and runs them; see "Currency checks" below.
 
-**The information's readers are crate-private (au-casa#68).** Only `Casa` is
-exported from `logbook`. `EntryInformation`, `AssessmentInformation`, their
-error types, `CheckType`, `CheckOutcome`, `CheckPurpose`, `AssessedPurpose`,
+**The information's readers are crate-private (au-casa#68).** `logbook`
+exports only `Casa`, and the migration of the information on an entry
+(`migrate_entry_information_from_version_1`, over the kernel's types, with its
+own public error, `EntryMigrationError`). The readers `EntryInformation` and
+`AssessmentInformation`, their read errors (`InformationError` and
+`AssessmentInformationError`), `CheckType`, `CheckOutcome`, `CheckPurpose`, `AssessedPurpose`,
 `PurposeKind` and `SupervisionRoute` are `pub(crate)`, with no writer outside
 the tests. A host reads CASA's information on a record only through
 `LicensingAuthority` (`counts`, `questions_for`, `problems_for`, `currency` and
@@ -176,7 +186,7 @@ to the trait.
   groups a flight's entries, asserts the same result for both orders.
 
 `icao-shared-kernel`, logbook-shared-kernel and aircraft-type-descriptions
-are taken by a caret range (`^0.6`, `^0.9` and `^0.1.0`), not pinned exactly
+are taken by a caret range (`^0.6`, `^0.9.1` and `^0.1.0`), not pinned exactly
 (au-casa#24): sibling country crates (nz-caa and the like) depend on them
 too, and a consumer such as a logbook imports several at once. Exact pins on
 different patches cannot be resolved together; with caret ranges Cargo builds
@@ -224,7 +234,8 @@ holds the first two to the stored names):
   no category rating). The category's is `category_id`'s. A host stores the
   ids of the national titles, so they do not change; a test lists them all.
 - A total that is a category's or a class's time has that term's id; the
-  others are `simulated-flight-time` and `solo-flight-time`.
+  others are `simulated-flight-time`, `solo-flight-time` and
+  `cross-country-flight-time`.
 
 ## Reading Part 61 for licences and category ratings
 
@@ -324,7 +335,11 @@ on a data repository branch merged with the host's take-up, not with
 au-casa's pull request, since a deployed page refuses records of a version it
 does not read until it takes up the release.
 
-The only migration so far, `AssessmentInformation::migrate_from_version_1`
+The migration so far is `logbook::migrate_entry_information_from_version_1`
+(au-casa#86, in 0.10.0), from version 1 of the information on an entry to
+version 2, which added `cross_country_flight`: it restamps the version and
+keeps every answer, so it refuses only information that reads as neither
+version. An earlier one, `AssessmentInformation::migrate_from_version_1`
 (run by pilot-logbook#206's `make migrate-assessment-purposes`), was removed
 in 0.7.0: it was written over the typed reader, which is no longer public, and
 the data repository was past it. It is in the history before 0.7.0.
@@ -335,7 +350,7 @@ Breaking includes a change to the API; a change to the Part 61 reading
 that changes an existing designator's category, class or design features, or
 a title of licence's Part 61 term; and a requirement added or removed, or a
 change to what makes an existing one current. Consumers take au-casa by a
-caret range on the current minor (such as `^0.9.0`), so a `cargo update` takes up patches but not a breaking release,
+caret range on the current minor (such as `^0.10.0`), so a `cargo update` takes up patches but not a breaking release,
 which they move to on purpose.
 
 ## Commands
