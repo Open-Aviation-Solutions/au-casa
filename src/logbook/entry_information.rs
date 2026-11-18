@@ -5,7 +5,7 @@
 //! CASA's authority-specific information on a logbook entry, as it is
 //! stored.
 
-use logbook_shared_kernel::AuthoritySpecificInformation;
+use logbook_shared_kernel::{AuthoritySpecificInformation, Questions};
 use serde_json::Value;
 use thiserror::Error;
 
@@ -47,6 +47,9 @@ pub struct EntryInformation {
     /// arrival procedure"). Stored as a JSON integer, as the kernel's
     /// `Answer::Count` is.
     pub dme_or_gnss_arrivals: Option<u64>,
+    /// `cross_country_flight`: whether a flight was a "cross-country
+    /// flight" (reg 61.010), for the whole flight. Added in version 2.
+    pub cross_country_flight: Option<bool>,
 }
 
 /// Which subregulation makes a flight time as pilot in command under
@@ -116,21 +119,68 @@ pub(super) const AZIMUTH_GUIDANCE_OPERATION: &str = "azimuth_guidance_operation"
 pub(super) const COURSE_DEVIATION_INDICATOR_OPERATION: &str =
     "course_deviation_indicator_operation";
 pub(super) const DME_OR_GNSS_ARRIVALS: &str = "dme_or_gnss_arrivals";
+pub(super) const CROSS_COUNTRY_FLIGHT: &str = "cross_country_flight";
 
 /// Every key of the format, in the order [`EntryInformation::to_information`]
-/// writes them: the one list both reading and writing go by.
-const KEYS: [&str; 6] = [
+/// writes them: the one list both reading and writing go by. Version 1's
+/// are every one but the last, `cross_country_flight`, which version 2
+/// added.
+const KEYS: [&str; 7] = [
     APPROVED_FSTD,
     ROUTE,
     RECEIVING_FLIGHT_TRAINING,
     AZIMUTH_GUIDANCE_OPERATION,
     COURSE_DEVIATION_INDICATOR_OPERATION,
     DME_OR_GNSS_ARRIVALS,
+    CROSS_COUNTRY_FLIGHT,
 ];
+
+/// Why stored information cannot be migrated to the current version of
+/// CASA's information on an entry.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum EntryMigrationError {
+    #[error("CASA's information on an entry is not a JSON object")]
+    NotAnObject,
+    #[error(
+        "CASA's information on an entry is not of version 1 or {}",
+        EntryInformation::VERSION
+    )]
+    UnsupportedVersion,
+    #[error("CASA's information on an entry has no key {0:?} in its version")]
+    UnknownKey(String),
+    #[error("CASA's information on an entry holds no answer of its kind under {0:?}")]
+    InvalidAnswer(&'static str),
+}
+
+impl From<Unreadable> for EntryMigrationError {
+    fn from(unreadable: Unreadable) -> Self {
+        match unreadable {
+            Unreadable::NotAnObject => Self::NotAnObject,
+            Unreadable::UnsupportedVersion => Self::UnsupportedVersion,
+            Unreadable::UnknownKey(key) => Self::UnknownKey(key),
+            Unreadable::InvalidAnswer(key) => Self::InvalidAnswer(key),
+        }
+    }
+}
+
+/// [`super::migrate_entry_information_from_version_1`]: version 1 has every
+/// key of this version but `cross_country_flight`, each meaning the same.
+pub(super) fn migrate_from_version_1(
+    information: &AuthoritySpecificInformation,
+) -> Result<AuthoritySpecificInformation, EntryMigrationError> {
+    let mut migrated = information.clone();
+    if information.version() != Some(EntryInformation::VERSION) {
+        stored::answers(information, 1, &KEYS[..KEYS.len() - 1], true)?;
+        Questions::new(EntryInformation::VERSION, Vec::new()).stamp(&mut migrated);
+    }
+    // Each answer is read as it is read in this version.
+    EntryInformation::read_answers(&migrated, true)?;
+    Ok(migrated)
+}
 
 impl EntryInformation {
     /// The version of this format.
-    pub const VERSION: u32 = 1;
+    pub const VERSION: u32 = 2;
 
     /// Read stored information, which carries its version: it must be
     /// [`Self::VERSION`]. A key that is not this format's, or an answer not
@@ -172,6 +222,7 @@ impl EntryInformation {
             azimuth_guidance_operation: yes_no(AZIMUTH_GUIDANCE_OPERATION)?,
             course_deviation_indicator_operation: yes_no(COURSE_DEVIATION_INDICATOR_OPERATION)?,
             dme_or_gnss_arrivals: stored::answer(answers, DME_OR_GNSS_ARRIVALS, Value::as_u64)?,
+            cross_country_flight: yes_no(CROSS_COUNTRY_FLIGHT)?,
         })
     }
 
@@ -188,6 +239,7 @@ impl EntryInformation {
             self.azimuth_guidance_operation.map(Value::from),
             self.course_deviation_indicator_operation.map(Value::from),
             self.dme_or_gnss_arrivals.map(Value::from),
+            self.cross_country_flight.map(Value::from),
         ];
         stored::information(KEYS.into_iter().zip(values))
     }
