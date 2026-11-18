@@ -120,7 +120,7 @@ the kernel at a matching `0.x` minor (au-casa `0.1.x` with kernel `0.1.x`,
 `0.2.x` with `0.2.x`, `0.3.x` to `0.8.x` with `0.5.x`, `0.9.x` and `0.10.x` with `0.6.x`); mixing them builds two copies of `LicenceTitle`. From `0.3`, `Casa`
 implements logbook-shared-kernel's `LicensingAuthority`, so a consumer takes
 that crate at the minor au-casa takes too (`0.2` for au-casa `0.3` and `0.4`, `0.5` for
-au-casa `0.5`, `0.6` for `0.6` and `0.7`, `0.8` for `0.8`, `0.9` for `0.9` and `0.10`): with another,
+au-casa `0.5`, `0.6` for `0.6` and `0.7`, `0.8` for `0.8`, `0.9` for `0.9`, and `0.9.1` for `0.10`): with another,
 `Casa` implements a different trait from the one the consumer names. The
 published set is:
 

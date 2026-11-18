@@ -115,11 +115,12 @@ answers one such question:
   absent key is. The currency checks are in `logbook::currency`, which
   also lists the requirements and runs them; see "Currency checks" below.
 
-**The information's readers are crate-private (au-casa#68).** Only `Casa`,
-and the migration of the information on an entry
-(`migrate_entry_information_from_version_1`, over the kernel's types, and its
-`EntryMigrationError`), are exported from `logbook`. `EntryInformation`, `AssessmentInformation`, their
-error types, `CheckType`, `CheckOutcome`, `CheckPurpose`, `AssessedPurpose`,
+**The information's readers are crate-private (au-casa#68).** `logbook`
+exports only `Casa`, and the migration of the information on an entry
+(`migrate_entry_information_from_version_1`, over the kernel's types, with its
+own public error, `EntryMigrationError`). The readers `EntryInformation` and
+`AssessmentInformation`, their read errors (`InformationError` and
+`AssessmentInformationError`), `CheckType`, `CheckOutcome`, `CheckPurpose`, `AssessedPurpose`,
 `PurposeKind` and `SupervisionRoute` are `pub(crate)`, with no writer outside
 the tests. A host reads CASA's information on a record only through
 `LicensingAuthority` (`counts`, `questions_for`, `problems_for`, `currency` and
