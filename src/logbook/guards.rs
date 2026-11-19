@@ -58,6 +58,14 @@ pub(crate) fn is_category(entry: &Entry, category: AircraftCategory) -> bool {
     classified(entry).is_some_and(|(of, _)| of == category)
 }
 
+/// Whether the entry is a flight in an aircraft *known* to be of this
+/// category: a session does not count, as it is not in an aircraft (for a
+/// regulation that says "in an aircraft of that category" and names no
+/// flight simulator, as reg 61.965(a) does).
+pub(crate) fn is_aircraft_of_category(entry: &Entry, category: AircraftCategory) -> bool {
+    matches!(entry.subject(), Subject::Flight { .. }) && is_category(entry, category)
+}
+
 /// Whether the type is *known* to be of this class (reg 61.020). Also false
 /// when the category is known but has no class: reg 61.020 lists no
 /// multi-engine helicopter or gyroplane class.

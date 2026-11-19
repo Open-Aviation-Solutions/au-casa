@@ -11,12 +11,12 @@
 //! one.
 
 use logbook_shared_kernel::{
-    CurrencyCheck, CurrencyResult, DayNight, Entry, EntryAccumulator, EventWindow, Subject,
+    CurrencyCheck, CurrencyResult, DayNight, Entry, EntryAccumulator, EventWindow,
 };
 use time::Date;
 
 use crate::aircraft::AircraftCategory;
-use crate::logbook::guards::is_category;
+use crate::logbook::guards::{is_aircraft_of_category, is_category};
 
 /// "Within the previous 90 days" (reg 61.395(1) and (2)).
 const PASSENGER_WINDOW_DAYS: u32 = 90;
@@ -71,9 +71,9 @@ pub(crate) struct TakeOffsAndLandings {
     kind: TakeOffsOrLandings,
     /// The number to count, from the entry's by day and at night.
     counted: fn(&DayNight<u32>) -> u64,
-    /// Whether a session in an approved flight simulator counts, as well as
-    /// a flight.
-    sessions_count: bool,
+    /// Whether the entry is in an aeroplane: by a guard that counts a
+    /// session's simulated type too, or one that counts a flight only.
+    in_aeroplane: fn(&Entry, AircraftCategory) -> bool,
 }
 
 /// By day and at night together.
@@ -98,7 +98,7 @@ impl TakeOffsAndLandings {
     /// least 500 ft AGL", as met.
     pub(crate) fn passenger_day(reference: Date, kind: TakeOffsOrLandings) -> Self {
         let window = EventWindow::new(reference, PASSENGER_WINDOW_DAYS, PASSENGER_REQUIRED);
-        Self::new(window, kind, day_and_night, true)
+        Self::new(window, kind, day_and_night, is_category)
     }
 
     /// Reg 61.395(2): "within the previous 90 days, in an aircraft of that
@@ -112,7 +112,7 @@ impl TakeOffsAndLandings {
     /// least 500 ft AGL", as met.
     pub(crate) fn passenger_night(reference: Date, kind: TakeOffsOrLandings) -> Self {
         let window = EventWindow::new(reference, PASSENGER_WINDOW_DAYS, PASSENGER_REQUIRED);
-        Self::new(window, kind, night_only, true)
+        Self::new(window, kind, night_only, is_category)
     }
 
     /// Reg 61.965(a): "within the previous 6 months … (i) at least one
@@ -123,20 +123,20 @@ impl TakeOffsAndLandings {
     /// names no flight simulator (decided on au-casa#56).
     pub(crate) fn night_vfr(reference: Date, kind: TakeOffsOrLandings) -> Self {
         let window = EventWindow::new(reference, NIGHT_VFR_WINDOW_DAYS, NIGHT_VFR_REQUIRED);
-        Self::new(window, kind, night_only, false)
+        Self::new(window, kind, night_only, is_aircraft_of_category)
     }
 
     fn new(
         window: EventWindow,
         kind: TakeOffsOrLandings,
         counted: fn(&DayNight<u32>) -> u64,
-        sessions_count: bool,
+        in_aeroplane: fn(&Entry, AircraftCategory) -> bool,
     ) -> Self {
         Self {
             window,
             kind,
             counted,
-            sessions_count,
+            in_aeroplane,
         }
     }
 
@@ -148,10 +148,7 @@ impl TakeOffsAndLandings {
 
 impl EntryAccumulator for TakeOffsAndLandings {
     fn accept_entry(&mut self, entry: &Entry) {
-        if !self.sessions_count && matches!(entry.subject(), Subject::Session { .. }) {
-            return;
-        }
-        if !is_category(entry, AircraftCategory::Aeroplane) {
+        if !(self.in_aeroplane)(entry, AircraftCategory::Aeroplane) {
             return;
         }
         let count = (self.counted)(&self.kind.of(entry));
@@ -441,6 +438,16 @@ mod tests {
             assert_each_counts_its_own_entry(result(&split(night(3), night(3), on)));
         }
 
+        /// "In an aircraft of that category or an approved flight simulator
+        /// for the purpose": whether the device was approved is
+        /// `Casa::counts`'.
+        #[test]
+        fn a_session_representing_an_aeroplane_counts() {
+            for r in result(&[at_night(3, simulated("a", date!(2024 - 08 - 20), "C172"))]) {
+                assert!(r.is_current());
+            }
+        }
+
         #[test]
         fn an_unclassified_type_does_not_count() {
             for r in result(&[at_night(3, unclassified("a", date!(2024 - 08 - 20)))]) {
@@ -532,6 +539,7 @@ mod tests {
             ];
             for r in result(&entries) {
                 assert_eq!(r.found, 1);
+                assert_eq!(r.qualifying[0].entry, EntryId::new("b"));
             }
         }
 
