@@ -52,10 +52,16 @@ pub(crate) fn tabled(designator: &str) -> Option<AircraftDescription> {
         .map(|facts| facts.description)
 }
 
+/// The category the type is *known* to be of (reg 61.015, or reg 61.007(2)
+/// for a registered sailplane); `None` when it is not known.
+pub(crate) fn category_of(entry: &Entry) -> Option<AircraftCategory> {
+    classified(entry).map(|(category, _)| category)
+}
+
 /// Whether the type is *known* to be of this category (reg 61.015, or reg
 /// 61.007(2) for a registered sailplane).
 pub(crate) fn is_category(entry: &Entry, category: AircraftCategory) -> bool {
-    classified(entry).is_some_and(|(of, _)| of == category)
+    category_of(entry) == Some(category)
 }
 
 /// Whether the type is *known* to be of this class (reg 61.020). Also false
@@ -63,6 +69,18 @@ pub(crate) fn is_category(entry: &Entry, category: AircraftCategory) -> bool {
 /// multi-engine helicopter or gyroplane class.
 pub(crate) fn is_class_rating(entry: &Entry, class_rating: AircraftClassRating) -> bool {
     classified(entry).is_some_and(|(_, class)| class == Some(class_rating))
+}
+
+/// Whether the type is *known* to be a multi-engine helicopter (reg
+/// 61.880(2)(b)), which Part 61 does not define: a helicopter with 2 or
+/// more engines. Reg 61.020 has a class for single-engine helicopters only,
+/// and [`classify`] puts every other helicopter in none, so it is a
+/// helicopter outside that class.
+pub(crate) fn is_multi_engine_helicopter(entry: &Entry) -> bool {
+    classified(entry).is_some_and(|(category, class)| {
+        category == AircraftCategory::Helicopter
+            && class != Some(AircraftClassRating::SingleEngineHelicopter)
+    })
 }
 
 #[cfg(test)]

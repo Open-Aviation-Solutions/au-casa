@@ -846,7 +846,7 @@ fn each_requirement_has_its_result_and_each_total_its_time() {
         assessments: vec![an_assessment()],
     };
     let requirements = casa.requirements();
-    assert_eq!(requirements.len(), 20);
+    assert_eq!(requirements.len(), 26);
     assert_eq!(
         requirements[0].name,
         "Carrying a passenger by day in an aeroplane: at least 3 take-offs, by day or night"

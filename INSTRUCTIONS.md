@@ -151,8 +151,12 @@ to the trait.
   that reads it (the flight review) is given the entries, and an assessment
   is in the aircraft of the entry for the same `flight`; one whose flight
   has no entry is unclassified and does not count. The instrument
-  proficiency check reads no aircraft, as pilot-logbook's did not, so it is
-  given no entries.
+  proficiency checks read it too (au-casa#58): a pass counts for a check
+  when its aircraft is a "relevant aircraft" for it (reg 61.880(9)), so one
+  in a multi-engine aeroplane counts for the aeroplane category as well as
+  for multi-engine aeroplanes; a failure ends the checks of its aircraft's
+  category, the multi-engine one included (reg 61.880(4)), and one whose
+  aircraft is not known ends them all.
 - **An unknown type does not count where a category is required.** A check
   that requires a category (`guards::is_category`) needs positive evidence;
   regs 61.870(2) and (4) to (7) require none ("in an aircraft"), so any
@@ -172,7 +176,13 @@ to the trait.
   `regulation` and the paragraph that requires them as its id
   (`61.395(1)(a)` for the take-offs, `61.395(1)(b)` for the landings,
   `61.965(a)(i)` and `61.965(a)(ii)`); these originate here too
-  (au-casa#67). A host may keep an id, so changing one is a breaking
+  (au-casa#67). Reg 61.880 has one for each of reg 61.015's categories
+  (`61.880|aeroplane`) and one each for its subregulation (2)'s
+  multi-engine aeroplanes and helicopters (`61.880|multi-engine-aeroplane`,
+  `61.880|multi-engine-helicopter`), with the regulation as its
+  `regulation`; it replaced the bare `61.880` in 0.11.0 (au-casa#58). A
+  multi-engine helicopter, which Part 61 does not define, is a helicopter
+  with 2 or more engines. A host may keep an id, so changing one is a breaking
   change. A new check is a `CasaRequirement` variant (a `match` on it will
   not compile without its id, name and regulation), a row of
   `REQUIREMENTS`, and its result paired with that variant in `currency`; a
