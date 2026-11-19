@@ -117,8 +117,8 @@ struct Passed {
 ///
 /// - (a) a passed flight test whose purpose is the instrument rating;
 /// - (b) a passed flight test whose purpose is an instrument endorsement,
-///   when it is more than 6 months after the latest passed rating test
-///   before it;
+///   when it is more than 6 months after the latest passed rating test,
+///   in any aircraft, before it;
 /// - (c) a passed operator proficiency check (that it covered IFR
 ///   operations, and its examiner, are not recorded);
 /// - (e) a passed instrument proficiency check.
@@ -159,6 +159,11 @@ pub(crate) struct InstrumentProficiencyCheck {
     /// The flights whose aircraft is known to be of another category only,
     /// on which a failure does not end this check.
     other_category: BTreeSet<SubjectId>,
+    /// The dates of the flight tests passed for the instrument rating, in
+    /// any aircraft: reg 61.880(3)(b)(ii) asks only when the holder passed
+    /// "the flight test for the rating", not in what.
+    rating_tests: Vec<Date>,
+    /// The passes in a relevant aircraft.
     passed: Vec<Passed>,
     /// The dates of the failed instrument proficiency checks that end it.
     failed: Vec<Date>,
@@ -200,6 +205,7 @@ impl InstrumentProficiencyCheck {
             reference,
             relevant,
             other_category: &other_category - &in_category,
+            rating_tests: Vec::new(),
             passed: Vec::new(),
             failed: Vec::new(),
         }
@@ -283,6 +289,9 @@ impl AssessmentAccumulator for InstrumentProficiencyCheck {
                 _ => return,
             }
         };
+        if basis == Basis::RatingTest {
+            self.rating_tests.push(assessment.date);
+        }
         if !self.relevant.contains(&flight) {
             return;
         }
@@ -296,19 +305,13 @@ impl AssessmentAccumulator for InstrumentProficiencyCheck {
 
 impl AssessmentCurrencyCheck for InstrumentProficiencyCheck {
     fn result(&self) -> CurrencyResult {
-        let rating_tests: Vec<Date> = self
-            .passed
-            .iter()
-            .filter(|passed| passed.basis == Basis::RatingTest)
-            .map(|passed| passed.on)
-            .collect();
         // Nothing passed before the latest failure counts after it.
         let failed_on = self.failed.iter().max();
         let mut events: Vec<&Passed> = self
             .passed
             .iter()
             .filter(|passed| failed_on.is_none_or(|failed| passed.on >= *failed))
-            .filter(|passed| Self::qualifies(passed, &rating_tests))
+            .filter(|passed| Self::qualifies(passed, &self.rating_tests))
             .collect();
         events.sort_by(|a, b| a.on.cmp(&b.on).then_with(|| a.id.cmp(&b.id)));
         if events.is_empty() {
@@ -823,14 +826,15 @@ mod tests {
         failed.authority_information = unreadable.authority_information;
         assert!(result(&[ipc("p", on, CheckOutcome::Passed), failed]).is_current());
     }
+
     /// An instrument proficiency check on this flight.
-    fn ipc_on(flight: u128, on: Date, outcome: CheckOutcome) -> Assessment {
+    fn ipc_on(id: &str, flight: u128, on: Date, outcome: CheckOutcome) -> Assessment {
         let information = AssessmentInformation {
             check_type: Some(CheckType::InstrumentProficiencyCheck),
             outcome: Some(outcome),
             check_purposes: Vec::new(),
         };
-        assessed(&flight.to_string(), on, flight, information)
+        assessed(id, on, flight, information)
     }
 
     /// Which of the checks a pass on each flight makes current: a
@@ -847,7 +851,12 @@ mod tests {
             Category(AircraftCategory::Gyroplane),
         ];
         let current = |flight| -> Vec<ProficiencyCheckFor> {
-            let passed = [ipc_on(flight, date!(2024 - 08 - 02), CheckOutcome::Passed)];
+            let passed = [ipc_on(
+                "p",
+                flight,
+                date!(2024 - 08 - 02),
+                CheckOutcome::Passed,
+            )];
             checks
                 .into_iter()
                 .filter(|&check_for| result_for(check_for, REFERENCE, &passed).is_current())
@@ -867,22 +876,62 @@ mod tests {
     /// not known ends both.
     #[test]
     fn a_failure_ends_the_checks_of_the_category_it_was_attempted_in() {
-        let passed = ipc_on(2, date!(2024 - 07 - 03), CheckOutcome::Passed);
-        let after = |flight| {
-            [
-                passed.clone(),
-                ipc_on(flight, date!(2024 - 08 - 22), CheckOutcome::Failed),
-            ]
-        };
-        for check_for in [Category(Aeroplane), MultiEngineAeroplanes] {
-            for flight in [1, 2, 5, 6] {
-                let r = result_for(check_for, REFERENCE, &after(flight));
-                assert!(!r.is_current(), "{check_for:?} after a failure on {flight}");
-            }
-            for flight in [3, 4] {
-                let r = result_for(check_for, REFERENCE, &after(flight));
-                assert!(r.is_current(), "{check_for:?} after a failure on {flight}");
+        // Passed in a multi-engine aeroplane (flight 2) or helicopter (4);
+        // the flights in the category, then those in the other.
+        let cases = [
+            (
+                2,
+                [Category(Aeroplane), MultiEngineAeroplanes],
+                [1, 2],
+                [3, 4],
+            ),
+            (
+                4,
+                [Category(Helicopter), MultiEngineHelicopters],
+                [3, 4],
+                [1, 2],
+            ),
+        ];
+        for (passed_on, checks, in_category, in_other) in cases {
+            let after = |flight| {
+                [
+                    ipc_on("p", passed_on, date!(2024 - 07 - 03), CheckOutcome::Passed),
+                    ipc_on("f", flight, date!(2024 - 08 - 22), CheckOutcome::Failed),
+                ]
+            };
+            for check_for in checks {
+                for flight in in_category.into_iter().chain([5, 6]) {
+                    let r = result_for(check_for, REFERENCE, &after(flight));
+                    assert!(!r.is_current(), "{check_for:?} after a failure on {flight}");
+                }
+                for flight in in_other {
+                    let r = result_for(check_for, REFERENCE, &after(flight));
+                    assert!(r.is_current(), "{check_for:?} after a failure on {flight}");
+                }
             }
         }
+    }
+
+    /// The flight test for the rating that an endorsement test must be more
+    /// than 6 months after (reg 61.880(3)(b)(ii)) may be in any aircraft:
+    /// one in a single-engine aeroplane lets an endorsement test in a
+    /// multi-engine aeroplane count for multi-engine aeroplanes.
+    #[test]
+    fn an_endorsement_test_counts_after_a_rating_test_in_any_aircraft() {
+        let rating = assessed(
+            "ir",
+            date!(2023 - 01 - 10),
+            1,
+            flight_test(&[(CheckPurpose::InstrumentRating, CheckOutcome::Passed)]),
+        );
+        let endorsement = assessed(
+            "ie",
+            date!(2023 - 09 - 15),
+            2,
+            flight_test(&[(CheckPurpose::InstrumentEndorsement, CheckOutcome::Passed)]),
+        );
+        let r = result_for(MultiEngineAeroplanes, REFERENCE, &[rating, endorsement]);
+        assert_eq!(r.current_through(), Some(date!(2024 - 09 - 30)));
+        assert_eq!(ids(&r), ["ie"]);
     }
 }
