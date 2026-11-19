@@ -99,9 +99,9 @@ fn for_entry() -> Questions {
         },
         Question {
             key: DME_OR_GNSS_ARRIVALS,
-            label: "How many instrument approach operations were conducted using distance \
-                    measuring equipment or a global navigation satellite system (DME or GNSS \
-                    arrival procedure) that are not recorded as an approach?"
+            label: "How many instrument approach operations using distance measuring \
+                    equipment or a global navigation satellite system (DME or GNSS arrival \
+                    procedure), not also recorded in this entry's approaches, were conducted?"
                 .into(),
             regulation: "Table 61.935, item 20",
             answer: Answer::Count,

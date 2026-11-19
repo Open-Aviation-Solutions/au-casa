@@ -415,25 +415,6 @@ fn only_whether_it_was_cross_country_and_the_arrivals_apply_to_a_flight() {
 /// The questions that apply to every flight.
 const FLIGHT_KEYS: [&str; 2] = ["cross_country_flight", "dme_or_gnss_arrivals"];
 
-/// Both an approach and a DME or GNSS arrival count towards reg 61.870(2), and
-/// the arrivals are only a count, so a duplicate cannot be detected: the
-/// question rules it out by asking only for those not recorded as an approach.
-#[test]
-fn the_dme_or_gnss_arrivals_asked_for_are_those_not_recorded_as_an_approach() {
-    let entry = session("CASA", None);
-    let questions = Casa::new().questions_for(Record::Entry(&entry));
-    let arrivals = questions
-        .iter()
-        .find(|question| question.key == "dme_or_gnss_arrivals")
-        .expect("a question for the arrivals");
-    assert_eq!(
-        arrivals.label,
-        "How many instrument approach operations were conducted using distance measuring \
-         equipment or a global navigation satellite system (DME or GNSS arrival procedure) \
-         that are not recorded as an approach?"
-    );
-}
-
 #[test]
 fn whether_its_device_was_approved_applies_to_a_session() {
     let entry = session("CASA", None);
@@ -629,6 +610,25 @@ fn every_question_is_a_key_of_its_format() {
         questions.retain_applicable_answers_for(record, &mut information);
         assert!(casa.problems_for(record, &information).is_empty());
     }
+}
+
+/// Pins the arrivals question's wording: an operation recorded as an approach
+/// and as an arrival would count twice towards reg 61.870(2), and a count
+/// cannot be de-duplicated, so the question excludes the entry's approaches.
+#[test]
+fn the_dme_or_gnss_arrivals_question_excludes_the_entrys_approaches() {
+    let entry = session("CASA", None);
+    let questions = Casa::new().questions_for(Record::Entry(&entry));
+    let arrivals = questions
+        .iter()
+        .find(|question| question.key == "dme_or_gnss_arrivals")
+        .expect("a question for the arrivals");
+    assert_eq!(
+        arrivals.label,
+        "How many instrument approach operations using distance measuring equipment or a \
+         global navigation satellite system (DME or GNSS arrival procedure), not also \
+         recorded in this entry's approaches, were conducted?"
+    );
 }
 
 #[test]

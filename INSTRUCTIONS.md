@@ -102,11 +102,14 @@ answers one such question:
   flight time), for the whole flight, first of the questions that apply to
   every flight, and is not required: an unanswered flight is not one, and
   the pilot answers it for a flight stored before it was asked; the DME or
-  GNSS arrivals are asked whatever the flight rules, and before the azimuth guidance and course deviation indicator
+  GNSS arrivals, which exclude operations also recorded in the entry's
+  approaches (both count towards reg 61.870(2), and a count cannot be
+  de-duplicated against them, so the wording must keep excluding them), are
+  asked whatever the flight rules, and before the azimuth guidance and course deviation indicator
   operations, which apply to an entry that records an approach or a DME or
   GNSS arrival (`Condition::Any` of `AnyApproach` and a `CountAtLeast` of
   one on the arrivals), as an arrival is an instrument approach operation
-  too); and the problems with the
+  too; the exclusion is no format change: the count was always meant as reg 61.870(2)'s operations, narrowing it only rules out counting one operation twice, and no stored answer existed when 0.10.1 released it); and the problems with the
   answers (`problems_for`): information it cannot read, so that the host
   does not stamp and save it, and reg 61.095(3)(b)'s "the person is not
   receiving flight training", where that question applies. Stored information must carry its version
