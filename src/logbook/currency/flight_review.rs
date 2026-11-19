@@ -21,8 +21,9 @@ use crate::logbook::{assessment_information, AssessmentInformation, CheckOutcome
 /// "The end of the 24th month after the month in which the holder
 /// completes the review" (reg 61.745(1A)(a)).
 const VALID_MONTHS: u32 = 24;
-/// "Within 3 months before the validity of the existing review expires"
-/// (reg 61.745(1A)(b)).
+/// "The validity of the previous flight review is due to expire within 3
+/// months after the holder successfully completes the flight review" (reg
+/// 61.745(1A)(b)(ii)).
 const EARLY_RENEWAL_MONTHS: i32 = 3;
 const REQUIRED: usize = 1;
 
@@ -32,12 +33,18 @@ const REQUIRED: usize = 1;
 /// which the holder completes the review" (reg 61.745(1A)(a)): a review
 /// completed on any day of a month is valid to the last day of the 24th
 /// month after it, so one completed on 1 March 2024 and one on 31 March 2024
-/// are both valid to 31 March 2026. A review completed "within 3 months
-/// before the validity of the existing review expires" runs from that
-/// expiry (reg 61.745(1A)(b)), as the instrument proficiency check's does
+/// are both valid to 31 March 2026. If "the holder already has a
+/// valid flight review for the rating (the previous flight review)" and its
+/// "validity ... is due to expire within 3 months after the holder
+/// successfully completes the flight review", the review is valid "at the
+/// end of the 24th month after the validity of the previous flight review
+/// expires" (reg 61.745(1A)(b)), as the instrument proficiency check's is
 /// ([`renewal`]): one completed from 1 January 2026 to the last day of a
-/// review valid to 31 March 2026 is valid to 31 March 2028. The review the
-/// holder is valid by is the one valid longest.
+/// previous flight review valid to 31 March 2026 is valid to 31 March 2028.
+/// Every check that satisfies [`satisfies_flight_review`] is "taken to have
+/// successfully completed a flight review" for that (reg 61.745(3)), so
+/// each may renew. The previous flight review is read as the one valid
+/// longest. The review the holder is valid by is the one valid longest.
 ///
 /// A check counts when CASA's information on the assessment records it as
 /// passed ([`passed`]: a flight test, for any of its purposes) and as a
@@ -82,15 +89,23 @@ impl FlightReview {
 }
 
 /// The latest day a review can have been completed on and not be valid on
-/// `reference`: the last day of the 25th month before `reference`'s, since
-/// one completed in the 24th month before it is valid to the end of
-/// `reference`'s month. Only the reported `look_back_days` is taken from
-/// it; whether a review is valid is [`renewal::valid_to`]'s.
+/// `reference`, as one that renews nothing: the last day of the 25th month
+/// before `reference`'s, since one completed in the 24th month before it is
+/// valid to the end of `reference`'s month. A review that renews a previous
+/// one within the 3 months before it expires can be valid from up to 3
+/// months earlier still (reg 61.745(1A)(b)), so the look-back reaches back
+/// that far more. Only the reported `look_back_days` is taken from it;
+/// whether a review is valid is [`renewal::validity`]'s.
 fn cutoff(reference: Date) -> Date {
     reference
         .replace_day(1)
         .ok()
-        .and_then(|first| add_months_clamped(first, -i32::try_from(VALID_MONTHS).ok()?))
+        .and_then(|first| {
+            add_months_clamped(
+                first,
+                -i32::try_from(VALID_MONTHS).ok()? - EARLY_RENEWAL_MONTHS,
+            )
+        })
         .and_then(Date::previous_day)
         .unwrap_or(Date::MIN)
 }
@@ -147,12 +162,13 @@ impl AssessmentCurrencyCheck for FlightReview {
     fn result(&self) -> CurrencyResult {
         let mut passed = self.passed.clone();
         passed.sort();
-        let dates: Vec<Date> = passed.iter().map(|(on, _)| *on).collect();
-        let valid_to = renewal::valid_to(&dates, VALID_MONTHS, EARLY_RENEWAL_MONTHS);
-        let latest = valid_to.iter().max().copied();
+        // Each kind of check that counts renews: reg 61.745(3).
+        let passes: Vec<(Date, bool)> = passed.iter().map(|(on, _)| (*on, true)).collect();
+        let validity = renewal::validity(&passes, VALID_MONTHS, EARLY_RENEWAL_MONTHS);
+        let latest = validity.longest.map(|(to, _)| to);
         let mut valid: Vec<AssessmentId> = passed
             .into_iter()
-            .zip(valid_to)
+            .zip(validity.each)
             .filter(|(_, to)| *to >= self.reference)
             .map(|((_, id), _)| id)
             .collect();
@@ -275,7 +291,8 @@ mod tests {
         assert!(inside.is_current());
         assert_eq!(inside.found, 1);
         assert_eq!(inside.current_through(), Some(date!(2024 - 09 - 30)));
-        assert_eq!(inside.look_back_days, 732);
+        // Reaching back 3 months further, for a review that renews one.
+        assert_eq!(inside.look_back_days, 824);
         let outside = result(Sea, &single_engine(), &[passed(date!(2022 - 08 - 31))]);
         assert!(!outside.is_current());
         assert_eq!(outside.found, 0);
@@ -283,8 +300,8 @@ mod tests {
     }
 
     /// A review is counted as found exactly while it is valid, and the
-    /// look-back reported reaches it exactly then, over every day of three
-    /// years.
+    /// look-back reported reaches it whenever it is, over every day of three
+    /// years: it reaches back 3 months further, for a review that renews one.
     #[test]
     fn a_review_is_found_exactly_while_it_is_valid() {
         let mut on = date!(2021 - 06 - 01);
@@ -292,7 +309,7 @@ mod tests {
             let r = result(Sea, &single_engine(), &[passed(on)]);
             assert_eq!(r.found == 1, r.is_current(), "{on}");
             let reached = on > REFERENCE - Duration::days(r.look_back_days);
-            assert_eq!(reached, r.is_current(), "{on}");
+            assert!(reached || !r.is_current(), "{on}");
             on = on.next_day().unwrap();
         }
     }
@@ -320,7 +337,7 @@ mod tests {
     }
 
     /// A review completed from the 1st of the 3rd month before the one the
-    /// existing review ends in runs from that expiry (reg 61.745(1A)(b)),
+    /// previous flight review ends in runs from that expiry (reg 61.745(1A)(b)),
     /// as the instrument proficiency check's does; one before the window
     /// opens does not, and so shortens nothing but renews nothing.
     #[test]
@@ -344,7 +361,7 @@ mod tests {
             let r = check.result();
             r.current_through()
         };
-        // The existing review is valid to 31 May 2026.
+        // The previous flight review is valid to 31 May 2026.
         assert_eq!(renewed(date!(2026 - 02 - 28)), Some(date!(2028 - 02 - 29)));
         assert_eq!(renewed(date!(2026 - 03 - 01)), Some(date!(2028 - 05 - 31)));
         assert_eq!(renewed(date!(2026 - 05 - 31)), Some(date!(2028 - 05 - 31)));

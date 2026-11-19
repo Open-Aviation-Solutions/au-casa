@@ -146,8 +146,10 @@ to the trait.
   checks keep their own passes and build their result with the kernel's
   `end_of_nth_month_after` (decided on au-casa#53: the rule stays here
   until another authority needs it). Both also renew early, from the expiry
-  of the validity they renew (regs 61.745(1A)(b), 61.880(3)(f): a pass in
-  the 3 months before it, the window opening on the 1st of the month), and
+  of the validity they renew (regs 61.745(1A)(b), 61.880(3)(f): a pass in the 3 months before it, the
+  window opening on the 1st of the month; for the flight review every check
+  of reg 61.745(3) renews, for the instrument proficiency check only an
+  instrument proficiency check does), and
   share `currency/renewal.rs` for that chaining (au-casa#54).
   Regulations whose checks differ only in their figures, and in whether
   they count by night only, share one, with a constructor for each that

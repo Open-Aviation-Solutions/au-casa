@@ -10,34 +10,56 @@
 use logbook_shared_kernel::authority::window::{add_months_clamped, end_of_nth_month_after};
 use time::Date;
 
-/// The last day each of `passes` is valid to, in their order, which is by
-/// date, earliest first.
+/// What [`validity`] found.
+pub(super) struct Validity {
+    /// The last day each pass is valid to, in the passes' order.
+    pub(super) each: Vec<Date>,
+    /// The longest validity and the pass that gives it (the latest, of
+    /// passes that tie), if there are any passes.
+    pub(super) longest: Option<(Date, usize)>,
+}
+
+/// The validity of `passes`, each a date and whether it may renew early,
+/// ordered by date, earliest first.
 ///
 /// A pass is valid to the end of the `valid_months`th month after its own
-/// month, unless it is "within" `renewal_months` "before the validity of
-/// the existing check expires": then it runs from that expiry, as though it
-/// were passed in the month the existing one ends. The existing check is
-/// the one valid longest of those passed before it. The validity ends with
-/// its last day, so the renewal window opens `renewal_months` back from the
-/// day after, and includes that last day.
-pub(super) fn valid_to(passes: &[Date], valid_months: u32, renewal_months: i32) -> Vec<Date> {
-    let mut existing: Option<Date> = None;
-    passes
+/// month, unless it may renew and is "within" `renewal_months` "before the
+/// validity of the existing check expires": then it runs from that expiry,
+/// as though it were passed in the month the existing one ends. The
+/// existing one is the one valid longest of those passed before it (a
+/// reading, kept to the longest alone: see the pull request that added it).
+/// The validity ends with its last day, so the renewal window opens
+/// `renewal_months` back from the day after, and includes that last day.
+pub(super) fn validity(
+    passes: &[(Date, bool)],
+    valid_months: u32,
+    renewal_months: i32,
+) -> Validity {
+    debug_assert!(
+        passes.windows(2).all(|pair| pair[0].0 <= pair[1].0),
+        "passes are ordered by date"
+    );
+    let mut longest: Option<(Date, usize)> = None;
+    let each = passes
         .iter()
-        .map(|&on| {
-            let renewed = existing.filter(|last| {
+        .enumerate()
+        .map(|(index, &(on, may_renew))| {
+            let renewed = longest.map(|(last, _)| last).filter(|last| {
                 let window_opens = last
                     .next_day()
                     .and_then(|expires| add_months_clamped(expires, -renewal_months))
                     .unwrap_or(Date::MIN);
-                window_opens <= on && on <= *last
+                may_renew && window_opens <= on && on <= *last
             });
             let to =
                 end_of_nth_month_after(renewed.unwrap_or(on), valid_months).unwrap_or(Date::MAX);
-            existing = Some(existing.map_or(to, |last| last.max(to)));
+            if longest.is_none_or(|(last, _)| to >= last) {
+                longest = Some((to, index));
+            }
             to
         })
-        .collect()
+        .collect();
+    Validity { each, longest }
 }
 
 #[cfg(test)]
@@ -46,49 +68,73 @@ mod tests {
 
     use super::*;
 
+    fn each(passes: &[(Date, bool)]) -> Vec<Date> {
+        validity(passes, 24, 3).each
+    }
+
     #[test]
     fn a_pass_is_valid_to_the_end_of_its_nth_month() {
-        assert_eq!(
-            valid_to(&[date!(2024 - 03 - 10)], 24, 3),
-            [date!(2026 - 03 - 31)]
-        );
+        let v = validity(&[(date!(2024 - 03 - 10), true)], 24, 3);
+        assert_eq!(v.each, [date!(2026 - 03 - 31)]);
+        assert_eq!(v.longest, Some((date!(2026 - 03 - 31), 0)));
+        assert!(validity(&[], 24, 3).longest.is_none());
     }
 
     /// The window opens on the 1st of the month `renewal_months` before the
     /// month after the last valid day's, and ends with that last day.
     #[test]
     fn a_pass_in_the_window_runs_from_the_expiry() {
-        let first = date!(2024 - 03 - 10);
+        let first = (date!(2024 - 03 - 10), true);
         for (on, to) in [
             (date!(2025 - 12 - 31), date!(2027 - 12 - 31)),
             (date!(2026 - 01 - 01), date!(2028 - 03 - 31)),
             (date!(2026 - 03 - 31), date!(2028 - 03 - 31)),
             (date!(2026 - 04 - 01), date!(2028 - 04 - 30)),
         ] {
-            assert_eq!(valid_to(&[first, on], 24, 3)[1], to, "{on}");
+            assert_eq!(each(&[first, (on, true)])[1], to, "{on}");
         }
     }
 
-    /// A pass outside the window is valid from its own month, and the
-    /// existing validity, the longest so far, is not shortened by it.
+    /// A pass that may not renew is valid from its own month, in the window
+    /// or not, and does not shorten the existing validity.
     #[test]
-    fn a_pass_after_a_renewal_renews_from_the_longest() {
-        let to = valid_to(
+    fn a_pass_that_may_not_renew_runs_from_its_own_month() {
+        let v = validity(
             &[
-                date!(2024 - 03 - 10),
-                date!(2026 - 01 - 05),
-                date!(2026 - 02 - 05),
+                (date!(2024 - 03 - 10), true),
+                (date!(2026 - 01 - 15), false),
+            ],
+            24,
+            3,
+        );
+        assert_eq!(v.each, [date!(2026 - 03 - 31), date!(2028 - 01 - 31)]);
+        assert_eq!(v.longest, Some((date!(2028 - 01 - 31), 1)));
+    }
+
+    /// A pass is renewed from the longest validity so far, not the latest
+    /// pass's: the third is valid for less than the second it follows, and
+    /// the fourth is in its window but not the second's.
+    #[test]
+    fn a_pass_renews_from_the_longest_not_the_latest() {
+        let v = validity(
+            &[
+                (date!(2024 - 03 - 10), true),
+                (date!(2026 - 01 - 05), true),
+                (date!(2026 - 02 - 05), true),
+                (date!(2027 - 12 - 15), true),
             ],
             24,
             3,
         );
         assert_eq!(
-            to,
+            v.each,
             [
                 date!(2026 - 03 - 31),
                 date!(2028 - 03 - 31),
-                date!(2028 - 02 - 29)
+                date!(2028 - 02 - 29),
+                date!(2029 - 12 - 31),
             ]
         );
+        assert_eq!(v.longest, Some((date!(2029 - 12 - 31), 3)));
     }
 }
