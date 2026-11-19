@@ -84,7 +84,8 @@ fn valid_to(on: Date) -> Option<Date> {
 /// The latest day a review can have been completed on and not be valid on
 /// `reference`: the last day of the 25th month before `reference`'s, since
 /// one completed in the 24th month before it is valid to the end of
-/// `reference`'s month.
+/// `reference`'s month. Only the reported `look_back_days` is taken from
+/// it; whether a review is valid is [`valid_to`]'s.
 fn cutoff(reference: Date) -> Date {
     reference
         .replace_day(1)
@@ -145,11 +146,10 @@ impl AssessmentAccumulator for FlightReview {
 impl AssessmentCurrencyCheck for FlightReview {
     fn result(&self) -> CurrencyResult {
         let latest = self.passed.iter().map(|(on, _)| *on).max();
-        let cutoff = cutoff(self.reference);
         let mut valid: Vec<AssessmentId> = self
             .passed
             .iter()
-            .filter(|(on, _)| *on > cutoff)
+            .filter(|(on, _)| valid_to(*on).is_some_and(|to| to >= self.reference))
             .map(|(_, id)| id.clone())
             .collect();
         valid.sort();
@@ -163,7 +163,7 @@ impl AssessmentCurrencyCheck for FlightReview {
             found: valid.len(),
             qualifying_assessments: valid,
             required: REQUIRED,
-            look_back_days: (self.reference - cutoff).whole_days(),
+            look_back_days: (self.reference - cutoff(self.reference)).whole_days(),
         }
     }
 }
@@ -235,20 +235,34 @@ mod tests {
         assert_eq!(r.qualifying_assessments, [AssessmentId::new("a")]);
     }
 
-    /// Any day of a month is valid to the same month's end, a leap
-    /// February's included.
+    /// Every day of a month is valid to the same month's end, a leap
+    /// February's included, and across a year's end.
     #[test]
     fn every_day_of_a_month_is_valid_to_the_same_months_end() {
-        let valid_to = |on| {
+        let current_through = |on| {
             let entries = [on_flight(1, aeroplane("e", on))];
             let mut check = FlightReview::new(on, Sea, &entries.map(entry));
             check.accept_assessment(&passed(on));
             check.result().current_through()
         };
-        for on in [date!(2022 - 02 - 01), date!(2022 - 02 - 28)] {
-            assert_eq!(valid_to(on), Some(date!(2024 - 02 - 29)), "{on}");
+        for (first, last, through) in [
+            (
+                date!(2022 - 02 - 01),
+                date!(2022 - 02 - 28),
+                date!(2024 - 02 - 29),
+            ),
+            (
+                date!(2023 - 12 - 01),
+                date!(2023 - 12 - 31),
+                date!(2025 - 12 - 31),
+            ),
+        ] {
+            let mut on = first;
+            while on <= last {
+                assert_eq!(current_through(on), Some(through), "{on}");
+                on = on.next_day().unwrap();
+            }
         }
-        assert_eq!(valid_to(date!(2023 - 12 - 31)), Some(date!(2025 - 12 - 31)));
     }
 
     /// One completed in the 24th month before the reference's is valid to
@@ -266,14 +280,17 @@ mod tests {
         assert_eq!(outside.expiry_date, Some(REFERENCE));
     }
 
-    /// A review is counted as found exactly while it is valid, over every
-    /// day of three years.
+    /// A review is counted as found exactly while it is valid, and the
+    /// look-back reported reaches it exactly then, over every day of three
+    /// years.
     #[test]
     fn a_review_is_found_exactly_while_it_is_valid() {
         let mut on = date!(2021 - 06 - 01);
         while on <= REFERENCE {
             let r = result(Sea, &single_engine(), &[passed(on)]);
             assert_eq!(r.found == 1, r.is_current(), "{on}");
+            let reached = on > REFERENCE - Duration::days(r.look_back_days);
+            assert_eq!(reached, r.is_current(), "{on}");
             on = on.next_day().unwrap();
         }
     }
@@ -281,13 +298,22 @@ mod tests {
     /// The latest review is the one the holder's is valid by.
     #[test]
     fn the_latest_passed_review_sets_the_expiry() {
-        let earlier = checked(
+        let earlier = assessed(
+            "b",
             date!(2023 - 01 - 10),
-            CheckType::FlightReview,
-            CheckOutcome::Passed,
+            1,
+            AssessmentInformation {
+                check_type: Some(CheckType::FlightReview),
+                outcome: Some(CheckOutcome::Passed),
+                check_purposes: Vec::new(),
+            },
         );
         let r = result(Sea, &single_engine(), &[passed(ON), earlier]);
         assert_eq!(r.found, 2);
+        assert_eq!(
+            r.qualifying_assessments,
+            [AssessmentId::new("a"), AssessmentId::new("b")]
+        );
         assert_eq!(r.current_through(), Some(date!(2026 - 05 - 31)));
     }
 
