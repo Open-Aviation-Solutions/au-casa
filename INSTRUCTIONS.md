@@ -138,7 +138,14 @@ to the trait.
 
 - **One module for each regulation**, an `EntryAccumulator` and
   `CurrencyCheck` (or the assessment traits) over the kernel's
-  `EventWindow`. Its doc comment quotes the regulation it implements.
+  `EventWindow`, in days or calendar months as its regulation counts them.
+  Its doc comment quotes the regulation it implements. A validity that
+  runs to "the end of the Nth month after the month in which" (the flight
+  review, reg 61.745(1A)(a); the instrument proficiency check, reg
+  61.880(3)) is not a look-back the kernel's `EventWindow` has, so those
+  checks keep their own passes and build their result with the kernel's
+  `end_of_nth_month_after` (decided on au-casa#53: the rule stays here
+  until another authority needs it).
   Regulations whose checks differ only in their figures, and in whether
   they count by night only, share one, with a constructor for each that
   quotes its regulation
@@ -350,7 +357,7 @@ Breaking includes a change to the API; a change to the Part 61 reading
 that changes an existing designator's category, class or design features, or
 a title of licence's Part 61 term; and a requirement added or removed, or a
 change to what makes an existing one current. Consumers take au-casa by a
-caret range on the current minor (such as `^0.10.0`), so a `cargo update` takes up patches but not a breaking release,
+caret range on the current minor (such as `^0.11.0`), so a `cargo update` takes up patches but not a breaking release,
 which they move to on purpose.
 
 ## Commands

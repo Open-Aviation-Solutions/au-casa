@@ -21,9 +21,8 @@ use crate::logbook::guards::is_category;
 const PASSENGER_WINDOW_DAYS: u32 = 90;
 const PASSENGER_REQUIRED: usize = 3;
 
-/// "Within the previous 6 months" (reg 61.965), as pilot-logbook's 183 days
-/// (6 × 30.5), kept for the move.
-const NIGHT_VFR_WINDOW_DAYS: u32 = 183;
+/// "Within the previous 6 months" (reg 61.965), in calendar months.
+const NIGHT_VFR_WINDOW_MONTHS: u32 = 6;
 const NIGHT_VFR_REQUIRED: usize = 1;
 
 /// The take-offs or the landings a requirement counts.
@@ -113,9 +112,11 @@ impl TakeOffsAndLandings {
 
     /// Reg 61.965(a): "within the previous 6 months … (i) at least one
     /// night take-off; and (ii) at least one night landing; in an aircraft
-    /// of that category while controlling the aircraft".
+    /// of that category while controlling the aircraft". The 6 months are
+    /// counted back by calendar months from the reference date, so a night
+    /// landing on 9 December is recent through 8 June.
     pub(crate) fn night_vfr(reference: Date, kind: TakeOffsOrLandings) -> Self {
-        let window = EventWindow::new(reference, NIGHT_VFR_WINDOW_DAYS, NIGHT_VFR_REQUIRED);
+        let window = EventWindow::months(reference, NIGHT_VFR_WINDOW_MONTHS, NIGHT_VFR_REQUIRED);
         Self::new(window, kind, night_only)
     }
 
@@ -466,11 +467,15 @@ mod tests {
         }
 
         #[test]
-        fn one_at_night_in_the_window_is_current_and_expires_183_days_on() {
-            let on = date!(2024 - 06 - 01);
-            for r in result(&[at_night(1, aeroplane("a", on))]) {
+        fn one_at_night_is_recent_through_the_day_before_the_same_date_6_months_on() {
+            for r in result(&[at_night(1, aeroplane("a", date!(2024 - 06 - 01)))]) {
                 assert!(r.is_current());
-                assert_eq!(r.expiry_date, Some(on + Duration::days(183)));
+                assert_eq!(r.current_through(), Some(date!(2024 - 11 - 30)));
+            }
+            // Six months on from 31 August is in February, which is shorter:
+            // it is recent through February's last day.
+            for r in result(&[at_night(1, aeroplane("a", date!(2023 - 08 - 31)))]) {
+                assert_eq!(r.current_through(), Some(date!(2024 - 02 - 29)));
             }
         }
 
@@ -507,17 +512,21 @@ mod tests {
             }
         }
 
+        /// From 1 September 2024, the previous 6 months reach back to 2
+        /// March, a day further than 183 days did; 1 March is not inside
+        /// them.
         #[test]
-        fn the_windows_edge_is_183_days_counting_the_reference_date() {
-            let inside = REFERENCE - Duration::days(182);
-            for r in result(&[at_night(1, aeroplane("a", inside))]) {
+        fn the_windows_edge_is_6_calendar_months_before_the_reference_date() {
+            for r in result(&[at_night(1, aeroplane("a", date!(2024 - 03 - 02)))]) {
                 assert!(r.is_current());
+                assert_eq!(r.found, 1);
+                assert_eq!(r.look_back_days, 184);
             }
 
-            let outside = REFERENCE - Duration::days(183);
-            for r in result(&[at_night(1, aeroplane("a", outside))]) {
+            for r in result(&[at_night(1, aeroplane("a", date!(2024 - 03 - 01)))]) {
                 assert!(!r.is_current());
                 assert_eq!(r.found, 0);
+                assert_eq!(r.expiry_date, Some(REFERENCE));
             }
         }
 
