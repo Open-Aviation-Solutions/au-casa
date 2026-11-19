@@ -7,10 +7,11 @@
 //! rating: each requires take-offs and landings, counted separately, so
 //! each is two requirements, one for its take-offs and one for its
 //! landings. The checks differ only in their figures, and in whether they
-//! count by night only, so they are one.
+//! count by night only, and whether a flight simulator counts, so they are
+//! one.
 
 use logbook_shared_kernel::{
-    CurrencyCheck, CurrencyResult, DayNight, Entry, EntryAccumulator, EventWindow,
+    CurrencyCheck, CurrencyResult, DayNight, Entry, EntryAccumulator, EventWindow, Subject,
 };
 use time::Date;
 
@@ -70,6 +71,9 @@ pub(crate) struct TakeOffsAndLandings {
     kind: TakeOffsOrLandings,
     /// The number to count, from the entry's by day and at night.
     counted: fn(&DayNight<u32>) -> u64,
+    /// Whether a session in an approved flight simulator counts, as well as
+    /// a flight.
+    sessions_count: bool,
 }
 
 /// By day and at night together.
@@ -94,7 +98,7 @@ impl TakeOffsAndLandings {
     /// least 500 ft AGL", as met.
     pub(crate) fn passenger_day(reference: Date, kind: TakeOffsOrLandings) -> Self {
         let window = EventWindow::new(reference, PASSENGER_WINDOW_DAYS, PASSENGER_REQUIRED);
-        Self::new(window, kind, day_and_night)
+        Self::new(window, kind, day_and_night, true)
     }
 
     /// Reg 61.395(2): "within the previous 90 days, in an aircraft of that
@@ -108,26 +112,31 @@ impl TakeOffsAndLandings {
     /// least 500 ft AGL", as met.
     pub(crate) fn passenger_night(reference: Date, kind: TakeOffsOrLandings) -> Self {
         let window = EventWindow::new(reference, PASSENGER_WINDOW_DAYS, PASSENGER_REQUIRED);
-        Self::new(window, kind, night_only)
+        Self::new(window, kind, night_only, true)
     }
 
     /// Reg 61.965(a): "within the previous 6 months … (i) at least one
     /// night take-off; and (ii) at least one night landing; in an aircraft
     /// of that category while controlling the aircraft".
+    ///
+    /// Only a flight counts: unlike regs 61.395 and 61.870, the regulation
+    /// names no flight simulator (decided on au-casa#56).
     pub(crate) fn night_vfr(reference: Date, kind: TakeOffsOrLandings) -> Self {
         let window = EventWindow::new(reference, NIGHT_VFR_WINDOW_DAYS, NIGHT_VFR_REQUIRED);
-        Self::new(window, kind, night_only)
+        Self::new(window, kind, night_only, false)
     }
 
     fn new(
         window: EventWindow,
         kind: TakeOffsOrLandings,
         counted: fn(&DayNight<u32>) -> u64,
+        sessions_count: bool,
     ) -> Self {
         Self {
             window,
             kind,
             counted,
+            sessions_count,
         }
     }
 
@@ -139,6 +148,9 @@ impl TakeOffsAndLandings {
 
 impl EntryAccumulator for TakeOffsAndLandings {
     fn accept_entry(&mut self, entry: &Entry) {
+        if !self.sessions_count && matches!(entry.subject(), Subject::Session { .. }) {
+            return;
+        }
         if !is_category(entry, AircraftCategory::Aeroplane) {
             return;
         }
@@ -498,6 +510,29 @@ mod tests {
         fn a_take_off_and_a_landing_in_different_entries_both_count() {
             let on = date!(2024 - 06 - 01);
             assert_each_counts_its_own_entry(result(&split(night(1), night(1), on)));
+        }
+
+        /// Reg 61.965(a) names no flight simulator, unlike regs 61.395 and
+        /// 61.870: a session does not count.
+        #[test]
+        fn a_session_does_not_count() {
+            let on = date!(2024 - 06 - 01);
+            for r in result(&[at_night(1, simulated("a", on, "C172"))]) {
+                assert!(!r.is_current());
+                assert_eq!(r.found, 0);
+            }
+        }
+
+        #[test]
+        fn a_session_does_not_add_to_a_flight() {
+            let on = date!(2024 - 06 - 01);
+            let entries = [
+                at_night(1, simulated("a", on, "C172")),
+                at_night(1, aeroplane("b", on)),
+            ];
+            for r in result(&entries) {
+                assert_eq!(r.found, 1);
+            }
         }
 
         #[test]
