@@ -145,7 +145,10 @@ to the trait.
   61.880(3)) is not a look-back the kernel's `EventWindow` has, so those
   checks keep their own passes and build their result with the kernel's
   `end_of_nth_month_after` (decided on au-casa#53: the rule stays here
-  until another authority needs it).
+  until another authority needs it). Both also renew early, from the expiry
+  of the validity they renew (regs 61.745(1A)(b), 61.880(3)(f): a pass in
+  the 3 months before it, the window opening on the 1st of the month), and
+  share `currency/renewal.rs` for that chaining (au-casa#54).
   Regulations whose checks differ only in their figures, and in whether
   they count by night only, share one, with a constructor for each that
   quotes its regulation
@@ -357,7 +360,7 @@ Breaking includes a change to the API; a change to the Part 61 reading
 that changes an existing designator's category, class or design features, or
 a title of licence's Part 61 term; and a requirement added or removed, or a
 change to what makes an existing one current. Consumers take au-casa by a
-caret range on the current minor (such as `^0.11.0`), so a `cargo update` takes up patches but not a breaking release,
+caret range on the current minor (such as `^0.12.0`), so a `cargo update` takes up patches but not a breaking release,
 which they move to on purpose.
 
 ## Commands

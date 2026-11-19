@@ -17,6 +17,7 @@ mod instrument_approaches;
 mod instrument_approaches_2d;
 mod instrument_approaches_3d;
 mod instrument_proficiency_check;
+mod renewal;
 mod single_pilot_ifr;
 mod take_offs_and_landings;
 

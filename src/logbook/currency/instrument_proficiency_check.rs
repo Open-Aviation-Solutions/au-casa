@@ -5,14 +5,13 @@
 //! Reg 61.880: the instrument proficiency check of the holder of an
 //! instrument rating.
 
-use logbook_shared_kernel::authority::window::{
-    add_months_clamped, count_in_window, end_of_nth_month_after,
-};
+use logbook_shared_kernel::authority::window::{add_months_clamped, count_in_window};
 use logbook_shared_kernel::{
     Assessment, AssessmentAccumulator, AssessmentCurrencyCheck, AssessmentId, CurrencyResult,
 };
 use time::{Date, Duration};
 
+use super::renewal;
 use crate::logbook::{
     assessment_information, AssessedPurpose, CheckOutcome, CheckPurpose, CheckType,
 };
@@ -208,27 +207,19 @@ impl AssessmentCurrencyCheck for InstrumentProficiencyCheck {
 
         // The last day it is valid to, and the pass that made it so,
         // chaining an early renewal from the expiry it renews.
+        let dates: Vec<Date> = events.iter().map(|event| event.on).collect();
         let mut valid: Option<(Date, &Passed)> = None;
-        for event in &events {
-            let renewed = valid.map(|(to, _)| to).filter(|existing| {
-                // "Within 3 months before the validity ... expires": the
-                // validity ends with its last day, so the 3 months run back
-                // from the day after.
-                let window_opens = existing
-                    .next_day()
-                    .and_then(|expires| add_months_clamped(expires, -EARLY_RENEWAL_MONTHS))
-                    .unwrap_or(Date::MIN);
-                window_opens <= event.on && event.on <= *existing
-            });
-            let to = end_of_nth_month_after(renewed.unwrap_or(event.on), VALID_MONTHS)
-                .unwrap_or(Date::MAX);
+        for (event, to) in events.iter().zip(renewal::valid_to(
+            &dates,
+            VALID_MONTHS,
+            EARLY_RENEWAL_MONTHS,
+        )) {
             if valid.is_none_or(|(existing, _)| to >= existing) {
                 valid = Some((to, event));
             }
         }
         let valid_to = valid.map(|(to, _)| to);
 
-        let dates: Vec<Date> = events.iter().map(|event| event.on).collect();
         let shown_after = self
             .reference
             .saturating_sub(Duration::days(DISPLAY_WINDOW_DAYS));
