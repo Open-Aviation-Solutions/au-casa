@@ -109,7 +109,7 @@ answers one such question:
   operations, which apply to an entry that records an approach or a DME or
   GNSS arrival (`Condition::Any` of `AnyApproach` and a `CountAtLeast` of
   one on the arrivals), as an arrival is an instrument approach operation
-  too; the exclusion is no format change: the count was always meant as reg 61.870(2)'s operations, narrowing it only rules out counting one operation twice, and no stored answer existed when 0.10.1 released it); and the problems with the
+  too; the exclusion is no format change: the count was always meant as reg 61.870(2)'s operations, narrowing it only rules out counting one operation twice, and no stored answer existed when 0.11.0 released it); and the problems with the
   answers (`problems_for`): information it cannot read, so that the host
   does not stamp and save it, and reg 61.095(3)(b)'s "the person is not
   receiving flight training", where that question applies. Stored information must carry its version
