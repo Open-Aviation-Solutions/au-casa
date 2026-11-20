@@ -4,7 +4,8 @@
 
 //! CASA's currency checks, a module for each regulation or for regulations
 //! whose checks differ only in their figures, written over the kernel's
-//! [`EventWindow`](logbook_shared_kernel::EventWindow), and the
+//! [`EventWindow`](logbook_shared_kernel::EventWindow) (or, for a validity
+//! to the end of a month, the kernel's date arithmetic), and the
 //! requirements they answer. Each sees only the entries
 //! [`Casa::counts`](crate::Casa) lets through, so none repeats that gate. A
 //! check over assessments ([`AssessmentCurrencyCheck`]) that reads their
@@ -16,6 +17,7 @@ mod instrument_approaches;
 mod instrument_approaches_2d;
 mod instrument_approaches_3d;
 mod instrument_proficiency_check;
+mod renewal;
 mod single_pilot_ifr;
 mod take_offs_and_landings;
 
