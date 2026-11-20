@@ -7,7 +7,8 @@
 //! rating: each requires take-offs and landings, counted separately, so
 //! each is two requirements, one for its take-offs and one for its
 //! landings. The checks differ only in their figures, and in whether they
-//! count by night only, so they are one.
+//! count by night only, and whether a flight simulator counts, so they are
+//! one.
 
 use logbook_shared_kernel::{
     CurrencyCheck, CurrencyResult, DayNight, Entry, EntryAccumulator, EventWindow,
@@ -15,15 +16,14 @@ use logbook_shared_kernel::{
 use time::Date;
 
 use crate::aircraft::AircraftCategory;
-use crate::logbook::guards::is_category;
+use crate::logbook::guards::{is_aircraft_of_category, is_category};
 
 /// "Within the previous 90 days" (reg 61.395(1) and (2)).
 const PASSENGER_WINDOW_DAYS: u32 = 90;
 const PASSENGER_REQUIRED: usize = 3;
 
-/// "Within the previous 6 months" (reg 61.965), as pilot-logbook's 183 days
-/// (6 × 30.5), kept for the move.
-const NIGHT_VFR_WINDOW_DAYS: u32 = 183;
+/// "Within the previous 6 months" (reg 61.965), in calendar months.
+const NIGHT_VFR_WINDOW_MONTHS: u32 = 6;
 const NIGHT_VFR_REQUIRED: usize = 1;
 
 /// The take-offs or the landings a requirement counts.
@@ -70,6 +70,9 @@ pub(crate) struct TakeOffsAndLandings {
     kind: TakeOffsOrLandings,
     /// The number to count, from the entry's by day and at night.
     counted: fn(&DayNight<u32>) -> u64,
+    /// Whether the entry is in an aeroplane: by a guard that counts a
+    /// session's simulated type too, or one that counts a flight only.
+    in_aeroplane: fn(&Entry, AircraftCategory) -> bool,
 }
 
 /// By day and at night together.
@@ -94,7 +97,7 @@ impl TakeOffsAndLandings {
     /// least 500 ft AGL", as met.
     pub(crate) fn passenger_day(reference: Date, kind: TakeOffsOrLandings) -> Self {
         let window = EventWindow::new(reference, PASSENGER_WINDOW_DAYS, PASSENGER_REQUIRED);
-        Self::new(window, kind, day_and_night)
+        Self::new(window, kind, day_and_night, is_category)
     }
 
     /// Reg 61.395(2): "within the previous 90 days, in an aircraft of that
@@ -108,26 +111,33 @@ impl TakeOffsAndLandings {
     /// least 500 ft AGL", as met.
     pub(crate) fn passenger_night(reference: Date, kind: TakeOffsOrLandings) -> Self {
         let window = EventWindow::new(reference, PASSENGER_WINDOW_DAYS, PASSENGER_REQUIRED);
-        Self::new(window, kind, night_only)
+        Self::new(window, kind, night_only, is_category)
     }
 
     /// Reg 61.965(a): "within the previous 6 months … (i) at least one
     /// night take-off; and (ii) at least one night landing; in an aircraft
-    /// of that category while controlling the aircraft".
+    /// of that category while controlling the aircraft". The 6 months are
+    /// counted back by calendar months from the reference date, so a night
+    /// landing on 9 December is recent through 8 June.
+    ///
+    /// Only a flight counts: unlike regs 61.395 and 61.870, the regulation
+    /// names no flight simulator (decided on au-casa#56).
     pub(crate) fn night_vfr(reference: Date, kind: TakeOffsOrLandings) -> Self {
-        let window = EventWindow::new(reference, NIGHT_VFR_WINDOW_DAYS, NIGHT_VFR_REQUIRED);
-        Self::new(window, kind, night_only)
+        let window = EventWindow::months(reference, NIGHT_VFR_WINDOW_MONTHS, NIGHT_VFR_REQUIRED);
+        Self::new(window, kind, night_only, is_aircraft_of_category)
     }
 
     fn new(
         window: EventWindow,
         kind: TakeOffsOrLandings,
         counted: fn(&DayNight<u32>) -> u64,
+        in_aeroplane: fn(&Entry, AircraftCategory) -> bool,
     ) -> Self {
         Self {
             window,
             kind,
             counted,
+            in_aeroplane,
         }
     }
 
@@ -139,7 +149,7 @@ impl TakeOffsAndLandings {
 
 impl EntryAccumulator for TakeOffsAndLandings {
     fn accept_entry(&mut self, entry: &Entry) {
-        if !is_category(entry, AircraftCategory::Aeroplane) {
+        if !(self.in_aeroplane)(entry, AircraftCategory::Aeroplane) {
             return;
         }
         let count = (self.counted)(&self.kind.of(entry));
@@ -429,6 +439,16 @@ mod tests {
             assert_each_counts_its_own_entry(result(&split(night(3), night(3), on)));
         }
 
+        /// "In an aircraft of that category or an approved flight simulator
+        /// for the purpose": whether the device was approved is
+        /// `Casa::counts`'.
+        #[test]
+        fn a_session_representing_an_aeroplane_counts() {
+            for r in result(&[at_night(3, simulated("a", date!(2024 - 08 - 20), "C172"))]) {
+                assert!(r.is_current());
+            }
+        }
+
         #[test]
         fn an_unclassified_type_does_not_count() {
             for r in result(&[at_night(3, unclassified("a", date!(2024 - 08 - 20)))]) {
@@ -466,11 +486,15 @@ mod tests {
         }
 
         #[test]
-        fn one_at_night_in_the_window_is_current_and_expires_183_days_on() {
-            let on = date!(2024 - 06 - 01);
-            for r in result(&[at_night(1, aeroplane("a", on))]) {
+        fn one_at_night_is_recent_through_the_day_before_the_same_date_6_months_on() {
+            for r in result(&[at_night(1, aeroplane("a", date!(2024 - 06 - 01)))]) {
                 assert!(r.is_current());
-                assert_eq!(r.expiry_date, Some(on + Duration::days(183)));
+                assert_eq!(r.current_through(), Some(date!(2024 - 11 - 30)));
+            }
+            // Six months on from 31 August is in February, which is shorter:
+            // it is recent through February's last day.
+            for r in result(&[at_night(1, aeroplane("a", date!(2023 - 08 - 31)))]) {
+                assert_eq!(r.current_through(), Some(date!(2024 - 02 - 29)));
             }
         }
 
@@ -500,6 +524,30 @@ mod tests {
             assert_each_counts_its_own_entry(result(&split(night(1), night(1), on)));
         }
 
+        /// Reg 61.965(a) names no flight simulator, unlike regs 61.395 and
+        /// 61.870: a session does not count.
+        #[test]
+        fn a_session_does_not_count() {
+            let on = date!(2024 - 06 - 01);
+            for r in result(&[at_night(1, simulated("a", on, "C172"))]) {
+                assert!(!r.is_current());
+                assert_eq!(r.found, 0);
+            }
+        }
+
+        #[test]
+        fn a_session_does_not_add_to_a_flight() {
+            let on = date!(2024 - 06 - 01);
+            let entries = [
+                at_night(1, simulated("a", on, "C172")),
+                at_night(1, aeroplane("b", on)),
+            ];
+            for r in result(&entries) {
+                assert_eq!(r.found, 1);
+                assert_eq!(r.qualifying[0].entry, EntryId::new("b"));
+            }
+        }
+
         #[test]
         fn an_unclassified_type_does_not_count() {
             for r in result(&[at_night(1, unclassified("a", date!(2024 - 06 - 01)))]) {
@@ -507,17 +555,21 @@ mod tests {
             }
         }
 
+        /// From 1 September 2024, the previous 6 months reach back to 2
+        /// March, a day further than 183 days did; 1 March is not inside
+        /// them.
         #[test]
-        fn the_windows_edge_is_183_days_counting_the_reference_date() {
-            let inside = REFERENCE - Duration::days(182);
-            for r in result(&[at_night(1, aeroplane("a", inside))]) {
+        fn the_windows_edge_is_6_calendar_months_before_the_reference_date() {
+            for r in result(&[at_night(1, aeroplane("a", date!(2024 - 03 - 02)))]) {
                 assert!(r.is_current());
+                assert_eq!(r.found, 1);
+                assert_eq!(r.look_back_days, 184);
             }
 
-            let outside = REFERENCE - Duration::days(183);
-            for r in result(&[at_night(1, aeroplane("a", outside))]) {
+            for r in result(&[at_night(1, aeroplane("a", date!(2024 - 03 - 01)))]) {
                 assert!(!r.is_current());
                 assert_eq!(r.found, 0);
+                assert_eq!(r.expiry_date, Some(REFERENCE));
             }
         }
 

@@ -102,11 +102,14 @@ answers one such question:
   flight time), for the whole flight, first of the questions that apply to
   every flight, and is not required: an unanswered flight is not one, and
   the pilot answers it for a flight stored before it was asked; the DME or
-  GNSS arrivals are asked whatever the flight rules, and before the azimuth guidance and course deviation indicator
+  GNSS arrivals, which exclude operations also recorded in the entry's
+  approaches (both count towards reg 61.870(2), and a count cannot be
+  de-duplicated against them, so the wording must keep excluding them), are
+  asked whatever the flight rules, and before the azimuth guidance and course deviation indicator
   operations, which apply to an entry that records an approach or a DME or
   GNSS arrival (`Condition::Any` of `AnyApproach` and a `CountAtLeast` of
   one on the arrivals), as an arrival is an instrument approach operation
-  too); and the problems with the
+  too; the exclusion is no format change: the count was always meant as reg 61.870(2)'s operations, narrowing it only rules out counting one operation twice, and no stored answer existed when 0.11.0 released it); and the problems with the
   answers (`problems_for`): information it cannot read, so that the host
   does not stamp and save it, and reg 61.095(3)(b)'s "the person is not
   receiving flight training", where that question applies. Stored information must carry its version
@@ -138,10 +141,22 @@ to the trait.
 
 - **One module for each regulation**, an `EntryAccumulator` and
   `CurrencyCheck` (or the assessment traits) over the kernel's
-  `EventWindow`. Its doc comment quotes the regulation it implements.
-  Regulations whose checks differ only in their figures, and in whether
-  they count by night only, share one, with a constructor for each that
-  quotes its regulation
+  `EventWindow`, in days or calendar months as its regulation counts them.
+  Its doc comment quotes the regulation it implements. A validity that
+  runs to "the end of the Nth month after the month in which" (the flight
+  review, reg 61.745(1A)(a); the instrument proficiency check, reg
+  61.880(3)) is not a look-back the kernel's `EventWindow` has, so those
+  checks keep their own passes and build their result with the kernel's
+  `end_of_nth_month_after` (decided on au-casa#53: the rule stays here
+  until another authority needs it). Both also renew early, from the expiry
+  of the validity they renew (regs 61.745(1A)(b), 61.880(3)(f): a pass in the 3 months before it, the
+  window opening on the 1st of the month; for the flight review every check
+  of reg 61.745(3) renews, for the instrument proficiency check only an
+  instrument proficiency check does), and
+  share `currency/renewal.rs` for that chaining (au-casa#54).
+  Regulations whose checks differ only in their figures, in whether
+  they count by night only, and in whether a simulator session counts,
+  share one, with a constructor for each that quotes its regulation
   (`take_offs_and_landings`, for regs 61.395(1) and (2) and 61.965(a)).
 - **Each sees only the entries `Casa::counts` lets through**: the kernel's
   `run` applies it once, so a check does not repeat it. A check over
@@ -365,7 +380,7 @@ Breaking includes a change to the API; a change to the Part 61 reading
 that changes an existing designator's category, class or design features, or
 a title of licence's Part 61 term; and a requirement added or removed, or a
 change to what makes an existing one current. Consumers take au-casa by a
-caret range on the current minor (such as `^0.10.0`), so a `cargo update` takes up patches but not a breaking release,
+caret range on the current minor (such as `^0.11.0`), so a `cargo update` takes up patches but not a breaking release,
 which they move to on purpose.
 
 ## Commands

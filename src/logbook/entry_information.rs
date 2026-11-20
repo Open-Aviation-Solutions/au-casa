@@ -44,7 +44,8 @@ pub struct EntryInformation {
     /// `dme_or_gnss_arrivals`: how many instrument approach operations were
     /// conducted "using distance measuring equipment or a global navigation
     /// satellite system" (Table 61.935, item 20, "Approach – DME or GNSS
-    /// arrival procedure"). Stored as a JSON integer, as the kernel's
+    /// arrival procedure"), not also recorded in the entry's approaches (a
+    /// count cannot be de-duplicated against them). Stored as a JSON integer, as the kernel's
     /// `Answer::Count` is.
     pub dme_or_gnss_arrivals: Option<u64>,
     /// `cross_country_flight`: whether a flight was a "cross-country
