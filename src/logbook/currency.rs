@@ -36,7 +36,7 @@ use guidance_operations::GuidanceOperations;
 use instrument_approaches::InstrumentApproaches;
 use instrument_approaches_2d::InstrumentApproaches2D;
 use instrument_approaches_3d::InstrumentApproaches3D;
-use instrument_proficiency_check::InstrumentProficiencyCheck;
+use instrument_proficiency_check::{InstrumentProficiencyCheck, ProficiencyCheckFor};
 use single_pilot_ifr::SinglePilotIfr;
 use take_offs_and_landings::{TakeOffsAndLandings, TakeOffsOrLandings, TAKE_OFFS_AND_LANDINGS};
 
@@ -60,7 +60,9 @@ enum CasaRequirement {
     SinglePilotIfr,
     /// A flight review for this aircraft class rating.
     FlightReview(AircraftClassRating),
-    InstrumentProficiencyCheck,
+    /// Reg 61.880's instrument proficiency check, for a category ((1)) or
+    /// for multi-engine aeroplanes or helicopters ((2)).
+    InstrumentProficiencyCheck(ProficiencyCheckFor),
 }
 
 /// Reg 61.015's categories of aircraft, in its order, each with a
@@ -73,13 +75,27 @@ const CATEGORIES: [AircraftCategory; 5] = [
     AircraftCategory::Airship,
 ];
 
+/// Reg 61.880's instrument proficiency checks: one for each category of
+/// reg 61.015, in its order ((1)), then for multi-engine aeroplanes and for
+/// multi-engine helicopters ((2)(a) and (b)).
+const PROFICIENCY_CHECKS: [ProficiencyCheckFor; 7] = [
+    ProficiencyCheckFor::Category(CATEGORIES[0]),
+    ProficiencyCheckFor::Category(CATEGORIES[1]),
+    ProficiencyCheckFor::Category(CATEGORIES[2]),
+    ProficiencyCheckFor::Category(CATEGORIES[3]),
+    ProficiencyCheckFor::Category(CATEGORIES[4]),
+    ProficiencyCheckFor::MultiEngineAeroplanes,
+    ProficiencyCheckFor::MultiEngineHelicopters,
+];
+
 /// The requirements, in the order they are reported. Aeroplane recency
 /// comes first, take-offs before landings for each regulation, then
 /// instrument recency, then the flight reviews and the instrument
-/// proficiency check, as pilot-logbook listed them; instrument
+/// proficiency checks, as pilot-logbook listed them; instrument
 /// recency is in reg 61.870's order, with a requirement of its subregulation
-/// (3) for each category in reg 61.015's.
-const REQUIREMENTS: [CasaRequirement; 20] = [
+/// (3) for each category in reg 61.015's, and the instrument proficiency
+/// checks in [`PROFICIENCY_CHECKS`]' order.
+const REQUIREMENTS: [CasaRequirement; 26] = [
     CasaRequirement::PassengerDay(TakeOffsOrLandings::TakeOffs),
     CasaRequirement::PassengerDay(TakeOffsOrLandings::Landings),
     CasaRequirement::PassengerNight(TakeOffsOrLandings::TakeOffs),
@@ -99,7 +115,13 @@ const REQUIREMENTS: [CasaRequirement; 20] = [
     CasaRequirement::SinglePilotIfr,
     CasaRequirement::FlightReview(AircraftClassRating::SingleEngineAeroplane),
     CasaRequirement::FlightReview(AircraftClassRating::MultiEngineAeroplane),
-    CasaRequirement::InstrumentProficiencyCheck,
+    CasaRequirement::InstrumentProficiencyCheck(PROFICIENCY_CHECKS[0]),
+    CasaRequirement::InstrumentProficiencyCheck(PROFICIENCY_CHECKS[1]),
+    CasaRequirement::InstrumentProficiencyCheck(PROFICIENCY_CHECKS[2]),
+    CasaRequirement::InstrumentProficiencyCheck(PROFICIENCY_CHECKS[3]),
+    CasaRequirement::InstrumentProficiencyCheck(PROFICIENCY_CHECKS[4]),
+    CasaRequirement::InstrumentProficiencyCheck(PROFICIENCY_CHECKS[5]),
+    CasaRequirement::InstrumentProficiencyCheck(PROFICIENCY_CHECKS[6]),
 ];
 
 impl CasaRequirement {
@@ -118,7 +140,7 @@ impl CasaRequirement {
             Self::CourseDeviationIndicator => "61.870(7)",
             Self::SinglePilotIfr => "61.875",
             Self::FlightReview(_) => "61.745",
-            Self::InstrumentProficiencyCheck => "61.880",
+            Self::InstrumentProficiencyCheck(_) => "61.880",
         }
     }
 
@@ -129,11 +151,23 @@ impl CasaRequirement {
     /// originate here, since pilot-logbook had no key for it; for the
     /// take-offs and landings of regs 61.395(1) and (2) and 61.965(a), the
     /// paragraph that requires them (`61.395(1)(a)`, `61.965(a)(ii)`), which
-    /// originate here too (au-casa#67). Stable: a host may keep it.
+    /// originate here too (au-casa#67); for reg 61.880, `|` and the
+    /// category's stored name (`61.880|aeroplane`), or
+    /// `multi-engine-aeroplane` or `multi-engine-helicopter`, which
+    /// originate here too (au-casa#58). Stable: a host may keep it.
     fn id(self) -> RequirementId {
         match self {
             Self::FlightReview(class_rating) => self.qualified(class_rating),
             Self::InstrumentApproachesInCategory(category) => self.qualified(category),
+            Self::InstrumentProficiencyCheck(check_for) => match check_for {
+                ProficiencyCheckFor::Category(category) => self.qualified(category),
+                ProficiencyCheckFor::MultiEngineAeroplanes => {
+                    self.qualified("multi-engine-aeroplane")
+                }
+                ProficiencyCheckFor::MultiEngineHelicopters => {
+                    self.qualified("multi-engine-helicopter")
+                }
+            },
             Self::PassengerDay(kind) | Self::PassengerNight(kind) => self.paragraph(match kind {
                 TakeOffsOrLandings::TakeOffs => "(a)",
                 TakeOffsOrLandings::Landings => "(b)",
@@ -191,7 +225,17 @@ impl CasaRequirement {
                 "Flight review for the {} class rating",
                 class_name(class_rating)
             ),
-            Self::InstrumentProficiencyCheck => "Instrument proficiency check".to_owned(),
+            Self::InstrumentProficiencyCheck(check_for) => match check_for {
+                ProficiencyCheckFor::Category(category) => {
+                    format!("Instrument proficiency check for the {category} category")
+                }
+                ProficiencyCheckFor::MultiEngineAeroplanes => {
+                    "Instrument proficiency check for multi-engine aeroplanes".to_owned()
+                }
+                ProficiencyCheckFor::MultiEngineHelicopters => {
+                    "Instrument proficiency check for multi-engine helicopters".to_owned()
+                }
+            },
         }
     }
 }
@@ -215,8 +259,8 @@ pub(super) fn requirements() -> Vec<Requirement> {
 /// The checks over entries are run together, in one pass of the kernel's
 /// `run`, which applies [`Casa::counts`]. The flight reviews read an
 /// assessment's aircraft from the entry for its flight, which `run` does
-/// not reach, so they are given the entries `counts` lets through. The
-/// instrument proficiency check reads no aircraft, and is given none.
+/// not reach, so they are given the entries `counts` lets through, as are
+/// the instrument proficiency checks.
 pub(super) fn currency(
     casa: &Casa,
     as_of: Date,
@@ -265,15 +309,16 @@ pub(super) fn currency(
     let counted = || logbook.entries.iter().filter(|entry| casa.counts(entry));
     let mut single_engine_review = FlightReview::new(as_of, single_engine, counted());
     let mut multi_engine_review = FlightReview::new(as_of, multi_engine, counted());
-    let mut proficiency_check = InstrumentProficiencyCheck::new(as_of);
-    run_assessments(
-        &logbook.assessments,
-        &mut [
-            &mut single_engine_review as &mut dyn AssessmentAccumulator,
-            &mut multi_engine_review,
-            &mut proficiency_check,
-        ],
+    let mut proficiency_checks = PROFICIENCY_CHECKS
+        .map(|check_for| InstrumentProficiencyCheck::new(as_of, check_for, counted()));
+    let mut assessment_accumulators: Vec<&mut dyn AssessmentAccumulator> =
+        vec![&mut single_engine_review, &mut multi_engine_review];
+    assessment_accumulators.extend(
+        proficiency_checks
+            .iter_mut()
+            .map(|check| check as &mut dyn AssessmentAccumulator),
     );
+    run_assessments(&logbook.assessments, &mut assessment_accumulators);
 
     let in_category = CATEGORIES
         .iter()
@@ -327,11 +372,18 @@ pub(super) fn currency(
                 CasaRequirement::FlightReview(multi_engine),
                 multi_engine_review.result(),
             ),
-            (
-                CasaRequirement::InstrumentProficiencyCheck,
-                proficiency_check.result(),
-            ),
         ])
+        .chain(
+            PROFICIENCY_CHECKS
+                .iter()
+                .zip(&proficiency_checks)
+                .map(|(&check_for, check)| {
+                    (
+                        CasaRequirement::InstrumentProficiencyCheck(check_for),
+                        check.result(),
+                    )
+                }),
+        )
         .map(|(requirement, result)| (requirement.id(), result))
         .collect()
 }
@@ -380,6 +432,32 @@ mod tests {
         assert_eq!(ids.iter().collect::<BTreeSet<_>>().len(), ids.len());
     }
 
+    /// Reg 61.880's ids are stable, and a host words each by its id.
+    #[test]
+    fn each_instrument_proficiency_check_has_its_id_and_name() {
+        let checks: Vec<(String, String)> = requirements()
+            .into_iter()
+            .filter(|requirement| requirement.regulation == "61.880")
+            .map(|requirement| (requirement.id.as_str().to_owned(), requirement.name))
+            .collect();
+        let expected = [
+            ("61.880|aeroplane", "the aeroplane category"),
+            ("61.880|helicopter", "the helicopter category"),
+            ("61.880|powered-lift", "the powered-lift aircraft category"),
+            ("61.880|gyroplane", "the gyroplane category"),
+            ("61.880|airship", "the airship category"),
+            ("61.880|multi-engine-aeroplane", "multi-engine aeroplanes"),
+            ("61.880|multi-engine-helicopter", "multi-engine helicopters"),
+        ]
+        .map(|(id, check_for)| {
+            (
+                id.to_owned(),
+                format!("Instrument proficiency check for {check_for}"),
+            )
+        });
+        assert_eq!(checks, expected);
+    }
+
     #[test]
     fn each_requirement_is_answered_by_its_own_check_over_the_entries_that_count() {
         // Flight 1, a single-engine aeroplane: 3 take-offs and landings by
@@ -424,7 +502,7 @@ mod tests {
                 "61.870(5)",
                 "61.870(6)",
                 "61.745|single-engine-aeroplane",
-                "61.880",
+                "61.880|aeroplane",
             ]
         );
     }

@@ -3,15 +3,23 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //! Reg 61.880: the instrument proficiency check of the holder of an
-//! instrument rating.
+//! instrument rating, for an aircraft category or for multi-engine
+//! aeroplanes or helicopters.
+
+use std::collections::BTreeSet;
 
 use logbook_shared_kernel::authority::window::{add_months_clamped, count_in_window};
 use logbook_shared_kernel::{
     Assessment, AssessmentAccumulator, AssessmentCurrencyCheck, AssessmentId, CurrencyResult,
+    Entry, SubjectId,
 };
 use time::{Date, Duration};
 
 use super::renewal;
+use crate::aircraft::{AircraftCategory, AircraftClassRating};
+use crate::logbook::guards::{
+    category_of, is_category, is_class_rating, is_multi_engine_helicopter,
+};
 use crate::logbook::{
     assessment_information, AssessedPurpose, CheckOutcome, CheckPurpose, CheckType,
 };
@@ -30,6 +38,51 @@ const ENDORSEMENT_AFTER_MONTHS: i32 = 6;
 /// "Within 3 months before the validity of the existing check expires"
 /// (reg 61.880(3)(f)(ii)).
 const EARLY_RENEWAL_MONTHS: i32 = 3;
+
+/// What an instrument proficiency check is for: an aircraft category (reg
+/// 61.880(1)), or multi-engine aeroplanes or helicopters (reg 61.880(2)).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ProficiencyCheckFor {
+    /// "A valid instrument proficiency check for the aircraft category"
+    /// (reg 61.880(1)).
+    Category(AircraftCategory),
+    /// "A valid instrument proficiency check for multi-engine aeroplanes"
+    /// (reg 61.880(2)(a)).
+    MultiEngineAeroplanes,
+    /// "A valid instrument proficiency check for multi-engine helicopters"
+    /// (reg 61.880(2)(b)).
+    MultiEngineHelicopters,
+}
+
+impl ProficiencyCheckFor {
+    /// Whether the entry's aircraft is a "relevant aircraft" for the check
+    /// (reg 61.880(9)): "a single-engine or multi-engine aircraft of that
+    /// category" for a category, so a multi-engine aeroplane is one for the
+    /// aeroplane category too; a multi-engine aeroplane (the class of reg
+    /// 61.020, as Part 61 defines it) for multi-engine aeroplanes; a
+    /// multi-engine helicopter for multi-engine helicopters. Its type must
+    /// be known to be one.
+    fn is_relevant(self, entry: &Entry) -> bool {
+        match self {
+            Self::Category(category) => is_category(entry, category),
+            Self::MultiEngineAeroplanes => {
+                is_class_rating(entry, AircraftClassRating::MultiEngineAeroplane)
+            }
+            Self::MultiEngineHelicopters => is_multi_engine_helicopter(entry),
+        }
+    }
+
+    /// The category a failed check ends it in: "the aircraft category in
+    /// which the holder attempted the failed check", or "multi-engine
+    /// aircraft of the category" (reg 61.880(4)).
+    fn category(self) -> AircraftCategory {
+        match self {
+            Self::Category(category) => category,
+            Self::MultiEngineAeroplanes => AircraftCategory::Aeroplane,
+            Self::MultiEngineHelicopters => AircraftCategory::Helicopter,
+        }
+    }
+}
 
 /// Why a passed assessment can qualify, of the paragraphs of reg 61.880(3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,27 +108,41 @@ struct Passed {
 
 /// Reg 61.880(1): the holder of an instrument rating may exercise its
 /// privileges in an aircraft of a category "only if the holder has a valid
-/// instrument proficiency check for the aircraft category". Here, one
-/// passed check of reg 61.880(3)'s kinds, valid "to the end of the 12th
+/// instrument proficiency check for the aircraft category", and (2), in a
+/// multi-engine aeroplane or helicopter, only with one "for multi-engine
+/// aeroplanes" or "for multi-engine helicopters". Here, one passed check
+/// of reg 61.880(3)'s kinds in a relevant aircraft
+/// ([`ProficiencyCheckFor::is_relevant`]), valid "to the end of the 12th
 /// month after the month in which" it was passed, as pilot-logbook had it:
 ///
 /// - (a) a passed flight test whose purpose is the instrument rating;
 /// - (b) a passed flight test whose purpose is an instrument endorsement,
-///   when it is more than 6 months after the latest passed rating test
-///   before it;
+///   when it is more than 6 months after the latest passed rating test,
+///   in any aircraft, before it;
 /// - (c) a passed operator proficiency check (that it covered IFR
 ///   operations, and its examiner, are not recorded);
 /// - (e) a passed instrument proficiency check.
 ///
-/// (d), an operator's training and checking system, is not recorded. A
+/// (d), an operator's training and checking system, is not recorded. An
 /// instrument proficiency check, (e), passed "within 3 months before the
 /// validity of the existing check expires" runs from that expiry (reg
 /// 61.880(3)(f)), the 3 months before the day after its last valid day;
-/// a pass of another kind in that window is valid from its own month. After a failed instrument proficiency
-/// check the holder "is no longer taken to have a valid instrument
-/// proficiency check" (reg 61.880(4)), so nothing passed before it counts
-/// or is renewed by a pass after it; a pass on the same day as the failure
-/// is taken as after it. A failed check of another kind ends nothing.
+/// a pass of another kind in that window is valid from its own month.
+/// After a failed instrument proficiency check the holder "is no longer
+/// taken to have a valid instrument proficiency check" for the category it
+/// was attempted in, or for
+/// multi-engine aircraft of that category (reg 61.880(4)), so nothing
+/// passed before it counts or is renewed by a pass after it; a pass on the
+/// same day as the failure is taken as after it. A failure in a
+/// single-engine aircraft ends the multi-engine check of its category too.
+/// A failure whose aircraft is not known (its flight has no entry, or its
+/// type no known category) ends every check, as it may have been in any
+/// category; one known to be in another category ends nothing. A failed
+/// check of another kind ends nothing.
+///
+/// A check's aircraft is that of the entry for its flight, as for a flight
+/// review: one whose flight has no entry, or whose type is not known to be
+/// a relevant aircraft, does not count.
 ///
 /// What a check was, its outcome and a flight test's purposes, each with
 /// its own outcome, are CASA's information on the assessment: one with
@@ -89,15 +156,58 @@ struct Passed {
 /// makes the answer independent of the order assessments arrive in.
 pub(crate) struct InstrumentProficiencyCheck {
     reference: Date,
+    /// The flights an entry records in a relevant aircraft.
+    relevant: BTreeSet<SubjectId>,
+    /// The flights whose aircraft is known to be of another category only,
+    /// on which a failure does not end this check.
+    other_category: BTreeSet<SubjectId>,
+    /// The dates of the flight tests passed for the instrument rating, in
+    /// any aircraft: reg 61.880(3)(b)(ii) asks only when the holder passed
+    /// "the flight test for the rating", not in what.
+    rating_tests: Vec<Date>,
+    /// The passes in a relevant aircraft.
     passed: Vec<Passed>,
-    /// The dates of the failed instrument proficiency checks.
+    /// The dates of the failed instrument proficiency checks that end it.
     failed: Vec<Date>,
 }
 
 impl InstrumentProficiencyCheck {
-    pub(crate) fn new(reference: Date) -> Self {
+    /// The check for `check_for`, finding each assessment's aircraft among
+    /// `entries`. The caller passes the entries
+    /// [`Casa::counts`](crate::Casa) lets through, as the kernel's `run`
+    /// would: this check is not run over entries, so it does not apply that
+    /// gate itself.
+    pub(crate) fn new<'a>(
+        reference: Date,
+        check_for: ProficiencyCheckFor,
+        entries: impl IntoIterator<Item = &'a Entry>,
+    ) -> Self {
+        let mut relevant = BTreeSet::new();
+        let mut in_category = BTreeSet::new();
+        let mut other_category = BTreeSet::new();
+        for entry in entries {
+            let flight = entry.subject().id();
+            if !matches!(flight, SubjectId::Flight(_)) {
+                continue;
+            }
+            if check_for.is_relevant(entry) {
+                relevant.insert(flight);
+            }
+            match category_of(entry) {
+                Some(category) if category == check_for.category() => {
+                    in_category.insert(flight);
+                }
+                Some(_) => {
+                    other_category.insert(flight);
+                }
+                None => {}
+            }
+        }
         Self {
             reference,
+            relevant,
+            other_category: &other_category - &in_category,
+            rating_tests: Vec::new(),
             passed: Vec::new(),
             failed: Vec::new(),
         }
@@ -142,6 +252,7 @@ impl AssessmentAccumulator for InstrumentProficiencyCheck {
         let Some(information) = assessment_information(assessment) else {
             return;
         };
+        let flight = SubjectId::Flight(assessment.flight);
         let basis = if information.check_type == Some(CheckType::FlightTest) {
             // A flight test's purposes each have their own outcome, and it
             // has none of its own; a failed one ends nothing.
@@ -163,7 +274,9 @@ impl AssessmentAccumulator for InstrumentProficiencyCheck {
             match information.outcome {
                 Some(CheckOutcome::Passed) => {}
                 Some(CheckOutcome::Failed) => {
-                    if information.check_type == Some(CheckType::InstrumentProficiencyCheck) {
+                    if information.check_type == Some(CheckType::InstrumentProficiencyCheck)
+                        && !self.other_category.contains(&flight)
+                    {
                         self.failed.push(assessment.date);
                     }
                     return;
@@ -177,6 +290,12 @@ impl AssessmentAccumulator for InstrumentProficiencyCheck {
                 _ => return,
             }
         };
+        if basis == Basis::RatingTest {
+            self.rating_tests.push(assessment.date);
+        }
+        if !self.relevant.contains(&flight) {
+            return;
+        }
         self.passed.push(Passed {
             id: assessment.id.clone(),
             on: assessment.date,
@@ -187,19 +306,13 @@ impl AssessmentAccumulator for InstrumentProficiencyCheck {
 
 impl AssessmentCurrencyCheck for InstrumentProficiencyCheck {
     fn result(&self) -> CurrencyResult {
-        let rating_tests: Vec<Date> = self
-            .passed
-            .iter()
-            .filter(|passed| passed.basis == Basis::RatingTest)
-            .map(|passed| passed.on)
-            .collect();
         // Nothing passed before the latest failure counts after it.
         let failed_on = self.failed.iter().max();
         let mut events: Vec<&Passed> = self
             .passed
             .iter()
             .filter(|passed| failed_on.is_none_or(|failed| passed.on >= *failed))
-            .filter(|passed| Self::qualifies(passed, &rating_tests))
+            .filter(|passed| Self::qualifies(passed, &self.rating_tests))
             .collect();
         events.sort_by(|a, b| a.on.cmp(&b.on).then_with(|| a.id.cmp(&b.id)));
         if events.is_empty() {
@@ -257,8 +370,13 @@ mod tests {
     use time::macros::date;
 
     use super::*;
-    use crate::logbook::test_support::{assessed, flight_test};
+    use crate::logbook::test_support::{
+        aeroplane, assessed, entry, flight_test, flown, on_flight, unclassified,
+    };
     use crate::logbook::{casa, AssessmentInformation};
+
+    use AircraftCategory::{Aeroplane, Helicopter};
+    use ProficiencyCheckFor::{Category, MultiEngineAeroplanes, MultiEngineHelicopters};
 
     const REFERENCE: Date = date!(2024 - 09 - 01);
 
@@ -302,12 +420,41 @@ mod tests {
         )
     }
 
-    fn result_on(reference: Date, assessments: &[Assessment]) -> CurrencyResult {
-        let mut check = InstrumentProficiencyCheck::new(reference);
+    /// The flights the checks here are on: 1 in a single-engine aeroplane
+    /// (a C172), 2 in a multi-engine aeroplane (a PA44), 3 in a
+    /// single-engine helicopter (an R44), 4 in a multi-engine helicopter
+    /// (an EC35) and 5 in a type of no known category; flight 6 has no
+    /// entry.
+    fn flights() -> Vec<Entry> {
+        [
+            aeroplane("1", REFERENCE),
+            flown("2", REFERENCE, "PA44"),
+            flown("3", REFERENCE, "R44"),
+            flown("4", REFERENCE, "EC35"),
+            unclassified("5", REFERENCE),
+        ]
+        .into_iter()
+        .zip(1..)
+        .map(|(parts, flight)| entry(on_flight(flight, parts)))
+        .collect()
+    }
+
+    /// The check for `check_for` over these assessments, on [`flights`].
+    fn result_for(
+        check_for: ProficiencyCheckFor,
+        reference: Date,
+        assessments: &[Assessment],
+    ) -> CurrencyResult {
+        let mut check = InstrumentProficiencyCheck::new(reference, check_for, &flights());
         for assessment in assessments {
             check.accept_assessment(assessment);
         }
         check.result()
+    }
+
+    /// The aeroplane category's check, the checks above being on flight 1.
+    fn result_on(reference: Date, assessments: &[Assessment]) -> CurrencyResult {
+        result_for(Category(Aeroplane), reference, assessments)
     }
 
     fn result(assessments: &[Assessment]) -> CurrencyResult {
@@ -692,5 +839,113 @@ mod tests {
         let mut failed = ipc("f", date!(2024 - 08 - 22), CheckOutcome::Failed);
         failed.authority_information = unreadable.authority_information;
         assert!(result(&[ipc("p", on, CheckOutcome::Passed), failed]).is_current());
+    }
+
+    /// An instrument proficiency check on this flight.
+    fn ipc_on(id: &str, flight: u128, on: Date, outcome: CheckOutcome) -> Assessment {
+        let information = AssessmentInformation {
+            check_type: Some(CheckType::InstrumentProficiencyCheck),
+            outcome: Some(outcome),
+            check_purposes: Vec::new(),
+        };
+        assessed(id, on, flight, information)
+    }
+
+    /// Which of the checks a pass on each flight makes current: a
+    /// multi-engine aeroplane or helicopter is a relevant aircraft for its
+    /// category as well (reg 61.880(9)(a)), a single-engine one is not for
+    /// multi-engine aircraft, and one not known to be either is for none.
+    #[test]
+    fn a_pass_counts_for_the_checks_its_aircraft_is_relevant_to() {
+        let checks = [
+            Category(Aeroplane),
+            MultiEngineAeroplanes,
+            Category(Helicopter),
+            MultiEngineHelicopters,
+            Category(AircraftCategory::Gyroplane),
+        ];
+        let current = |flight| -> Vec<ProficiencyCheckFor> {
+            let passed = [ipc_on(
+                "p",
+                flight,
+                date!(2024 - 08 - 02),
+                CheckOutcome::Passed,
+            )];
+            checks
+                .into_iter()
+                .filter(|&check_for| result_for(check_for, REFERENCE, &passed).is_current())
+                .collect()
+        };
+        assert_eq!(current(1), [Category(Aeroplane)]);
+        assert_eq!(current(2), [Category(Aeroplane), MultiEngineAeroplanes]);
+        assert_eq!(current(3), [Category(Helicopter)]);
+        assert_eq!(current(4), [Category(Helicopter), MultiEngineHelicopters]);
+        assert!(current(5).is_empty());
+        assert!(current(6).is_empty());
+    }
+
+    /// A failure ends the checks for its category and for multi-engine
+    /// aircraft of it (reg 61.880(4)), whatever aircraft of the category it
+    /// was in; one in another category ends neither, and one in an aircraft
+    /// not known ends both.
+    #[test]
+    fn a_failure_ends_the_checks_of_the_category_it_was_attempted_in() {
+        // Passed in a multi-engine aeroplane (flight 2) or helicopter (4);
+        // the flights in the category, then those in the other.
+        let cases = [
+            (
+                2,
+                [Category(Aeroplane), MultiEngineAeroplanes],
+                [1, 2],
+                [3, 4],
+            ),
+            (
+                4,
+                [Category(Helicopter), MultiEngineHelicopters],
+                [3, 4],
+                [1, 2],
+            ),
+        ];
+        for (passed_on, checks, in_category, in_other) in cases {
+            let after = |flight| {
+                [
+                    ipc_on("p", passed_on, date!(2024 - 07 - 03), CheckOutcome::Passed),
+                    ipc_on("f", flight, date!(2024 - 08 - 22), CheckOutcome::Failed),
+                ]
+            };
+            for check_for in checks {
+                for flight in in_category.into_iter().chain([5, 6]) {
+                    let r = result_for(check_for, REFERENCE, &after(flight));
+                    assert!(!r.is_current(), "{check_for:?} after a failure on {flight}");
+                }
+                for flight in in_other {
+                    let r = result_for(check_for, REFERENCE, &after(flight));
+                    assert!(r.is_current(), "{check_for:?} after a failure on {flight}");
+                }
+            }
+        }
+    }
+
+    /// The flight test for the rating that an endorsement test must be more
+    /// than 6 months after (reg 61.880(3)(b)(ii)) may be in any aircraft:
+    /// one in a single-engine aeroplane lets an endorsement test in a
+    /// multi-engine aeroplane count for multi-engine aeroplanes.
+    #[test]
+    fn an_endorsement_test_counts_after_a_rating_test_in_any_aircraft() {
+        let rating = assessed(
+            "ir",
+            date!(2023 - 01 - 10),
+            1,
+            flight_test(&[(CheckPurpose::InstrumentRating, CheckOutcome::Passed)]),
+        );
+        let endorsement = assessed(
+            "ie",
+            date!(2023 - 09 - 15),
+            2,
+            flight_test(&[(CheckPurpose::InstrumentEndorsement, CheckOutcome::Passed)]),
+        );
+        let r = result_for(MultiEngineAeroplanes, REFERENCE, &[rating, endorsement]);
+        assert_eq!(r.current_through(), Some(date!(2024 - 09 - 30)));
+        assert_eq!(ids(&r), ["ie"]);
     }
 }

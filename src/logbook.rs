@@ -198,13 +198,14 @@ impl LicensingAuthority for Casa {
         licence_titles::minimum_ages()
     }
 
-    /// Twenty: carrying a passenger by day and at night (reg 61.395(1),
+    /// Twenty-six: carrying a passenger by day and at night (reg 61.395(1),
     /// (2)) and night VFR recency (reg 61.965(a)), each a requirement for
     /// its take-offs and one for its landings, instrument recency (reg
     /// 61.870(2), (3) for each category of reg 61.015, (4) to (7), and reg
     /// 61.875), a flight review for each aeroplane class rating (reg
-    /// 61.745) and the instrument proficiency check (reg 61.880). Each has a stable id and a name in its
-    /// regulation's words.
+    /// 61.745) and an instrument proficiency check for each category and for
+    /// multi-engine aeroplanes and helicopters (reg 61.880). Each has a
+    /// stable id and a name in its regulation's words.
     fn requirements(&self) -> Vec<Requirement> {
         currency::requirements()
     }
