@@ -612,6 +612,25 @@ fn every_question_is_a_key_of_its_format() {
     }
 }
 
+/// Pins the arrivals question's wording: an operation recorded as an approach
+/// and as an arrival would count twice towards reg 61.870(2), and a count
+/// cannot be de-duplicated, so the question excludes the entry's approaches.
+#[test]
+fn the_dme_or_gnss_arrivals_question_excludes_the_entrys_approaches() {
+    let entry = session("CASA", None);
+    let questions = Casa::new().questions_for(Record::Entry(&entry));
+    let arrivals = questions
+        .iter()
+        .find(|question| question.key == "dme_or_gnss_arrivals")
+        .expect("a question for the arrivals");
+    assert_eq!(
+        arrivals.label,
+        "How many instrument approach operations using distance measuring equipment or a \
+         global navigation satellite system (DME or GNSS arrival procedure), not also \
+         recorded in this entry's approaches, were conducted?"
+    );
+}
+
 #[test]
 fn a_flight_tests_purposes_are_asked_in_part_61s_words_and_only_failing_is_adverse() {
     let assessment = an_assessment();

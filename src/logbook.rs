@@ -242,6 +242,9 @@ impl LicensingAuthority for Casa {
     /// with an approach or a DME or GNSS arrival, the route to a pilot in
     /// command under supervision, and whether the person was receiving
     /// flight training on the instructor's route. The DME or GNSS arrivals
+    /// question excludes operations also recorded in the entry's approaches,
+    /// as both count towards reg 61.870(2) and a count cannot be
+    /// de-duplicated against them, so do not reword it back. They
     /// are asked whatever the flight rules, as reg 61.870 counts an
     /// instrument approach operation, and before the guidance operations,
     /// whose condition reads their answer.
