@@ -5,14 +5,13 @@
 //! Reg 61.880: the instrument proficiency check of the holder of an
 //! instrument rating.
 
-use logbook_shared_kernel::authority::window::{
-    add_months_clamped, count_in_window, end_of_nth_month_after,
-};
+use logbook_shared_kernel::authority::window::{add_months_clamped, count_in_window};
 use logbook_shared_kernel::{
     Assessment, AssessmentAccumulator, AssessmentCurrencyCheck, AssessmentId, CurrencyResult,
 };
 use time::{Date, Duration};
 
+use super::renewal;
 use crate::logbook::{
     assessment_information, AssessedPurpose, CheckOutcome, CheckPurpose, CheckType,
 };
@@ -41,8 +40,9 @@ enum Basis {
     /// qualifies only if it is "conducted more than 6 months after the
     /// holder passes the flight test for the rating".
     EndorsementTest,
-    /// (c) and (e): "an operator proficiency check that covers IFR
-    /// operations", or "an instrument proficiency check".
+    /// (c): "an operator proficiency check that covers IFR operations".
+    OperatorCheck,
+    /// (e): "an instrument proficiency check".
     ProficiencyCheck,
 }
 
@@ -68,9 +68,10 @@ struct Passed {
 /// - (e) a passed instrument proficiency check.
 ///
 /// (d), an operator's training and checking system, is not recorded. A
-/// renewal "within 3 months before the validity of the existing check
-/// expires" runs from that expiry (reg 61.880(3)(f)), the 3 months before
-/// the day after its last valid day. After a failed instrument proficiency
+/// instrument proficiency check, (e), passed "within 3 months before the
+/// validity of the existing check expires" runs from that expiry (reg
+/// 61.880(3)(f)), the 3 months before the day after its last valid day;
+/// a pass of another kind in that window is valid from its own month. After a failed instrument proficiency
 /// check the holder "is no longer taken to have a valid instrument
 /// proficiency check" (reg 61.880(4)), so nothing passed before it counts
 /// or is renewed by a pass after it; a pass on the same day as the failure
@@ -117,7 +118,7 @@ impl InstrumentProficiencyCheck {
     /// Whether a pass counts, given the dates of every rating test passed.
     fn qualifies(passed: &Passed, rating_tests: &[Date]) -> bool {
         match passed.basis {
-            Basis::RatingTest | Basis::ProficiencyCheck => true,
+            Basis::RatingTest | Basis::OperatorCheck | Basis::ProficiencyCheck => true,
             Basis::EndorsementTest => rating_tests
                 .iter()
                 .filter(|on| **on < passed.on)
@@ -170,9 +171,8 @@ impl AssessmentAccumulator for InstrumentProficiencyCheck {
                 None => return,
             }
             match information.check_type {
-                Some(
-                    CheckType::InstrumentProficiencyCheck | CheckType::OperatorProficiencyCheck,
-                ) => Basis::ProficiencyCheck,
+                Some(CheckType::InstrumentProficiencyCheck) => Basis::ProficiencyCheck,
+                Some(CheckType::OperatorProficiencyCheck) => Basis::OperatorCheck,
                 // A check of another kind.
                 _ => return,
             }
@@ -207,28 +207,18 @@ impl AssessmentCurrencyCheck for InstrumentProficiencyCheck {
         }
 
         // The last day it is valid to, and the pass that made it so,
-        // chaining an early renewal from the expiry it renews.
-        let mut valid: Option<(Date, &Passed)> = None;
-        for event in &events {
-            let renewed = valid.map(|(to, _)| to).filter(|existing| {
-                // "Within 3 months before the validity ... expires": the
-                // validity ends with its last day, so the 3 months run back
-                // from the day after.
-                let window_opens = existing
-                    .next_day()
-                    .and_then(|expires| add_months_clamped(expires, -EARLY_RENEWAL_MONTHS))
-                    .unwrap_or(Date::MIN);
-                window_opens <= event.on && event.on <= *existing
-            });
-            let to = end_of_nth_month_after(renewed.unwrap_or(event.on), VALID_MONTHS)
-                .unwrap_or(Date::MAX);
-            if valid.is_none_or(|(existing, _)| to >= existing) {
-                valid = Some((to, event));
-            }
-        }
-        let valid_to = valid.map(|(to, _)| to);
-
+        // chaining an early renewal from the expiry it renews. Only "an
+        // instrument proficiency check" renews early (reg 61.880(3)(f)(ii)),
+        // not another of (3)'s kinds.
         let dates: Vec<Date> = events.iter().map(|event| event.on).collect();
+        let passes: Vec<(Date, bool)> = events
+            .iter()
+            .map(|event| (event.on, event.basis == Basis::ProficiencyCheck))
+            .collect();
+        let valid = renewal::validity(&passes, VALID_MONTHS, EARLY_RENEWAL_MONTHS)
+            .longest
+            .map(|(to, index)| (to, events[index]));
+        let valid_to = valid.map(|(to, _)| to);
         let shown_after = self
             .reference
             .saturating_sub(Duration::days(DISPLAY_WINDOW_DAYS));
@@ -581,6 +571,29 @@ mod tests {
             ipc("b", date!(2024 - 02 - 01), CheckOutcome::Passed),
         ]);
         assert_eq!(natural.current_through(), Some(date!(2025 - 02 - 28)));
+    }
+
+    /// Reg 61.880(3)(f)(ii) renews early only on "successfully completes an
+    /// instrument proficiency check": an operator proficiency check, or a
+    /// flight test, in the window is valid from its own month.
+    #[test]
+    fn only_an_instrument_proficiency_check_renews_early() {
+        let first = ipc("a", date!(2025 - 03 - 10), CheckOutcome::Passed);
+        let opc = checked(
+            "b",
+            date!(2026 - 01 - 15),
+            CheckType::OperatorProficiencyCheck,
+            CheckOutcome::Passed,
+            None,
+        );
+        let renewing = ipc("b", date!(2026 - 01 - 15), CheckOutcome::Passed);
+        let flight = test("b", date!(2026 - 01 - 15), CheckPurpose::InstrumentRating);
+        let through = |second: &Assessment| {
+            result_on(date!(2026 - 02 - 01), &[first.clone(), second.clone()]).current_through()
+        };
+        assert_eq!(through(&renewing), Some(date!(2027 - 03 - 31)));
+        assert_eq!(through(&opc), Some(date!(2027 - 01 - 31)));
+        assert_eq!(through(&flight), Some(date!(2027 - 01 - 31)));
     }
 
     #[test]
