@@ -155,8 +155,13 @@ to the trait.
   when its aircraft is a "relevant aircraft" for it (reg 61.880(9)), so one
   in a multi-engine aeroplane counts for the aeroplane category as well as
   for multi-engine aeroplanes; a failure ends the checks of its aircraft's
-  category, the multi-engine one included (reg 61.880(4)), and one whose
-  aircraft is not known ends them all.
+  category, the multi-engine one included (reg 61.880(4), read as ending
+  both until au-casa#94 settles whether it ends only the kind of check
+  failed), and one whose aircraft is not known ends them all. That is the
+  one exception to an unclassified assessment not counting: a pilot shown
+  current after a failure that could not be placed is the worse error
+  (decided on au-casa#93). A host should not let such a check be recorded
+  (pilot-logbook#249).
 - **An unknown type does not count where a category is required.** A check
   that requires a category (`guards::is_category`) needs positive evidence;
   regs 61.870(2) and (4) to (7) require none ("in an aircraft"), so any
