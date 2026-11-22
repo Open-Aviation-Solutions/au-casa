@@ -370,10 +370,11 @@ does not read until it takes up the release.
 entry and for an assessment, and refuses by the kernel's kinds: newer than the
 current version, older than every migration kept (version 0 of an entry; any
 version before 2 of an assessment, as none is kept) and not readable
-(information with no version, that is not an object, or of version 1 or 2 of
-an entry that does not read). An entry's version 2 that reads, and an
-assessment's version 2 without its answers read (`Ok(None)` is not a check of
-them), give `Ok(None)`. The function below stays public in 0.11.1 for hosts
+(information with no version, that is not an object, or of version 1 of an
+entry that does not read). Version 2 of an entry or of an assessment gives
+`Ok(None)` on its version alone, without its answers read (`Ok(None)` is not a
+check of them, which is `problems_for`'s: the owner's decision on
+logbook-shared-kernel#45). The function below stays public in 0.11.1 for hosts
 that call it, and goes in the next breaking release.
 
 The migration so far is `logbook::migrate_entry_information_from_version_1`

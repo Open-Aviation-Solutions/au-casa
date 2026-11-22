@@ -262,13 +262,14 @@ impl LicensingAuthority for Casa {
     }
 
     /// An entry's information of version 1 is rewritten as version 2
-    /// ([`migrate_entry_information_from_version_1`]); version 2 that reads
-    /// gives `Ok(None)`. An assessment's information of version 2 is the
-    /// current one, so gives `Ok(None)`, without its answers read: no older
-    /// version of it is kept, so one is refused as too old. A version newer
-    /// than the current is refused as newer; version 2 of an entry that
-    /// does not read, and information with no version or that is not a JSON
-    /// object, as not readable.
+    /// ([`migrate_entry_information_from_version_1`]), and refused as not
+    /// readable when it does not read as version 1. Information of the
+    /// current version, 2, of an entry or of an assessment, gives `Ok(None)`
+    /// on its version alone, without its answers read: that is not a check of
+    /// them, which is `problems_for`'s. No older version of an assessment is
+    /// kept, so one is refused as too old. A version newer than the current
+    /// is refused as newer; information with no version or that is not a
+    /// JSON object, as not readable.
     fn migrate_information(
         &self,
         record: Record,
@@ -290,11 +291,12 @@ impl LicensingAuthority for Casa {
             ))),
             (Some(version), Record::Assessment(_)) if version == current => Ok(None),
             (Some(version), Record::Assessment(_)) => Err(too_old(version)),
+            (Some(version), Record::Entry(_)) if version == current => Ok(None),
             (Some(0), Record::Entry(_)) => Err(too_old(0)),
-            (Some(version), Record::Entry(_)) => {
-                let migrated = migrate_entry_information_from_version_1(information)
-                    .map_err(|error| MigrationRefused::Unreadable(error.to_string()))?;
-                Ok((version == 1).then_some(migrated))
+            (Some(_), Record::Entry(_)) => {
+                migrate_entry_information_from_version_1(information)
+                    .map(Some)
+                    .map_err(|error| MigrationRefused::Unreadable(error.to_string()))
             }
         }
     }

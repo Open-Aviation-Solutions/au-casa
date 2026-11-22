@@ -1386,15 +1386,15 @@ fn an_entry_at_version_1_is_migrated_once() {
 }
 
 #[test]
-fn an_entry_at_version_2_that_does_not_read_is_unreadable() {
+fn an_entry_at_version_2_is_current_without_its_answers_read() {
     let entry = session("CASA", None);
-    assert!(matches!(
+    assert_eq!(
         migrated_as(
             Record::Entry(&entry),
             json!({"_version": 2, "approved_fstd": "yes"})
         ),
-        Err(MigrationRefused::Unreadable(_))
-    ));
+        Ok(None)
+    );
 }
 
 #[test]
