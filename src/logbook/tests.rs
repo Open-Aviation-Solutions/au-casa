@@ -21,7 +21,7 @@ use icao_shared_kernel::{Capacity, FlightRules, LocationIndicator};
 use logbook_shared_kernel::{
     AircraftCharacteristic, Answer, Approach, ApproachType, Assessment, AssessmentId, AuthorityId,
     AuthoritySpecificInformation, Choice, DateRange, Entry, EntryParts, LicensingAuthority,
-    Logbook, ProblemAt, ProblemKind, Question, Record, Subject,
+    Logbook, MigrationRefused, ProblemAt, ProblemKind, Question, Record, Subject,
 };
 use rstest::rstest;
 use serde_json::{json, Value};
@@ -1364,4 +1364,85 @@ fn what_is_not_the_assessment_format_is_refused(
     #[case] error: AssessmentInformationError,
 ) {
     assert_eq!(read_assessment(stored), Err(error));
+}
+
+/// What `Casa` migrates `value` to, as an entry's or an assessment's
+/// information: its value, or `None` when there is nothing to rewrite.
+fn migrated_as(record: Record, value: Value) -> Result<Option<Value>, MigrationRefused> {
+    Casa::new()
+        .migrate_information(record, &AuthoritySpecificInformation::new(value))
+        .map(|migrated| migrated.map(AuthoritySpecificInformation::into_value))
+}
+
+#[test]
+fn an_entry_at_version_1_is_migrated_once() {
+    let entry = session("CASA", None);
+    let record = Record::Entry(&entry);
+    let version_1 = json!({"_version": 1, "approved_fstd": true, "dme_or_gnss_arrivals": 2});
+    let version_2 = json!({"_version": 2, "approved_fstd": true, "dme_or_gnss_arrivals": 2});
+    let migrated = migrated_as(record, version_1).unwrap();
+    assert_eq!(migrated, Some(version_2.clone()));
+    assert_eq!(migrated_as(record, version_2), Ok(None));
+}
+
+#[test]
+fn an_entry_at_version_2_is_current_without_its_answers_read() {
+    let entry = session("CASA", None);
+    assert_eq!(
+        migrated_as(
+            Record::Entry(&entry),
+            json!({"_version": 2, "approved_fstd": "yes"})
+        ),
+        Ok(None)
+    );
+}
+
+#[test]
+fn an_assessment_at_version_2_is_current() {
+    let assessment = an_assessment();
+    assert_eq!(
+        migrated_as(Record::Assessment(&assessment), json!({"_version": 2})),
+        Ok(None)
+    );
+}
+
+#[rstest]
+#[case::newer(json!({"_version": 3}), "newer")]
+#[case::no_version(json!({"approved_fstd": true}), "unreadable")]
+#[case::not_an_object(json!([]), "unreadable")]
+#[case::version_0(json!({"_version": 0}), "too_old")]
+fn what_cannot_be_migrated_is_refused_by_kind(#[case] stored: Value, #[case] kind: &str) {
+    let entry = session("CASA", None);
+    let assessment = an_assessment();
+    for record in [Record::Entry(&entry), Record::Assessment(&assessment)] {
+        let refused = migrated_as(record, stored.clone()).unwrap_err();
+        let expected = match kind {
+            "newer" => matches!(refused, MigrationRefused::Newer(_)),
+            "too_old" => matches!(refused, MigrationRefused::TooOld(_)),
+            "unreadable" => matches!(refused, MigrationRefused::Unreadable(_)),
+            other => unreachable!("no kind {other}"),
+        };
+        assert!(expected, "{refused:?} for {stored}");
+    }
+}
+
+#[test]
+fn an_entry_at_version_1_that_does_not_read_is_unreadable() {
+    let entry = session("CASA", None);
+    assert!(matches!(
+        migrated_as(
+            Record::Entry(&entry),
+            json!({"_version": 1, "cross_country_flight": true})
+        ),
+        Err(MigrationRefused::Unreadable(_))
+    ));
+}
+
+#[test]
+fn an_assessment_at_version_1_is_too_old_as_none_is_kept() {
+    let assessment = an_assessment();
+    assert!(matches!(
+        migrated_as(Record::Assessment(&assessment), json!({"_version": 1})),
+        Err(MigrationRefused::TooOld(_))
+    ));
 }
