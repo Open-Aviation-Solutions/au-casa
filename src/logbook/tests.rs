@@ -1419,10 +1419,23 @@ fn what_cannot_be_migrated_is_refused_by_kind(#[case] stored: Value, #[case] kin
         let expected = match kind {
             "newer" => matches!(refused, MigrationRefused::Newer(_)),
             "too_old" => matches!(refused, MigrationRefused::TooOld(_)),
-            _ => matches!(refused, MigrationRefused::Unreadable(_)),
+            "unreadable" => matches!(refused, MigrationRefused::Unreadable(_)),
+            other => unreachable!("no kind {other}"),
         };
         assert!(expected, "{refused:?} for {stored}");
     }
+}
+
+#[test]
+fn an_entry_at_version_1_that_does_not_read_is_unreadable() {
+    let entry = session("CASA", None);
+    assert!(matches!(
+        migrated_as(
+            Record::Entry(&entry),
+            json!({"_version": 1, "cross_country_flight": true})
+        ),
+        Err(MigrationRefused::Unreadable(_))
+    ));
 }
 
 #[test]

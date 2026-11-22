@@ -275,26 +275,27 @@ impl LicensingAuthority for Casa {
         information: &AuthoritySpecificInformation,
     ) -> Result<Option<AuthoritySpecificInformation>, MigrationRefused> {
         let current = self.questions_for(record).version();
+        let too_old = |version: u32| {
+            MigrationRefused::TooOld(format!(
+                "the information is of version {version}, which these rules have no migration from, to version {current}"
+            ))
+        };
         match (information.version(), record) {
-            (Some(version), _) if version > current => Err(MigrationRefused::Newer(format!(
-                "the information is of version {version}, newer than version {current}, which these rules write"
-            ))),
-            (Some(0), _) | (Some(1), Record::Assessment(_)) => Err(MigrationRefused::TooOld(
-                format!(
-                    "the information is of version {}, which these rules have no migration from, to version {current}",
-                    information.version().unwrap_or_default()
-                ),
-            )),
-            (Some(_), Record::Assessment(_)) => Ok(None),
-            (_, Record::Entry(_)) => {
-                let migrated = migrate_entry_information_from_version_1(information)
-                    .map_err(|error| MigrationRefused::Unreadable(error.to_string()))?;
-                Ok((information.version() == Some(1)).then_some(migrated))
-            }
-            (None, Record::Assessment(_)) => Err(MigrationRefused::Unreadable(format!(
+            (None, _) => Err(MigrationRefused::Unreadable(format!(
                 "the information holds no version: a JSON object with \"{}\" a whole number is expected",
                 AuthoritySpecificInformation::VERSION_KEY
             ))),
+            (Some(version), _) if version > current => Err(MigrationRefused::Newer(format!(
+                "the information is of version {version}, newer than version {current}, which these rules write"
+            ))),
+            (Some(version), Record::Assessment(_)) if version == current => Ok(None),
+            (Some(version), Record::Assessment(_)) => Err(too_old(version)),
+            (Some(0), Record::Entry(_)) => Err(too_old(0)),
+            (Some(version), Record::Entry(_)) => {
+                let migrated = migrate_entry_information_from_version_1(information)
+                    .map_err(|error| MigrationRefused::Unreadable(error.to_string()))?;
+                Ok((version == 1).then_some(migrated))
+            }
         }
     }
 
