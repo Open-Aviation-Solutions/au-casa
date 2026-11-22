@@ -50,8 +50,8 @@ use icao_shared_kernel::MinimumAges;
 use logbook_shared_kernel::{
     AircraftCharacteristic, AircraftDescription, Assessment, AuthorityId,
     AuthoritySpecificInformation, AuthorityTotal, Classification, CurrencyResult, DateRange, Entry,
-    LicenceTitleTerm, LicensingAuthority, Logbook, Problem, ProblemAt, ProblemKind, Questions,
-    Record, Requirement, RequirementId, Subject, Term, TermId,
+    LicenceTitleTerm, LicensingAuthority, Logbook, MigrationRefused, Problem, ProblemAt,
+    ProblemKind, Questions, Record, Requirement, RequirementId, Subject, Term, TermId,
 };
 use time::Date;
 
@@ -111,6 +111,11 @@ pub(crate) fn assessment_information(assessment: &Assessment) -> Option<Assessme
 /// is given back as it is, once it reads, so the migration can be run
 /// again. Nothing in it needs guessing, so it refuses only information
 /// that reads as neither version.
+///
+/// Superseded by [`LicensingAuthority::migrate_information`] on [`Casa`],
+/// which migrates this and says why it refuses by kind. It stays public in
+/// this release for hosts that call it, and goes in au-casa's next breaking
+/// release.
 pub fn migrate_entry_information_from_version_1(
     information: &AuthoritySpecificInformation,
 ) -> Result<AuthoritySpecificInformation, EntryMigrationError> {
@@ -253,6 +258,43 @@ impl LicensingAuthority for Casa {
         match record {
             Record::Entry(_) => questions::ENTRY.clone(),
             Record::Assessment(_) => questions::ASSESSMENT.clone(),
+        }
+    }
+
+    /// An entry's information of version 1 is rewritten as version 2
+    /// ([`migrate_entry_information_from_version_1`]); version 2 that reads
+    /// gives `Ok(None)`. An assessment's information of version 2 is the
+    /// current one, so gives `Ok(None)`, without its answers read: no older
+    /// version of it is kept, so one is refused as too old. A version newer
+    /// than the current is refused as newer; version 2 of an entry that
+    /// does not read, and information with no version or that is not a JSON
+    /// object, as not readable.
+    fn migrate_information(
+        &self,
+        record: Record,
+        information: &AuthoritySpecificInformation,
+    ) -> Result<Option<AuthoritySpecificInformation>, MigrationRefused> {
+        let current = self.questions_for(record).version();
+        match (information.version(), record) {
+            (Some(version), _) if version > current => Err(MigrationRefused::Newer(format!(
+                "the information is of version {version}, newer than version {current}, which these rules write"
+            ))),
+            (Some(0), _) | (Some(1), Record::Assessment(_)) => Err(MigrationRefused::TooOld(
+                format!(
+                    "the information is of version {}, which these rules have no migration from, to version {current}",
+                    information.version().unwrap_or_default()
+                ),
+            )),
+            (Some(_), Record::Assessment(_)) => Ok(None),
+            (_, Record::Entry(_)) => {
+                let migrated = migrate_entry_information_from_version_1(information)
+                    .map_err(|error| MigrationRefused::Unreadable(error.to_string()))?;
+                Ok((information.version() == Some(1)).then_some(migrated))
+            }
+            (None, Record::Assessment(_)) => Err(MigrationRefused::Unreadable(format!(
+                "the information holds no version: a JSON object with \"{}\" a whole number is expected",
+                AuthoritySpecificInformation::VERSION_KEY
+            ))),
         }
     }
 

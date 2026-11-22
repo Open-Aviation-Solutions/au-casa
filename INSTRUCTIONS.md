@@ -216,7 +216,7 @@ to the trait.
   groups a flight's entries, asserts the same result for both orders.
 
 `icao-shared-kernel`, logbook-shared-kernel and aircraft-type-descriptions
-are taken by a caret range (`^0.6`, `^0.9.1` and `^0.1.0`), not pinned exactly
+are taken by a caret range (`^0.6`, `^0.9.2` and `^0.1.0`), not pinned exactly
 (au-casa#24): sibling country crates (nz-caa and the like) depend on them
 too, and a consumer such as a logbook imports several at once. Exact pins on
 different patches cannot be resolved together; with caret ranges Cargo builds
@@ -364,6 +364,17 @@ records. The host's take-up of the release runs it over the data repository,
 on a data repository branch merged with the host's take-up, not with
 au-casa's pull request, since a deployed page refuses records of a version it
 does not read until it takes up the release.
+
+`Casa` offers the migration through the kernel's
+`LicensingAuthority::migrate_information` (au-casa#88, in 0.11.1), for an
+entry and for an assessment, and refuses by the kernel's kinds: newer than the
+current version, older than every migration kept (version 0 of an entry; any
+version before 2 of an assessment, as none is kept) and not readable
+(information with no version, that is not an object, or of version 1 or 2 of
+an entry that does not read). An entry's version 2 that reads, and an
+assessment's version 2 without its answers read (`Ok(None)` is not a check of
+them), give `Ok(None)`. The function below stays public in 0.11.1 for hosts
+that call it, and goes in the next breaking release.
 
 The migration so far is `logbook::migrate_entry_information_from_version_1`
 (au-casa#86, in 0.10.0), from version 1 of the information on an entry to
