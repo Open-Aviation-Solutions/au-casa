@@ -586,11 +586,14 @@ fn every_question_is_a_key_of_its_format() {
     })
     .unwrap();
     let assessment = an_assessment();
+    // A session that records no type cannot be placed in a category, which
+    // an assessment is refused for, so the assessment's entry is a flight.
+    let flight = an_entry();
     for record in [
         Record::Entry(&entry),
         Record::Assessment {
             assessment: &assessment,
-            entry: &entry,
+            entry: &flight,
         },
     ] {
         let questions = casa.questions_for(record);
@@ -1129,6 +1132,74 @@ fn information_on_an_assessment_that_cannot_be_read_is_refused_before_it_is_save
     assert_eq!(refused.len(), 1);
     assert_eq!(refused[0].at, ProblemAt::Information);
     assert_eq!(refused[0].kind, ProblemKind::Refusal);
+}
+
+/// Every check CASA records is evidence about an aircraft category, so one
+/// whose entry's aircraft cannot be placed in one is refused, saying what is
+/// missing (pilot-logbook#249).
+#[rstest]
+#[case::a_flight_in_a_type_with_no_description(
+    test_support::unclassified("e1", date!(2026 - 11 - 06)),
+    "This flight's aircraft can't be placed in a category, as its type, ZZZZ, has no \
+     description: describe the type, its airframe and its engines, on the entry"
+)]
+#[case::a_session_representing_a_type_with_no_description(
+    test_support::simulated("e1", date!(2026 - 11 - 06), "ZZZZ"),
+    "The aircraft this session's device represented can't be placed in a category, as its \
+     type, ZZZZ, has no description: describe the type, its airframe and its engines, on the \
+     entry"
+)]
+#[case::a_session_that_records_no_type(
+    EntryParts {
+        subject: Subject::Session { session: Uuid::nil(), device: Uuid::nil(), simulated: None },
+        ..flight_parts()
+    },
+    "The aircraft this session's device represented can't be placed in a category, as the \
+     session doesn't record its type: record the type on the entry"
+)]
+fn an_assessment_whose_entrys_aircraft_cannot_be_classified_is_refused(
+    #[case] parts: EntryParts,
+    #[case] text: &str,
+) {
+    let assessment = an_assessment();
+    let entry = Entry::new(parts).unwrap();
+    let refused = Casa::new().problems_for(
+        Record::Assessment {
+            assessment: &assessment,
+            entry: &entry,
+        },
+        &AuthoritySpecificInformation::new(json!({"check_type": "flight_review"})),
+    );
+    assert_eq!(refused.len(), 1);
+    assert_eq!(refused[0].at, ProblemAt::Information);
+    assert_eq!(refused[0].kind, ProblemKind::Refusal);
+    assert_eq!(refused[0].text, text);
+    assert_eq!(refused[0].regulation, "61.015");
+}
+
+/// A type the table does not catalogue is placed by the description the
+/// entry carries, and a session by the type its device represented.
+#[test]
+fn an_assessment_whose_entrys_aircraft_is_described_is_not_refused() {
+    let assessment = an_assessment();
+    let mut described = test_support::unclassified("e1", date!(2026 - 11 - 06));
+    if let Subject::Flight { description, .. } = &mut described.subject {
+        *description = crate::logbook::guards::tabled("C172");
+    }
+    for parts in [
+        described,
+        test_support::simulated("e1", date!(2026 - 11 - 06), "C172"),
+    ] {
+        let entry = Entry::new(parts).unwrap();
+        let problems = Casa::new().problems_for(
+            Record::Assessment {
+                assessment: &assessment,
+                entry: &entry,
+            },
+            &AuthoritySpecificInformation::new(json!({"check_type": "flight_review"})),
+        );
+        assert!(problems.is_empty(), "{problems:?}");
+    }
 }
 
 #[test]
