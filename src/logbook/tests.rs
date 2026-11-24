@@ -1140,25 +1140,26 @@ fn information_on_an_assessment_that_cannot_be_read_is_refused_before_it_is_save
 #[rstest]
 #[case::a_flight_in_a_type_with_no_description(
     test_support::unclassified("e1", date!(2026 - 11 - 06)),
-    "its type, ZZZZ, has no description. Describe the type, its airframe and its engines, \
-     on that entry"
+    "This flight's aircraft can't be placed in a category, as its type, ZZZZ, has no \
+     description: describe the type, its airframe and its engines, on the entry"
 )]
 #[case::a_session_representing_a_type_with_no_description(
     test_support::simulated("e1", date!(2026 - 11 - 06), "ZZZZ"),
-    "the type the device represented, ZZZZ, has no description. Describe the type, its \
-     airframe and its engines, on that entry"
+    "The aircraft this session's device represented can't be placed in a category, as its \
+     type, ZZZZ, has no description: describe the type, its airframe and its engines, on the \
+     entry"
 )]
 #[case::a_session_that_records_no_type(
     EntryParts {
         subject: Subject::Session { session: Uuid::nil(), device: Uuid::nil(), simulated: None },
         ..flight_parts()
     },
-    "that entry doesn't record the type of aircraft the device represented. Record the type \
-     on that entry"
+    "The aircraft this session's device represented can't be placed in a category, as the \
+     session doesn't record its type: record the type on the entry"
 )]
 fn an_assessment_whose_entrys_aircraft_cannot_be_classified_is_refused(
     #[case] parts: EntryParts,
-    #[case] missing: &str,
+    #[case] text: &str,
 ) {
     let assessment = an_assessment();
     let entry = Entry::new(parts).unwrap();
@@ -1172,10 +1173,7 @@ fn an_assessment_whose_entrys_aircraft_cannot_be_classified_is_refused(
     assert_eq!(refused.len(), 1);
     assert_eq!(refused[0].at, ProblemAt::Information);
     assert_eq!(refused[0].kind, ProblemKind::Refusal);
-    assert_eq!(
-        refused[0].text,
-        format!("The aircraft of the entry this check names can't be placed in a category, as {missing}")
-    );
+    assert_eq!(refused[0].text, text);
     assert_eq!(refused[0].regulation, "61.015");
 }
 

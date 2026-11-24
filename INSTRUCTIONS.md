@@ -118,8 +118,13 @@ answers one such question:
   receiving flight training", where that question applies, and an
   assessment whose entry's aircraft cannot be placed in a category, with
   what is missing (its type's description, or a session's type) and where
-  to record it: every check CASA records is evidence about an aircraft
-  category or class, whatever its kind (au-casa#99, pilot-logbook#249). Stored information must carry its version
+  to record it, worded to read whether the assessment or its entry is being
+  saved: every check CASA records is evidence about an aircraft
+  category or class, whatever its kind (au-casa#99, pilot-logbook#249).
+  That one's information reads, but it is still refused at the information
+  as a whole, which is not only for information that cannot be read; and
+  the entry given with an assessment must be the one it names, as a
+  stand-in (a session with no type, say) is refused. Stored information must carry its version
   (`read`); only information about to be saved may lack it
   (`read_to_save`), which is how `problems_for` reads what it is given. A `null` answer is no answer, as an
   absent key is. The currency checks are in `logbook::currency`, which
