@@ -174,7 +174,7 @@ impl LicensingAuthority for Casa {
     /// 61.755), in its order for the category. Each is in Part 61's words,
     /// with a stable id, and each required is one of
     /// [`ratings_and_endorsements`](LicensingAuthority::ratings_and_endorsements),
-    /// under the same id; a class rating's is its class's.
+    /// under the same id. A class rating's id is its own, not its class's.
     ///
     /// A multi-engine aeroplane with centre-line thrust recorded is in the
     /// single-engine class (reg 61.020(2)(a)). The caller passes the

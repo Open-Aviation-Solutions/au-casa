@@ -286,12 +286,16 @@ holds the first two to the stored names):
   alighting gear, `float-alighting-gear` for a helicopter's,
   `gas-turbine-engine`).
 - A rating or endorsement that `classify` requires has the same term in
-  `ratings_and_endorsements`, so a host matches a held one by equal ids: an
-  aircraft class rating has its class's id (`single-engine-aeroplane`,
-  `airship-class`), as a design feature endorsement has its design
-  feature's. Its name is Part 61's for the rating ("single-engine aeroplane
-  class rating"), where the class's term in `counts_as` is the class's
-  ("single-engine aeroplane"). An operational rating's id is its Part 61
+  `ratings_and_endorsements`, so a host matches a held one by equal ids. An
+  aircraft class rating has an id of its own, so that no id names two
+  things (the owner, on au-casa#100): its class's id followed by
+  `-class-rating` (`single-engine-aeroplane-class-rating`), but for the
+  airship class rating, `airship-class-rating`, as the airship class's id
+  already ends in `-class`. Its name is Part 61's for the rating
+  ("single-engine aeroplane class rating"); the class's own term in
+  `counts_as` and the totals keeps the class's id and name. A design
+  feature endorsement has its design feature's id. A test holds that no
+  listed id is a class's or a category's. An operational rating's id is its Part 61
   name joined by `-` (`instrument-rating`, `private-instrument-rating`,
   `night-vfr-rating`). A test lists them all.
 - A title of licence's (`licence_titles`, in `logbook::licence_titles`) is

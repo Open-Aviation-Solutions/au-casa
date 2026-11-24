@@ -149,18 +149,18 @@ fn a_type_counts_as_its_category_and_class(
     assert!(cautions.is_empty());
 }
 
-/// The class's aircraft class rating (reg 61.735), under the class's id, is
-/// required; an aircraft with no class requires none. Type ratings are not
+/// The class's aircraft class rating (reg 61.735), under an id of its own,
+/// is required; an aircraft with no class requires none. Type ratings are not
 /// required yet (#101).
 #[rstest]
-#[case(AirframeKind::LandPlane, 1, Some(("single-engine-aeroplane", "single-engine aeroplane class rating")))]
-#[case(AirframeKind::LandPlane, 2, Some(("multi-engine-aeroplane", "multi-engine aeroplane class rating")))]
-#[case(AirframeKind::Helicopter, 1, Some(("single-engine-helicopter", "single-engine helicopter class rating")))]
+#[case(AirframeKind::LandPlane, 1, Some(("single-engine-aeroplane-class-rating", "single-engine aeroplane class rating")))]
+#[case(AirframeKind::LandPlane, 2, Some(("multi-engine-aeroplane-class-rating", "multi-engine aeroplane class rating")))]
+#[case(AirframeKind::Helicopter, 1, Some(("single-engine-helicopter-class-rating", "single-engine helicopter class rating")))]
 #[case(AirframeKind::Helicopter, 2, None)]
-#[case(AirframeKind::Gyrocopter, 1, Some(("single-engine-gyroplane", "single-engine gyroplane class rating")))]
+#[case(AirframeKind::Gyrocopter, 1, Some(("single-engine-gyroplane-class-rating", "single-engine gyroplane class rating")))]
 #[case(AirframeKind::Gyrocopter, 2, None)]
-#[case(AirframeKind::TiltRotor, 2, Some(("powered-lift-aircraft", "powered-lift aircraft class rating")))]
-#[case(AirframeKind::Airship, 2, Some(("airship-class", "airship class rating")))]
+#[case(AirframeKind::TiltRotor, 2, Some(("powered-lift-aircraft-class-rating", "powered-lift aircraft class rating")))]
+#[case(AirframeKind::Airship, 2, Some(("airship-class-rating", "airship class rating")))]
 #[case(AirframeKind::Glider, 0, None)]
 fn a_type_requires_its_class_rating(
     #[case] airframe: AirframeKind,
@@ -178,18 +178,10 @@ fn a_type_requires_its_class_rating(
 /// The ids of the design feature endorsements among what is required: all
 /// but the class rating.
 fn design_feature_ids(required: &Terms) -> Vec<&str> {
-    let class_ids = [
-        "single-engine-aeroplane",
-        "multi-engine-aeroplane",
-        "single-engine-helicopter",
-        "powered-lift-aircraft",
-        "single-engine-gyroplane",
-        "airship-class",
-    ];
     required
         .iter()
         .map(|(id, _)| id.as_str())
-        .filter(|id| !class_ids.contains(id))
+        .filter(|id| !id.ends_with("-class-rating"))
         .collect()
 }
 
@@ -402,7 +394,10 @@ fn a_centre_line_thrust_aeroplane_counts_as_single_engine() {
     let ids: Vec<_> = required.iter().map(|(id, _)| id.as_str()).collect();
     assert_eq!(
         ids,
-        ["single-engine-aeroplane", "multi-engine-centre-line-thrust"]
+        [
+            "single-engine-aeroplane-class-rating",
+            "multi-engine-centre-line-thrust"
+        ]
     );
 }
 

@@ -163,7 +163,7 @@ fn main() {
     );
     assert_eq!(
         ids(&classification.requires),
-        ["single-engine-aeroplane", "tailwheel-undercarriage"]
+        ["single-engine-aeroplane-class-rating", "tailwheel-undercarriage"]
     );
 
     let title = LicenceTitle::Private(PrivateOrCommercialCategory::Aeroplane);

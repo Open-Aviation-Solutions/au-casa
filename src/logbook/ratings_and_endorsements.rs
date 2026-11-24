@@ -8,15 +8,18 @@
 //! Each has a stable id, which a host may keep, so once released one does
 //! not change. A rating or endorsement that `Casa::classify` requires has the
 //! same term there, so a host matches a held one against what an aircraft
-//! requires by equal ids: an aircraft class rating has its class's id
-//! (`single-engine-aeroplane`, `airship-class`), as a design feature
-//! endorsement has its design feature's (`tailwheel-undercarriage`). An
-//! operational rating's id is its Part 61 name joined by `-`
-//! (`instrument-rating`, `night-vfr-rating`).
+//! requires by equal ids. An aircraft class rating has an id of its own,
+//! not its class's (which `counts_as` and the totals give the class), so
+//! that no id names two things: its class's id followed by `-class-rating`
+//! (`single-engine-aeroplane-class-rating`), but for the airship class
+//! rating, `airship-class-rating`, as the airship class's id is already
+//! `airship-class`. A design feature endorsement has its design feature's id
+//! (`tailwheel-undercarriage`). An operational rating's id is its Part 61
+//! name joined by `-` (`instrument-rating`, `night-vfr-rating`).
 
 use logbook_shared_kernel::Term;
 
-use super::{class_id, class_name, term};
+use super::{class_name, term};
 use crate::aircraft::{AircraftClassRating, DesignFeature};
 
 /// The ratings and endorsements CASA issues, in Part 61's order: the
@@ -39,13 +42,27 @@ pub(crate) fn ratings_and_endorsements() -> Vec<Term> {
         .collect()
 }
 
-/// The aircraft class rating for a class: its class's id, and its name as
-/// Part 61 names one ("single-engine aeroplane class rating", reg 61.375(4)).
+/// The aircraft class rating for a class: its id, and its name as Part 61
+/// names one ("single-engine aeroplane class rating", reg 61.375(4)).
 pub(crate) fn class_rating(class: AircraftClassRating) -> Term {
     term(
-        class_id(class),
+        class_rating_id(class),
         format!("{} class rating", class_name(class)),
     )
+}
+
+/// A class rating's stable id, which a host may keep: its class's id
+/// followed by `-class-rating`, but for the airship class's, whose class id
+/// already ends in `-class`.
+fn class_rating_id(class: AircraftClassRating) -> &'static str {
+    match class {
+        AircraftClassRating::SingleEngineAeroplane => "single-engine-aeroplane-class-rating",
+        AircraftClassRating::MultiEngineAeroplane => "multi-engine-aeroplane-class-rating",
+        AircraftClassRating::SingleEngineHelicopter => "single-engine-helicopter-class-rating",
+        AircraftClassRating::PoweredLiftAircraft => "powered-lift-aircraft-class-rating",
+        AircraftClassRating::SingleEngineGyroplane => "single-engine-gyroplane-class-rating",
+        AircraftClassRating::Airship => "airship-class-rating",
+    }
 }
 
 /// The design feature endorsement for a design feature: its feature's id and
@@ -97,26 +114,26 @@ mod tests {
         let listed = ids_and_names(Casa::new().ratings_and_endorsements());
         let expected: Vec<_> = [
             (
-                "single-engine-aeroplane",
+                "single-engine-aeroplane-class-rating",
                 "single-engine aeroplane class rating",
             ),
             (
-                "multi-engine-aeroplane",
+                "multi-engine-aeroplane-class-rating",
                 "multi-engine aeroplane class rating",
             ),
             (
-                "single-engine-helicopter",
+                "single-engine-helicopter-class-rating",
                 "single-engine helicopter class rating",
             ),
             (
-                "powered-lift-aircraft",
+                "powered-lift-aircraft-class-rating",
                 "powered-lift aircraft class rating",
             ),
             (
-                "single-engine-gyroplane",
+                "single-engine-gyroplane-class-rating",
                 "single-engine gyroplane class rating",
             ),
-            ("airship-class", "airship class rating"),
+            ("airship-class-rating", "airship class rating"),
             ("tailwheel-undercarriage", "tailwheel undercarriage"),
             ("retractable-undercarriage", "retractable undercarriage"),
             (
@@ -182,6 +199,31 @@ mod tests {
         }
         for (at, feature) in DesignFeature::ALL.into_iter().enumerate() {
             assert_eq!(feature_position(feature), at);
+        }
+    }
+
+    /// A class rating's id is its own: no listed id is a class's, nor a
+    /// category's, which `counts_as` and the totals give.
+    #[test]
+    fn no_listed_id_is_a_class_or_a_category() {
+        use crate::aircraft::AircraftCategory as Category;
+        use crate::logbook::{category_id, class_id};
+        let listed: Vec<_> = Casa::new()
+            .ratings_and_endorsements()
+            .into_iter()
+            .map(|term| term.id)
+            .collect();
+        let categories = [
+            Category::Aeroplane,
+            Category::Helicopter,
+            Category::PoweredLift,
+            Category::Gyroplane,
+            Category::Airship,
+            Category::RegisteredSailplane,
+        ]
+        .map(category_id);
+        for id in CLASSES.map(class_id).into_iter().chain(categories) {
+            assert!(!listed.iter().any(|listed| listed.as_str() == id), "{id}");
         }
     }
 
