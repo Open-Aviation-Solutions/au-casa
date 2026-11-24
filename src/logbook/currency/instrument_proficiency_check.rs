@@ -21,7 +21,8 @@ use crate::logbook::guards::{
     category_of, is_category, is_class_rating, is_multi_engine_helicopter,
 };
 use crate::logbook::{
-    assessment_information, AssessedPurpose, CheckOutcome, CheckPurpose, CheckType,
+    assessment_information, stored_assessment_information, AssessedPurpose, CheckOutcome,
+    CheckPurpose, CheckType,
 };
 
 const REQUIRED: usize = 1;
@@ -135,16 +136,18 @@ struct Passed {
 /// passed before it counts or is renewed by a pass after it; a pass on the
 /// same day as the failure is taken as after it. A failure in a
 /// single-engine aircraft ends the multi-engine check of its category too.
-/// A failure whose aircraft is not known (its entry is not one that counts,
-/// is of a session, or its type of no known category) ends every check, as it may have been in any
+/// A failure whose aircraft is not known (its entry is missing, is not one
+/// that counts, is of a session, or its type of no known category) ends
+/// every check, as it may have been in any
 /// category; one known to be in another category ends nothing. A failed
 /// check of another kind ends nothing.
 ///
 /// A check's aircraft is that of the entry it names, as for a flight
 /// review: one whose entry is not among those given, is of a session, or
 /// whose type is not known to be a relevant aircraft, does not count. Its
-/// information is read with that entry, so one that names no entry of the
-/// logbook, which a host does not let happen, counts for nothing.
+/// information is read with that entry, or as stored when it names no entry
+/// of the logbook, which a host does not let happen: a failure in one ends
+/// every check, as its aircraft is not known.
 ///
 /// What a check was, its outcome and a flight test's purposes, each with
 /// its own outcome, are CASA's information on the assessment: one with
@@ -259,11 +262,14 @@ impl AssessmentAccumulator for InstrumentProficiencyCheck<'_> {
             return;
         }
         let entry = &assessment.entry;
-        let Some(information) = self
-            .logbook
-            .get(entry)
-            .and_then(|named| assessment_information(assessment, named))
-        else {
+        // One whose entry is not in the logbook, which a host does not let
+        // happen, is read as stored, so that its failure still ends every
+        // check.
+        let information = match self.logbook.get(entry) {
+            Some(named) => assessment_information(assessment, named),
+            None => stored_assessment_information(assessment),
+        };
+        let Some(information) = information else {
             return;
         };
         let basis = if information.check_type == Some(CheckType::FlightTest) {
@@ -900,9 +906,8 @@ mod tests {
     /// A failure ends the checks for its category and for multi-engine
     /// aircraft of it (reg 61.880(4)), whatever aircraft of the category it
     /// was in; one in another category ends neither, and one in an aircraft
-    /// not known ends both. One that names no entry of the logbook (6),
-    /// which a host does not let happen, cannot be read with its entry, and
-    /// ends neither.
+    /// not known ends both, as does one that names no entry of the logbook
+    /// (6).
     #[test]
     fn a_failure_ends_the_checks_of_the_category_it_was_attempted_in() {
         // Passed in a multi-engine aeroplane (flight 2) or helicopter (4);
@@ -929,11 +934,11 @@ mod tests {
                 ]
             };
             for check_for in checks {
-                for flight in in_category.into_iter().chain([5]) {
+                for flight in in_category.into_iter().chain([5, 6]) {
                     let r = result_for(check_for, REFERENCE, &after(flight));
                     assert!(!r.is_current(), "{check_for:?} after a failure on {flight}");
                 }
-                for flight in in_other.into_iter().chain([6]) {
+                for flight in in_other {
                     let r = result_for(check_for, REFERENCE, &after(flight));
                     assert!(r.is_current(), "{check_for:?} after a failure on {flight}");
                 }

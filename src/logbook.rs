@@ -109,6 +109,18 @@ pub(crate) fn assessment_information(
     AssessmentInformation::read(&assessment_information::applicable(stored, record)).ok()
 }
 
+/// CASA's information on an assessment, read as it is stored, with every
+/// answer, for an assessment whose entry is not at hand; `None` as for
+/// [`assessment_information`]. A question on an assessment applies by its
+/// other answers only, never by its entry, so the answers that do not apply
+/// are a flight test's own outcome and another check's purposes, which a
+/// reader that goes by the check type does not read.
+pub(crate) fn stored_assessment_information(
+    assessment: &Assessment,
+) -> Option<AssessmentInformation> {
+    AssessmentInformation::read(assessment.authority_information.get(&casa())?).ok()
+}
+
 /// Rewrite one entry's stored CASA information of version 1 as version 2,
 /// for the migration of a host's stored records: restamped as version 2,
 /// with every answer kept, since version 2 only adds `cross_country_flight`,

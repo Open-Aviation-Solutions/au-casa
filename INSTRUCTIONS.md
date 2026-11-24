@@ -173,7 +173,8 @@ to the trait.
   with its entry (the kernel's `Record::Assessment`), so the instrument
   proficiency checks, which read a failure's information whether or not
   its entry counts, are given every entry too; one naming no entry of the
-  logbook, which a host does not let happen, counts for nothing. The instrument
+  logbook, which a host does not let happen, they read as stored, so that
+  its failure still ends them all (au-casa#99 keeps the cautious fallback). The instrument
   proficiency checks read it too (au-casa#58): a pass counts for a check
   when its aircraft is a "relevant aircraft" for it (reg 61.880(9)), so one
   in a multi-engine aeroplane counts for the aeroplane category as well as
