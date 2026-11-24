@@ -23,7 +23,8 @@ mod take_offs_and_landings;
 
 use logbook_shared_kernel::{
     run, run_assessments, AssessmentAccumulator, AssessmentCurrencyCheck, CurrencyCheck,
-    CurrencyResult, EntryAccumulator, LicensingAuthority, Logbook, Requirement, RequirementId,
+    CurrencyResult, EntryAccumulator, EventsNoun, LicensingAuthority, Logbook, Requirement,
+    RequirementId, RequirementKind,
 };
 use serde::Serialize;
 use time::Date;
@@ -238,16 +239,177 @@ impl CasaRequirement {
             },
         }
     }
+
+    /// What meets it, in CASA's words: pilot-logbook's wording of it until
+    /// au-casa#96 moved it here, and for reg 61.870(3), the owner's on
+    /// au-casa#96.
+    fn description(self) -> String {
+        match self {
+            Self::PassengerDay(kind) => format!("3 {} in the past 90 days", kind.plural()),
+            Self::PassengerNight(kind) => format!("3 night {} in the past 90 days", kind.plural()),
+            Self::NightVfr(kind) => format!("1 night {} in the past 6 months", kind.one()),
+            Self::InstrumentApproaches => "At least 3 instrument approach operations within the \
+                                           previous 90 days, in an aircraft or an approved flight \
+                                           simulation training device"
+                .to_owned(),
+            Self::InstrumentApproachesInCategory(category) => format!(
+                "At least 1 instrument approach operation within the previous 90 days, in {} or \
+                 an approved flight simulation training device",
+                with_article(&category.to_string())
+            ),
+            Self::InstrumentApproaches2D => "A 2D instrument approach operation (with lateral \
+                                             navigation guidance only) within the previous 90 days"
+                .to_owned(),
+            Self::InstrumentApproaches3D => "A 3D instrument approach operation (with lateral and \
+                                             vertical navigation guidance) within the previous 90 \
+                                             days"
+                .to_owned(),
+            Self::AzimuthGuidance => {
+                "An azimuth guidance operation within the previous 90 days".to_owned()
+            }
+            Self::CourseDeviationIndicator => {
+                "A course deviation indicator operation within the previous 90 days".to_owned()
+            }
+            Self::SinglePilotIfr => "1 flight or simulated flight under the IFR in a single-pilot \
+                                     operation, of at least 1 hour and with an approach, in the \
+                                     past 6 months"
+                .to_owned(),
+            Self::FlightReview(class_rating) => format!(
+                "A flight review for the rating, successfully completed in {} or an approved \
+                 flight simulator, or what reg 61.745(3) counts as one; valid to the end of the \
+                 24th month after the month it is completed",
+                with_article(class_name(class_rating))
+            ),
+            Self::InstrumentProficiencyCheck(check_for) => {
+                let (check, completed_in) = match check_for {
+                    ProficiencyCheckFor::Category(category) => (
+                        format!("the {category} category"),
+                        format!("a single-engine or multi-engine {category}"),
+                    ),
+                    ProficiencyCheckFor::MultiEngineAeroplanes => (
+                        "multi-engine aeroplanes".to_owned(),
+                        "a multi-engine aeroplane".to_owned(),
+                    ),
+                    ProficiencyCheckFor::MultiEngineHelicopters => (
+                        "multi-engine helicopters".to_owned(),
+                        "a multi-engine helicopter".to_owned(),
+                    ),
+                };
+                format!(
+                    "An instrument proficiency check for {check}, successfully completed in \
+                     {completed_in}, or a flight test or check reg 61.880(3) counts as one; valid \
+                     to the end of the 12th month after the month it is completed"
+                )
+            }
+        }
+    }
+
+    /// The noun its events are counted in, for the take-offs, landings and
+    /// operations counted by regs 61.395, 61.965 and 61.870; `None` for the
+    /// others.
+    fn events(self) -> Option<EventsNoun> {
+        let noun = |one: &str, other: &str| {
+            Some(EventsNoun {
+                one: one.to_owned(),
+                other: other.to_owned(),
+            })
+        };
+        match self {
+            Self::PassengerDay(kind) => noun(kind.one(), kind.plural()),
+            Self::PassengerNight(kind) | Self::NightVfr(kind) => noun(
+                &format!("night {}", kind.one()),
+                &format!("night {}", kind.plural()),
+            ),
+            Self::InstrumentApproaches | Self::InstrumentApproachesInCategory(_) => noun(
+                "instrument approach operation",
+                "instrument approach operations",
+            ),
+            Self::InstrumentApproaches2D => noun(
+                "2D instrument approach operation",
+                "2D instrument approach operations",
+            ),
+            Self::InstrumentApproaches3D => noun(
+                "3D instrument approach operation",
+                "3D instrument approach operations",
+            ),
+            Self::AzimuthGuidance => {
+                noun("azimuth guidance operation", "azimuth guidance operations")
+            }
+            Self::CourseDeviationIndicator => noun(
+                "course deviation indicator operation",
+                "course deviation indicator operations",
+            ),
+            Self::SinglePilotIfr | Self::FlightReview(_) | Self::InstrumentProficiencyCheck(_) => {
+                None
+            }
+        }
+    }
+
+    /// The key it shares with the requirements its regulation sets with it:
+    /// the provision that sets them, for the take-offs and landings of regs
+    /// 61.395(1) and (2) and of reg 61.965(a) (`61.395(1)`, `61.965(a)`);
+    /// `None` for the others, each set on its own.
+    fn set(self) -> Option<&'static str> {
+        match self {
+            Self::PassengerDay(_) => Some("61.395(1)"),
+            Self::PassengerNight(_) => Some("61.395(2)"),
+            Self::NightVfr(_) => Some("61.965(a)"),
+            _ => None,
+        }
+    }
+
+    /// Recent experience (regs 61.395, 61.870, 61.875 and 61.965), or a
+    /// periodic assessment: a flight review (reg 61.745) or an instrument
+    /// proficiency check (reg 61.880).
+    fn kind(self) -> RequirementKind {
+        match self {
+            Self::FlightReview(_) | Self::InstrumentProficiencyCheck(_) => {
+                RequirementKind::PeriodicAssessment
+            }
+            Self::PassengerDay(_)
+            | Self::PassengerNight(_)
+            | Self::NightVfr(_)
+            | Self::InstrumentApproaches
+            | Self::InstrumentApproachesInCategory(_)
+            | Self::InstrumentApproaches2D
+            | Self::InstrumentApproaches3D
+            | Self::AzimuthGuidance
+            | Self::CourseDeviationIndicator
+            | Self::SinglePilotIfr => RequirementKind::RecentExperience,
+        }
+    }
+}
+
+/// `noun` after "a", or "an" before a vowel: "an aeroplane", "a
+/// single-engine aeroplane".
+fn with_article(noun: &str) -> String {
+    let article = if noun.starts_with(['a', 'e', 'i', 'o', 'u']) {
+        "an"
+    } else {
+        "a"
+    };
+    format!("{article} {noun}")
 }
 
 /// The requirements, in [`REQUIREMENTS`]' order.
 pub(super) fn requirements() -> Vec<Requirement> {
     REQUIREMENTS
         .iter()
-        .map(|&requirement| Requirement {
-            id: requirement.id(),
-            name: requirement.name(),
-            regulation: requirement.regulation(),
+        .map(|&requirement| {
+            let mut built = Requirement::new(
+                requirement.id(),
+                requirement.name(),
+                requirement.description(),
+                requirement.kind(),
+                requirement.regulation(),
+            );
+            if let Some(events) = requirement.events() {
+                built = built.with_events(events);
+            }
+            if let Some(set) = requirement.set() {
+                built = built.with_set(set);
+            }
+            built
         })
         .collect()
 }
@@ -258,9 +420,10 @@ pub(super) fn requirements() -> Vec<Requirement> {
 ///
 /// The checks over entries are run together, in one pass of the kernel's
 /// `run`, which applies [`Casa::counts`]. The flight reviews read an
-/// assessment's aircraft from the entry for its flight, which `run` does
-/// not reach, so they are given the entries `counts` lets through, as are
-/// the instrument proficiency checks.
+/// assessment's aircraft from the entry it names, which `run` does not
+/// reach, so they are given the entries `counts` lets through, as are the
+/// instrument proficiency checks, which are also given every entry, to read
+/// an assessment's information with its entry whether or not it counts.
 pub(super) fn currency(
     casa: &Casa,
     as_of: Date,
@@ -309,8 +472,9 @@ pub(super) fn currency(
     let counted = || logbook.entries.iter().filter(|entry| casa.counts(entry));
     let mut single_engine_review = FlightReview::new(as_of, single_engine, counted());
     let mut multi_engine_review = FlightReview::new(as_of, multi_engine, counted());
-    let mut proficiency_checks = PROFICIENCY_CHECKS
-        .map(|check_for| InstrumentProficiencyCheck::new(as_of, check_for, counted()));
+    let mut proficiency_checks = PROFICIENCY_CHECKS.map(|check_for| {
+        InstrumentProficiencyCheck::new(as_of, check_for, counted(), &logbook.entries)
+    });
     let mut assessment_accumulators: Vec<&mut dyn AssessmentAccumulator> =
         vec![&mut single_engine_review, &mut multi_engine_review];
     assessment_accumulators.extend(
@@ -397,19 +561,19 @@ mod tests {
 
     use super::*;
     use crate::logbook::test_support::{
-        aeroplane, approach, assessed, day, entry, informed, night, on_flight, simulated,
+        aeroplane, approach, assessed, day, entry, informed, night, simulated,
     };
     use crate::logbook::{AssessmentInformation, CheckOutcome, CheckType, EntryInformation};
 
     const REFERENCE: Date = date!(2024 - 09 - 01);
     const ON: Date = date!(2024 - 08 - 20);
 
-    /// A passed check of this type on flight 1.
+    /// A passed check of this type in entry `e`.
     fn passed(id: &str, check_type: CheckType) -> Assessment {
         assessed(
             id,
             ON,
-            1,
+            "e",
             AssessmentInformation {
                 check_type: Some(check_type),
                 outcome: Some(CheckOutcome::Passed),
@@ -458,9 +622,52 @@ mod tests {
         assert_eq!(checks, expected);
     }
 
+    /// Each requirement's kind and set, by its regulation, and the wording
+    /// that varies with what it is for.
+    #[test]
+    fn each_requirement_has_its_kind_set_and_words() {
+        for requirement in requirements() {
+            let periodic = ["61.745", "61.880"].contains(&requirement.regulation);
+            let kind = if periodic {
+                RequirementKind::PeriodicAssessment
+            } else {
+                RequirementKind::RecentExperience
+            };
+            assert_eq!(requirement.kind, kind, "{}", requirement.id.as_str());
+            let set = ["61.395(1)", "61.395(2)", "61.965(a)"]
+                .into_iter()
+                .find(|set| requirement.id.as_str().starts_with(&format!("{set}(")));
+            assert_eq!(
+                requirement.set.as_deref(),
+                set,
+                "{}",
+                requirement.id.as_str()
+            );
+        }
+        let by_id = |id: &str| {
+            requirements()
+                .into_iter()
+                .find(|requirement| requirement.id.as_str() == id)
+                .unwrap()
+        };
+        assert_eq!(
+            by_id("61.870(3)|airship").description,
+            "At least 1 instrument approach operation within the previous 90 days, in an \
+             airship or an approved flight simulation training device"
+        );
+        assert_eq!(
+            by_id("61.395(2)(b)").events,
+            Some(EventsNoun {
+                one: "night landing".into(),
+                other: "night landings".into()
+            })
+        );
+        assert_eq!(by_id("61.875").events, None);
+    }
+
     #[test]
     fn each_requirement_is_answered_by_its_own_check_over_the_entries_that_count() {
-        // Flight 1, a single-engine aeroplane: 3 take-offs and landings by
+        // Entry `e`, a single-engine aeroplane: 3 take-offs and landings by
         // day, and an ILS flown as an azimuth guidance operation.
         let flight = informed(
             EntryInformation {
@@ -471,7 +678,7 @@ mod tests {
                 take_offs: day(3),
                 landings: day(3),
                 approaches: vec![approach(ApproachType::Ils)],
-                ..on_flight(1, aeroplane("e", ON))
+                ..aeroplane("e", ON)
             },
         );
         // A session that does not count, in no approved device, with what

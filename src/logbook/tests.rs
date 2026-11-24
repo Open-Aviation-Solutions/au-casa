@@ -20,8 +20,9 @@ use aircraft_type_descriptions::{AircraftDescription, AirframeKind, EngineType};
 use icao_shared_kernel::{Capacity, FlightRules, LocationIndicator};
 use logbook_shared_kernel::{
     AircraftCharacteristic, Answer, Approach, ApproachType, Assessment, AssessmentId, AuthorityId,
-    AuthoritySpecificInformation, Choice, DateRange, Entry, EntryParts, LicensingAuthority,
-    Logbook, MigrationRefused, ProblemAt, ProblemKind, Question, Record, Subject,
+    AuthoritySpecificInformation, Choice, DateRange, Entry, EntryId, EntryParts,
+    LicensingAuthority, Logbook, MigrationRefused, ProblemAt, ProblemKind, Question, Record,
+    Subject,
 };
 use rstest::rstest;
 use serde_json::{json, Value};
@@ -585,7 +586,13 @@ fn every_question_is_a_key_of_its_format() {
     })
     .unwrap();
     let assessment = an_assessment();
-    for record in [Record::Entry(&entry), Record::Assessment(&assessment)] {
+    for record in [
+        Record::Entry(&entry),
+        Record::Assessment {
+            assessment: &assessment,
+            entry: &entry,
+        },
+    ] {
         let questions = casa.questions_for(record);
         let mut answers = serde_json::Map::new();
         for question in &questions {
@@ -634,7 +641,11 @@ fn the_dme_or_gnss_arrivals_question_excludes_the_entrys_approaches() {
 #[test]
 fn a_flight_tests_purposes_are_asked_in_part_61s_words_and_only_failing_is_adverse() {
     let assessment = an_assessment();
-    let questions = Casa::new().questions_for(Record::Assessment(&assessment));
+    let entry = an_entry();
+    let questions = Casa::new().questions_for(Record::Assessment {
+        assessment: &assessment,
+        entry: &entry,
+    });
     let purposes = questions
         .iter()
         .find(|question| matches!(question.answer, Answer::Choices { .. }))
@@ -686,7 +697,11 @@ fn a_flight_tests_purposes_are_asked_in_part_61s_words_and_only_failing_is_adver
 #[test]
 fn an_assessment_is_asked_its_check_and_its_outcome_or_a_flight_tests_purposes() {
     let assessment = an_assessment();
-    let record = Record::Assessment(&assessment);
+    let entry = an_entry();
+    let record = Record::Assessment {
+        assessment: &assessment,
+        entry: &entry,
+    };
     let questions = Casa::new().questions_for(record);
     assert_eq!(questions.version(), AssessmentInformation::VERSION);
     let (asked, applicable) = asked_and_applicable(record, json!({"check_type": "flight_review"}));
@@ -755,7 +770,11 @@ fn an_answer_its_check_does_not_take_is_read_as_stored() {
 #[test]
 fn the_purposes_question_accepts_what_the_format_reads() {
     let assessment = an_assessment();
-    let questions = Casa::new().questions_for(Record::Assessment(&assessment));
+    let entry = an_entry();
+    let questions = Casa::new().questions_for(Record::Assessment {
+        assessment: &assessment,
+        entry: &entry,
+    });
     let question = questions
         .iter()
         .find(|question| question.key == "check_purposes")
@@ -1069,13 +1088,19 @@ fn what_reads_as_neither_version_is_refused(
     assert_eq!(migrated(stored), Err(error));
 }
 
+/// An assessment in [`an_entry`].
 fn an_assessment() -> Assessment {
     Assessment {
         id: AssessmentId::new("a1"),
         date: date!(2026 - 11 - 06),
-        flight: Uuid::nil(),
+        entry: EntryId::new("e1"),
         authority_information: BTreeMap::new(),
     }
+}
+
+/// The entry `e1`, a flight.
+fn an_entry() -> Entry {
+    Entry::new(flight_parts()).unwrap()
 }
 
 /// Read as information on an assessment about to be saved.
@@ -1087,9 +1112,13 @@ fn read_assessment(value: Value) -> Result<AssessmentInformation, AssessmentInfo
 fn information_on_an_assessment_that_cannot_be_read_is_refused_before_it_is_saved() {
     let casa = Casa::new();
     let assessment = an_assessment();
+    let entry = an_entry();
     let problems = |value| {
         casa.problems_for(
-            Record::Assessment(&assessment),
+            Record::Assessment {
+                assessment: &assessment,
+                entry: &entry,
+            },
             &AuthoritySpecificInformation::new(value),
         )
     };
@@ -1400,8 +1429,15 @@ fn an_entry_at_version_2_is_current_without_its_answers_read() {
 #[test]
 fn an_assessment_at_version_2_is_current() {
     let assessment = an_assessment();
+    let entry = an_entry();
     assert_eq!(
-        migrated_as(Record::Assessment(&assessment), json!({"_version": 2})),
+        migrated_as(
+            Record::Assessment {
+                assessment: &assessment,
+                entry: &entry
+            },
+            json!({"_version": 2})
+        ),
         Ok(None)
     );
 }
@@ -1414,7 +1450,13 @@ fn an_assessment_at_version_2_is_current() {
 fn what_cannot_be_migrated_is_refused_by_kind(#[case] stored: Value, #[case] kind: &str) {
     let entry = session("CASA", None);
     let assessment = an_assessment();
-    for record in [Record::Entry(&entry), Record::Assessment(&assessment)] {
+    for record in [
+        Record::Entry(&entry),
+        Record::Assessment {
+            assessment: &assessment,
+            entry: &entry,
+        },
+    ] {
         let refused = migrated_as(record, stored.clone()).unwrap_err();
         let expected = match kind {
             "newer" => matches!(refused, MigrationRefused::Newer(_)),
@@ -1441,8 +1483,15 @@ fn an_entry_at_version_1_that_does_not_read_is_unreadable() {
 #[test]
 fn an_assessment_at_version_1_is_too_old_as_none_is_kept() {
     let assessment = an_assessment();
+    let entry = an_entry();
     assert!(matches!(
-        migrated_as(Record::Assessment(&assessment), json!({"_version": 1})),
+        migrated_as(
+            Record::Assessment {
+                assessment: &assessment,
+                entry: &entry
+            },
+            json!({"_version": 1})
+        ),
         Err(MigrationRefused::TooOld(_))
     ));
 }

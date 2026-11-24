@@ -4,7 +4,7 @@
 
 //! CASA's authority-specific information on an assessment, as it is stored.
 
-use logbook_shared_kernel::{Assessment, AuthoritySpecificInformation, Record};
+use logbook_shared_kernel::{AuthoritySpecificInformation, Record};
 use serde_json::{Map, Value};
 use thiserror::Error;
 
@@ -635,14 +635,13 @@ fn purposes(value: &Value) -> Option<Vec<AssessedPurpose>> {
 }
 
 /// Stored information without the answers to questions that do not apply
-/// to the assessment (a flight test's own outcome, another check's
+/// to the assessment `record` (a flight test's own outcome, another check's
 /// purposes), as the host removes them on a save.
 pub(crate) fn applicable(
     information: &AuthoritySpecificInformation,
-    assessment: &Assessment,
+    record: Record,
 ) -> AuthoritySpecificInformation {
     let mut applicable = information.clone();
-    questions::ASSESSMENT
-        .retain_applicable_answers_for(Record::Assessment(assessment), &mut applicable);
+    questions::ASSESSMENT.retain_applicable_answers_for(record, &mut applicable);
     applicable
 }

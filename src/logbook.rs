@@ -96,12 +96,17 @@ pub(crate) fn information(entry: &Entry) -> Option<EntryInformation> {
 /// answers to questions that do not apply to it (a flight test's own
 /// outcome, another check's purposes), as for an entry; `None` when the
 /// assessment has none, or has information that cannot be read as stored.
-pub(crate) fn assessment_information(assessment: &Assessment) -> Option<AssessmentInformation> {
-    let stored = Record::Assessment(assessment).information_for(&casa())?;
+/// `entry` is the entry the assessment names.
+pub(crate) fn assessment_information(
+    assessment: &Assessment,
+    entry: &Entry,
+) -> Option<AssessmentInformation> {
+    let record = Record::Assessment { assessment, entry };
+    let stored = record.information_for(&casa())?;
     AssessmentInformation::read(stored).ok()?;
     // Removing answers from information that reads leaves information that
     // reads.
-    AssessmentInformation::read(&assessment_information::applicable(stored, assessment)).ok()
+    AssessmentInformation::read(&assessment_information::applicable(stored, record)).ok()
 }
 
 /// Rewrite one entry's stored CASA information of version 1 as version 2,
@@ -197,6 +202,11 @@ impl LicensingAuthority for Casa {
         licence_titles::licence_titles()
     }
 
+    fn ratings_and_endorsements(&self) -> Vec<Term> {
+        // TODO(#100): list CASA's ratings and endorsements.
+        Vec::new()
+    }
+
     /// Annex 1's, as CASA's are the same (regs 61.515(1), 61.580(1),
     /// 61.655(1), 61.700(1) and 61.1540(1)).
     fn minimum_ages(&self) -> MinimumAges {
@@ -257,7 +267,7 @@ impl LicensingAuthority for Casa {
     fn questions_for(&self, record: Record) -> Questions {
         match record {
             Record::Entry(_) => questions::ENTRY.clone(),
-            Record::Assessment(_) => questions::ASSESSMENT.clone(),
+            Record::Assessment { .. } => questions::ASSESSMENT.clone(),
         }
     }
 
@@ -289,8 +299,8 @@ impl LicensingAuthority for Casa {
             (Some(version), _) if version > current => Err(MigrationRefused::Newer(format!(
                 "the information is of version {version}, newer than version {current}, which these rules write"
             ))),
-            (Some(version), Record::Assessment(_)) if version == current => Ok(None),
-            (Some(version), Record::Assessment(_)) => Err(too_old(version)),
+            (Some(version), Record::Assessment { .. }) if version == current => Ok(None),
+            (Some(version), Record::Assessment { .. }) => Err(too_old(version)),
             (Some(version), Record::Entry(_)) if version == current => Ok(None),
             (Some(0), Record::Entry(_)) => Err(too_old(0)),
             (Some(_), Record::Entry(_)) => {
@@ -343,7 +353,7 @@ impl LicensingAuthority for Casa {
                 }
                 Ok(_) => Vec::new(),
             },
-            Record::Assessment(_) => AssessmentInformation::read_to_save(information)
+            Record::Assessment { .. } => AssessmentInformation::read_to_save(information)
                 .err()
                 .map(|error| unreadable(error.to_string()))
                 .into_iter()

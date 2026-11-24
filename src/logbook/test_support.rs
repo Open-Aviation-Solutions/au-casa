@@ -179,12 +179,12 @@ pub(crate) fn flight_test(purposes: &[(CheckPurpose, CheckOutcome)]) -> Assessme
     }
 }
 
-/// An assessment on flight `flight`, with this as CASA's information,
+/// An assessment in the entry `entry`, with this as CASA's information,
 /// stamped with its version as the host stores it.
 pub(crate) fn assessed(
     id: &str,
     on: Date,
-    flight: u128,
+    entry: &str,
     information: AssessmentInformation,
 ) -> Assessment {
     let mut information = information.to_information();
@@ -192,7 +192,7 @@ pub(crate) fn assessed(
     Assessment {
         id: AssessmentId::new(id),
         date: on,
-        flight: Uuid::from_u128(flight),
+        entry: EntryId::new(entry),
         authority_information: BTreeMap::from([(casa(), information)]),
     }
 }
