@@ -8,9 +8,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::logbook::assessment_information::AssessmentInformationError;
+use crate::logbook::entry_information::migrate_from_version_1;
+use crate::logbook::entry_information::EntryMigrationError;
 use crate::logbook::entry_information::InformationError;
 use crate::logbook::test_support;
-use crate::logbook::{migrate_entry_information_from_version_1, EntryMigrationError};
 use crate::logbook::{
     AssessedPurpose, AssessmentInformation, CheckOutcome, CheckPurpose, CheckType,
     EntryInformation, SupervisionRoute,
@@ -1081,7 +1082,7 @@ fn what_is_not_this_format_is_refused(#[case] stored: Value, #[case] error: Info
 
 /// Migrated from version 1, as its value.
 fn migrated(value: Value) -> Result<Value, EntryMigrationError> {
-    migrate_entry_information_from_version_1(&AuthoritySpecificInformation::new(value))
+    migrate_from_version_1(&AuthoritySpecificInformation::new(value))
         .map(AuthoritySpecificInformation::into_value)
 }
 
