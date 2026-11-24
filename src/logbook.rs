@@ -12,10 +12,9 @@
 //! the problems with the answers.
 //!
 //! CASA's information on an entry and on an assessment is not exported: a
-//! host reads it through [`LicensingAuthority`], and these keep it so. The
-//! migration of stored information on an entry
-//! ([`migrate_entry_information_from_version_1`]) takes and gives the
-//! kernel's [`AuthoritySpecificInformation`].
+//! host reads it through [`LicensingAuthority`], and these keep it so, with
+//! the migration of stored information
+//! ([`LicensingAuthority::migrate_information`]).
 //!
 //! ```compile_fail
 //! use au_casa::logbook::EntryInformation;
@@ -42,7 +41,6 @@ mod totals;
 pub(crate) use assessment_information::{
     AssessedPurpose, AssessmentInformation, CheckOutcome, CheckPurpose, CheckType, PurposeKind,
 };
-pub use entry_information::EntryMigrationError;
 pub(crate) use entry_information::{EntryInformation, SupervisionRoute};
 
 use std::collections::BTreeSet;
@@ -122,24 +120,6 @@ pub(crate) fn stored_assessment_information(
     assessment: &Assessment,
 ) -> Option<AssessmentInformation> {
     AssessmentInformation::read(assessment.authority_information.get(&casa())?).ok()
-}
-
-/// Rewrite one entry's stored CASA information of version 1 as version 2,
-/// for the migration of a host's stored records: restamped as version 2,
-/// with every answer kept, since version 2 only adds `cross_country_flight`,
-/// which no version 1 information holds. Information of version 2 already
-/// is given back as it is, once it reads, so the migration can be run
-/// again. Nothing in it needs guessing, so it refuses only information
-/// that reads as neither version.
-///
-/// Superseded by [`LicensingAuthority::migrate_information`] on [`Casa`],
-/// which migrates this and says why it refuses by kind. It stays public in
-/// this release for hosts that call it, and goes in au-casa's next breaking
-/// release.
-pub fn migrate_entry_information_from_version_1(
-    information: &AuthoritySpecificInformation,
-) -> Result<AuthoritySpecificInformation, EntryMigrationError> {
-    entry_information::migrate_from_version_1(information)
 }
 
 impl Default for Casa {
@@ -306,7 +286,7 @@ impl LicensingAuthority for Casa {
     }
 
     /// An entry's information of version 1 is rewritten as version 2
-    /// ([`migrate_entry_information_from_version_1`]), and refused as not
+    /// (every answer kept, as version 2 only adds `cross_country_flight`), and refused as not
     /// readable when it does not read as version 1. Information of the
     /// current version, 2, of an entry or of an assessment, gives `Ok(None)`
     /// on its version alone, without its answers read: that is not a check of
@@ -338,7 +318,7 @@ impl LicensingAuthority for Casa {
             (Some(version), Record::Entry(_)) if version == current => Ok(None),
             (Some(0), Record::Entry(_)) => Err(too_old(0)),
             (Some(_), Record::Entry(_)) => {
-                migrate_entry_information_from_version_1(information)
+                entry_information::migrate_from_version_1(information)
                     .map(Some)
                     .map_err(|error| MigrationRefused::Unreadable(error.to_string()))
             }

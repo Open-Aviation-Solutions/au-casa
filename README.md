@@ -31,7 +31,7 @@ takes `^0.1.3` and `^0.1.0`, `0.2.0` takes `^0.2.0` and `^0.1.0`, and `0.3.0`
 and `0.4.0` take `^0.5` and `^0.1.0`, with
 [logbook-shared-kernel](https://github.com/Open-Aviation-Solutions/logbook-shared-kernel)
 at `^0.2`, `0.5.0` takes it at `^0.5`, `0.6.0` and `0.7.0` at `^0.6`, and
-`0.8.0` at `^0.8`, `0.9.0` at `^0.9` and `0.10.0` and `0.11.0` at `^0.9.1`, and `0.11.1` at `^0.9.2`; `0.9.0` to `0.11.1` take icao-shared-kernel at `^0.6`.
+`0.8.0` at `^0.8`, `0.9.0` at `^0.9` and `0.10.0` and `0.11.0` at `^0.9.1`, and `0.11.1` at `^0.9.2`, and `0.12.0` at `^0.10.0`; `0.9.0` to `0.12.0` take icao-shared-kernel at `^0.6`.
 
 What is covered:
 
@@ -98,7 +98,7 @@ version of its format under `_version` (each has its own). They are read inside
 the crate only, through `LicensingAuthority` (0.7). A change to
 either is a breaking release, and a consumer that stores them migrates its
 stored information with it, through the function au-casa ships for it
-(`LicensingAuthority::migrate_information` on `Casa`, from 0.11.1, which also refuses by kind; `logbook::migrate_entry_information_from_version_1`, from 0.10, is superseded by it and goes in the next breaking release). The open
+(`LicensingAuthority::migrate_information` on `Casa`, from 0.11.1, which also refuses by kind; `logbook::migrate_entry_information_from_version_1`, from 0.10, was superseded by it and is no longer public from 0.12.0). The open
 [issues](https://github.com/Open-Aviation-Solutions/au-casa/issues) are the
 work still to do.
 
@@ -117,19 +117,19 @@ and what they fly.
 
 Add it from crates.io, with the kernel at a version it accepts. au-casa takes
 the kernel at a matching `0.x` minor (au-casa `0.1.x` with kernel `0.1.x`,
-`0.2.x` with `0.2.x`, `0.3.x` to `0.8.x` with `0.5.x`, `0.9.x` to `0.11.x` with `0.6.x`); mixing them builds two copies of `LicenceTitle`. From `0.3`, `Casa`
+`0.2.x` with `0.2.x`, `0.3.x` to `0.8.x` with `0.5.x`, `0.9.x` to `0.12.x` with `0.6.x`); mixing them builds two copies of `LicenceTitle`. From `0.3`, `Casa`
 implements logbook-shared-kernel's `LicensingAuthority`, so a consumer takes
 that crate at the minor au-casa takes too (`0.2` for au-casa `0.3` and `0.4`, `0.5` for
-au-casa `0.5`, `0.6` for `0.6` and `0.7`, `0.8` for `0.8`, `0.9` for `0.9`, and `0.9.1` for `0.10` and `0.11.0`, and `0.9.2` for `0.11.1`): with another,
+au-casa `0.5`, `0.6` for `0.6` and `0.7`, `0.8` for `0.8`, `0.9` for `0.9`, and `0.9.1` for `0.10` and `0.11.0`, and `0.9.2` for `0.11.1`, and `0.10` for `0.12`): with another,
 `Casa` implements a different trait from the one the consumer names. The
 published set is:
 
 ```toml
 [dependencies]
-au-casa = "0.11"
+au-casa = "0.12"
 aircraft-type-descriptions = "0.1.0"
 icao-shared-kernel = "0.6"
-logbook-shared-kernel = "0.9.2"
+logbook-shared-kernel = "0.10"
 ```
 
 The aircraft description types (`AircraftDescription`, `AirframeKind`,

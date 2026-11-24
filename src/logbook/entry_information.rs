@@ -149,7 +149,7 @@ const VERSION_1_KEYS: [&str; 6] = [
 /// CASA's information on an entry.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 #[non_exhaustive]
-pub enum EntryMigrationError {
+pub(crate) enum EntryMigrationError {
     #[error("CASA's information on an entry is not a JSON object")]
     NotAnObject,
     #[error("CASA's information on an entry is not of version 1 or 2")]
@@ -175,8 +175,12 @@ impl From<Unreadable> for EntryMigrationError {
 // writes a migration of its own.
 const _: () = assert!(EntryInformation::VERSION == 2);
 
-/// [`super::migrate_entry_information_from_version_1`]: each answer of
-/// version 1 is read as version 2 reads it, as it means the same.
+/// Rewrite one entry's stored information of version 1 as version 2, for
+/// [`LicensingAuthority::migrate_information`](logbook_shared_kernel::LicensingAuthority::migrate_information):
+/// restamped as version 2, with every answer kept, since version 2 only adds
+/// `cross_country_flight`. Each answer of version 1 is read as version 2
+/// reads it, as it means the same. Information of version 2 already is given
+/// back as it is, once it reads.
 pub(super) fn migrate_from_version_1(
     information: &AuthoritySpecificInformation,
 ) -> Result<AuthoritySpecificInformation, EntryMigrationError> {

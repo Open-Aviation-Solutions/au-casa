@@ -139,9 +139,10 @@ answers one such question:
   also lists the requirements and runs them; see "Currency checks" below.
 
 **The information's readers are crate-private (au-casa#68).** `logbook`
-exports only `Casa`, and the migration of the information on an entry
-(`migrate_entry_information_from_version_1`, over the kernel's types, with its
-own public error, `EntryMigrationError`). The readers `EntryInformation` and
+exports only `Casa`; the migration of stored information is
+`LicensingAuthority::migrate_information` on it (the function it calls for an
+entry's version 1, and its error `EntryMigrationError`, are crate-private from
+0.12.0). The readers `EntryInformation` and
 `AssessmentInformation`, their read errors (`InformationError` and
 `AssessmentInformationError`), `CheckType`, `CheckOutcome`, `CheckPurpose`, `AssessedPurpose`,
 `PurposeKind` and `SupervisionRoute` are `pub(crate)`, with no writer outside
@@ -426,11 +427,12 @@ version before 2 of an assessment, as none is kept) and not readable
 entry that does not read). Version 2 of an entry or of an assessment gives
 `Ok(None)` on its version alone, without its answers read (`Ok(None)` is not a
 check of them, which is `problems_for`'s: the owner's decision on
-logbook-shared-kernel#45). The function below stays public in 0.11.1 for hosts
-that call it, and goes in the next breaking release.
+logbook-shared-kernel#45).
 
-The migration so far is `logbook::migrate_entry_information_from_version_1`
-(au-casa#86, in 0.10.0), from version 1 of the information on an entry to
+The migration so far is `entry_information::migrate_from_version_1`
+(au-casa#86, public in 0.10.0 to 0.11.1 as
+`logbook::migrate_entry_information_from_version_1`, crate-private from
+0.12.0, as `migrate_information` supersedes it), from version 1 of the information on an entry to
 version 2, which added `cross_country_flight`: it restamps the version and
 keeps every answer, so it refuses only information that reads as neither
 version. An earlier one, `AssessmentInformation::migrate_from_version_1`
@@ -444,7 +446,7 @@ Breaking includes a change to the API; a change to the Part 61 reading
 that changes an existing designator's category, class or design features, or
 a title of licence's Part 61 term; and a requirement added or removed, or a
 change to what makes an existing one current. Consumers take au-casa by a
-caret range on the current minor (such as `^0.11.0`), so a `cargo update` takes up patches but not a breaking release,
+caret range on the current minor (such as `^0.12.0`), so a `cargo update` takes up patches but not a breaking release,
 which they move to on purpose.
 
 ## Commands
