@@ -38,6 +38,22 @@ pub(crate) enum DesignFeature {
 }
 
 impl DesignFeature {
+    /// Every design feature, each once, in reg 61.755's order: an
+    /// aeroplane's (subregulation (2)), and then the one only a helicopter's
+    /// list has (subregulation (3)(a)).
+    pub(crate) const ALL: [Self; 10] = [
+        Self::TailwheelUndercarriage,
+        Self::RetractableUndercarriage,
+        Self::ManualPropellerPitchControl,
+        Self::GasTurbineEngine,
+        Self::MultiEngineCentreLineThrust,
+        Self::PressurisationSystem,
+        Self::Floatplane,
+        Self::FloatingHull,
+        Self::SkiLandingGear,
+        Self::FloatAlightingGear,
+    ];
+
     /// Whether an aircraft of this description with these characteristics
     /// has the feature: gas turbine engine from the description's engine
     /// type, and every other from the characteristic recorded for it, as
