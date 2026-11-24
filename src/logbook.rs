@@ -31,6 +31,7 @@ mod entry_information;
 mod guards;
 mod licence_titles;
 mod questions;
+mod ratings_and_endorsements;
 mod stored;
 #[cfg(test)]
 mod test_support;
@@ -54,6 +55,8 @@ use logbook_shared_kernel::{
     ProblemKind, Questions, Record, Requirement, RequirementId, Subject, Term, TermId,
 };
 use time::Date;
+
+use ratings_and_endorsements::{class_rating, design_feature_endorsement};
 
 use crate::aircraft::{
     classify, design_features, lacks_water_alighting_gear, AircraftCategory, AircraftClassRating,
@@ -165,9 +168,13 @@ impl LicensingAuthority for Casa {
 
     /// The category (reg 61.015, or reg 61.007(2) for a registered
     /// sailplane), and the class (reg 61.020) where there is one, in that
-    /// order; and the design features that require a design feature
-    /// endorsement (reg 61.755), in its order for the category. Each is in
-    /// Part 61's words, with a stable id.
+    /// order; and what it requires: the class's aircraft class rating (reg
+    /// 61.735) where there is a class, and then the design feature
+    /// endorsement for each of its design features that requires one (reg
+    /// 61.755), in its order for the category. Each is in Part 61's words,
+    /// with a stable id, and each required is one of
+    /// [`ratings_and_endorsements`](LicensingAuthority::ratings_and_endorsements),
+    /// under the same id. A class rating's id is its own, not its class's.
     ///
     /// A multi-engine aeroplane with centre-line thrust recorded is in the
     /// single-engine class (reg 61.020(2)(a)). The caller passes the
@@ -186,9 +193,16 @@ impl LicensingAuthority for Casa {
         let (category, class) = classify(*aircraft, characteristics);
         let mut counts_as = vec![term(category_id(category), category.to_string())];
         counts_as.extend(class.map(|class| term(class_id(class), class_name(class))));
-        let requires = design_features(category, *aircraft, characteristics)
+        // TODO(#101): type ratings are not required yet, so a multi-engine
+        // helicopter or gyroplane, which has no class, requires no rating.
+        let requires = class
+            .map(class_rating)
             .into_iter()
-            .map(|feature| term(feature.id(), feature.name()))
+            .chain(
+                design_features(category, *aircraft, characteristics)
+                    .into_iter()
+                    .map(design_feature_endorsement),
+            )
             .collect();
         let cautions = lacks_water_alighting_gear(*aircraft, characteristics)
             .then(|| {
@@ -214,9 +228,17 @@ impl LicensingAuthority for Casa {
         licence_titles::licence_titles()
     }
 
+    /// The aircraft class ratings, one for each class of reg 61.020(1), the
+    /// design feature endorsements, one for each design feature of reg
+    /// 61.755, and the instrument rating (reg 61.855), the private
+    /// instrument rating (reg 61.910) and the night VFR rating (reg 61.955),
+    /// in that order. Each is in Part 61's words, with a stable id.
+    ///
+    /// Not yet every one CASA issues, as the kernel asks: the other
+    /// operational ratings, the endorsements other than the design feature
+    /// endorsements, and the type ratings (#101) are not listed yet.
     fn ratings_and_endorsements(&self) -> Vec<Term> {
-        // TODO(#100): list CASA's ratings and endorsements.
-        Vec::new()
+        ratings_and_endorsements::ratings_and_endorsements()
     }
 
     /// Annex 1's, as CASA's are the same (regs 61.515(1), 61.580(1),

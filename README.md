@@ -161,7 +161,10 @@ fn main() {
         ids(&classification.counts_as),
         ["aeroplane", "single-engine-aeroplane"]
     );
-    assert_eq!(ids(&classification.requires), ["tailwheel-undercarriage"]);
+    assert_eq!(
+        ids(&classification.requires),
+        ["single-engine-aeroplane-class-rating", "tailwheel-undercarriage"]
+    );
 
     let title = LicenceTitle::Private(PrivateOrCommercialCategory::Aeroplane);
     let term = part61_term(title).expect("CASA issues this title");

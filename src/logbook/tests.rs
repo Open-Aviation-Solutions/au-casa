@@ -140,14 +140,49 @@ fn a_type_counts_as_its_category_and_class(
     #[case] engines: u8,
     #[case] counts_as: &[(&str, &str)],
 ) {
-    let (terms, requires, cautions) = classified(airframe, engines, EngineType::Piston, &[]);
+    let (terms, _, cautions) = classified(airframe, engines, EngineType::Piston, &[]);
     let expected: Vec<_> = counts_as
         .iter()
         .map(|&(id, name)| (id.to_owned(), name.to_owned()))
         .collect();
     assert_eq!(terms, expected);
-    assert!(requires.is_empty());
     assert!(cautions.is_empty());
+}
+
+/// The class's aircraft class rating (reg 61.735), under an id of its own,
+/// is required; an aircraft with no class requires none. Type ratings are not
+/// required yet (#101).
+#[rstest]
+#[case(AirframeKind::LandPlane, 1, Some(("single-engine-aeroplane-class-rating", "single-engine aeroplane class rating")))]
+#[case(AirframeKind::LandPlane, 2, Some(("multi-engine-aeroplane-class-rating", "multi-engine aeroplane class rating")))]
+#[case(AirframeKind::Helicopter, 1, Some(("single-engine-helicopter-class-rating", "single-engine helicopter class rating")))]
+#[case(AirframeKind::Helicopter, 2, None)]
+#[case(AirframeKind::Gyrocopter, 1, Some(("single-engine-gyroplane-class-rating", "single-engine gyroplane class rating")))]
+#[case(AirframeKind::Gyrocopter, 2, None)]
+#[case(AirframeKind::TiltRotor, 2, Some(("powered-lift-aircraft-class-rating", "powered-lift aircraft class rating")))]
+#[case(AirframeKind::Airship, 2, Some(("airship-class-rating", "airship class rating")))]
+#[case(AirframeKind::Glider, 0, None)]
+fn a_type_requires_its_class_rating(
+    #[case] airframe: AirframeKind,
+    #[case] engines: u8,
+    #[case] class_rating: Option<(&str, &str)>,
+) {
+    let (_, requires, _) = classified(airframe, engines, EngineType::Piston, &[]);
+    let expected: Terms = class_rating
+        .into_iter()
+        .map(|(id, name)| (id.to_owned(), name.to_owned()))
+        .collect();
+    assert_eq!(requires, expected);
+}
+
+/// The ids of the design feature endorsements among what is required: all
+/// but the class rating.
+fn design_feature_ids(required: &Terms) -> Vec<&str> {
+    required
+        .iter()
+        .map(|(id, _)| id.as_str())
+        .filter(|id| !id.ends_with("-class-rating"))
+        .collect()
 }
 
 /// Reg 61.755's design features for each category, each from the
@@ -256,7 +291,7 @@ fn a_recorded_characteristic_requires_its_categorys_design_feature(
     #[case] requires: Option<&str>,
 ) {
     let (_, required, _) = classified(airframe, 1, EngineType::Piston, &[characteristic]);
-    let ids: Vec<_> = required.iter().map(|(id, _)| id.as_str()).collect();
+    let ids = design_feature_ids(&required);
     assert_eq!(ids, Vec::from_iter(requires));
 }
 
@@ -278,7 +313,7 @@ fn a_gas_turbine_engine_is_read_from_the_description(
         AircraftCharacteristic::TailwheelUndercarriage,
     ];
     let (_, required, _) = classified(airframe, 1, EngineType::TurboProp, &recorded);
-    let ids: Vec<_> = required.iter().map(|(id, _)| id.as_str()).collect();
+    let ids = design_feature_ids(&required);
     assert_eq!(ids, requires);
 }
 
@@ -292,7 +327,7 @@ fn a_design_feature_is_named_as_the_regulation_words_it() {
         &[AircraftCharacteristic::ManualPropellerPitchControl],
     );
     assert_eq!(
-        required[0].1,
+        required[1].1,
         "manual propeller pitch control (piston engine)"
     );
 }
@@ -313,7 +348,7 @@ fn manual_propeller_pitch_control_is_required_only_with_a_piston_engine(
         engine_type,
         &[AircraftCharacteristic::ManualPropellerPitchControl],
     );
-    let ids: Vec<_> = required.iter().map(|(id, _)| id.as_str()).collect();
+    let ids = design_feature_ids(&required);
     assert_eq!(ids, requires);
 }
 
@@ -356,7 +391,14 @@ fn a_centre_line_thrust_aeroplane_counts_as_single_engine() {
         &[AircraftCharacteristic::MultiEngineCentreLineThrust],
     );
     assert_eq!(counts_as[1].0, "single-engine-aeroplane");
-    assert_eq!(required[0].0, "multi-engine-centre-line-thrust");
+    let ids: Vec<_> = required.iter().map(|(id, _)| id.as_str()).collect();
+    assert_eq!(
+        ids,
+        [
+            "single-engine-aeroplane-class-rating",
+            "multi-engine-centre-line-thrust"
+        ]
+    );
 }
 
 /// A seaplane or amphibian's description cannot say whether it has float
@@ -375,7 +417,7 @@ fn a_type_on_water_is_cautioned_until_its_gear_is_recorded(
     #[case] cautioned: bool,
 ) {
     let (_, required, cautions) = classified(airframe, 1, EngineType::Piston, recorded);
-    let ids: Vec<_> = required.iter().map(|(id, _)| id.as_str()).collect();
+    let ids = design_feature_ids(&required);
     assert_eq!(ids, requires);
     assert_eq!(cautions.len(), usize::from(cautioned));
 }

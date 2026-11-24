@@ -10,8 +10,8 @@
 //!
 //! - [`aircraft`] — CASA category and class rating, from the description of
 //!   an aircraft's type and its airframe's characteristics (task `0001`);
-//!   what an aircraft requires (its design feature endorsements) is
-//!   [`Casa`]'s `classify`.
+//!   what an aircraft requires (its class rating and design feature
+//!   endorsements) is [`Casa`]'s `classify`.
 //! - [`fstd`] — recognition of a flight simulation training device under reg
 //!   61.010, and whether time on it counts for Part 61 (task `0002`).
 //! - [`licence`] — the Part 61 term (licence and category rating) for each of

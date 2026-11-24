@@ -79,8 +79,16 @@ answers one such question:
   `instrument_rating`), and its wording is its choice's label, so a value
   does not change when its wording does. `Casa` says which entries count (`counts`: a session
   only in an approved flight simulation training device, reg 61.010), what
-  an aircraft counts as and requires (`classify`, each term with a stable
-  id; see "Term ids" below), which requirements it checks, each with a
+  an aircraft counts as and requires (`classify`: its class's aircraft
+  class rating and its design feature endorsements, each term with a
+  stable id; see "Term ids" below), the ratings and endorsements it issues
+  (`ratings_and_endorsements`, in `logbook::ratings_and_endorsements`: the
+  class ratings, the design feature endorsements, and the instrument,
+  private instrument and night VFR ratings; every term `classify` requires
+  is one of them, under the same id. The list is not yet every rating and
+  endorsement CASA issues, as the kernel's contract asks: the other
+  operational ratings and endorsements, and the type ratings (#101), are
+  not listed yet), which requirements it checks, each with a
   stable id, a name in its regulation's words, a description of what
   meets it, the noun its events are counted in, the key of the set its
   regulation sets it in and its kind (`requirements`; see "Currency
@@ -272,8 +280,8 @@ releases once, at its end.
 
 ## Term ids
 
-`Casa::classify` and `Casa::totals` give each term a logbook-shared-kernel
-`TermId`, which a host may keep (pilot-logbook stores them), so once
+`Casa::classify`, `Casa::ratings_and_endorsements` and `Casa::totals` give
+each term a logbook-shared-kernel `TermId`, which a host may keep (pilot-logbook stores them), so once
 released an id does not change; a name may. Each is mapped by hand
 (`category_id` and `class_id` in `logbook`, `DesignFeature::id`; a test
 holds the first two to the stored names):
@@ -287,6 +295,19 @@ holds the first two to the stored names):
   (`tailwheel-undercarriage`, `floatplane` for an aeroplane's float
   alighting gear, `float-alighting-gear` for a helicopter's,
   `gas-turbine-engine`).
+- A rating or endorsement that `classify` requires has the same term in
+  `ratings_and_endorsements`, so a host matches a held one by equal ids. An
+  aircraft class rating has an id of its own, so that no id names two
+  things (the owner, on au-casa#100): its class's id followed by
+  `-class-rating` (`single-engine-aeroplane-class-rating`), but for the
+  airship class rating, `airship-class-rating`, as the airship class's id
+  already ends in `-class`. Its name is Part 61's for the rating
+  ("single-engine aeroplane class rating"); the class's own term in
+  `counts_as` and the totals keeps the class's id and name. A design
+  feature endorsement has its design feature's id. A test holds that no
+  listed id is a class's or a category's. An operational rating's id is its Part 61
+  name joined by `-` (`instrument-rating`, `private-instrument-rating`,
+  `night-vfr-rating`). A test lists them all.
 - A title of licence's (`licence_titles`, in `logbook::licence_titles`) is
   its licence's name and its category rating's, joined by `-`, which is how
   pilot-logbook spells a stored title's pair, so its own titles read without
