@@ -336,6 +336,14 @@ impl LicensingAuthority for Casa {
     /// where the question applies, on the route of reg 61.095(3) for a pilot
     /// in command under supervision: "the person is not receiving flight
     /// training" (reg 61.095(3)(b)).
+    ///
+    /// And a refusal of an assessment, at the information as a whole, when
+    /// the aircraft of the entry it names cannot be placed in a category
+    /// (reg 61.015): its type, or the type a session's device represented,
+    /// has no description, or a session records no type. It says what is
+    /// missing and where to record it. Every check CASA records is evidence
+    /// about an aircraft category or class, whatever its kind; the currency
+    /// checks still read an assessment saved before this refusal cautiously.
     fn problems_for(
         &self,
         record: Record,
@@ -365,13 +373,53 @@ impl LicensingAuthority for Casa {
                 }
                 Ok(_) => Vec::new(),
             },
-            Record::Assessment { .. } => AssessmentInformation::read_to_save(information)
+            Record::Assessment { entry, .. } => AssessmentInformation::read_to_save(information)
                 .err()
                 .map(|error| unreadable(error.to_string()))
                 .into_iter()
+                .chain(unclassified(entry))
                 .collect(),
         }
     }
+}
+
+/// A refusal of an assessment whose entry's aircraft cannot be placed in a
+/// category (reg 61.015), at the information as a whole, saying what is
+/// missing and where to record it; `None` when it can be. Every check CASA
+/// records is evidence about an aircraft category or class, so one that
+/// cannot be placed is not recorded (pilot-logbook#249).
+fn unclassified(entry: &Entry) -> Option<Problem> {
+    if guards::category_of(entry).is_some() {
+        return None;
+    }
+    let missing = match entry.subject() {
+        Subject::Flight { aircraft, .. } => format!(
+            "its type, {}, has no description. Describe the type, its airframe and its \
+             engines, on that entry",
+            aircraft.aircraft_type.as_str()
+        ),
+        Subject::Session {
+            simulated: Some(simulated),
+            ..
+        } => format!(
+            "the type the device represented, {}, has no description. Describe the type, its \
+             airframe and its engines, on that entry",
+            simulated.aircraft_type.as_str()
+        ),
+        Subject::Session {
+            simulated: None, ..
+        } => "that entry doesn't record the type of aircraft the device represented. Record \
+              the type on that entry"
+            .to_owned(),
+    };
+    Some(Problem {
+        at: ProblemAt::Information,
+        kind: ProblemKind::Refusal,
+        text: format!(
+            "The aircraft of the entry this check names can't be placed in a category, as {missing}"
+        ),
+        regulation: "61.015",
+    })
 }
 
 /// A refusal of information that cannot be read, at the information as a

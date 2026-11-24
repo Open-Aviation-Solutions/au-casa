@@ -114,8 +114,12 @@ answers one such question:
   one on the arrivals), as an arrival is an instrument approach operation
   too; the exclusion is no format change: the count was always meant as reg 61.870(2)'s operations, narrowing it only rules out counting one operation twice, and no stored answer existed when 0.11.0 released it); and the problems with the
   answers (`problems_for`): information it cannot read, so that the host
-  does not stamp and save it, and reg 61.095(3)(b)'s "the person is not
-  receiving flight training", where that question applies. Stored information must carry its version
+  does not stamp and save it, reg 61.095(3)(b)'s "the person is not
+  receiving flight training", where that question applies, and an
+  assessment whose entry's aircraft cannot be placed in a category, with
+  what is missing (its type's description, or a session's type) and where
+  to record it: every check CASA records is evidence about an aircraft
+  category or class, whatever its kind (au-casa#99, pilot-logbook#249). Stored information must carry its version
   (`read`); only information about to be saved may lack it
   (`read_to_save`), which is how `problems_for` reads what it is given. A `null` answer is no answer, as an
   absent key is. The currency checks are in `logbook::currency`, which
@@ -174,7 +178,7 @@ to the trait.
   proficiency checks, which read a failure's information whether or not
   its entry counts, are given every entry too; one naming no entry of the
   logbook, which a host does not let happen, they read as stored, so that
-  its failure still ends them all (au-casa#99 keeps the cautious fallback). The instrument
+  its failure still ends them all. The instrument
   proficiency checks read it too (au-casa#58): a pass counts for a check
   when its aircraft is a "relevant aircraft" for it (reg 61.880(9)), so one
   in a multi-engine aeroplane counts for the aeroplane category as well as
@@ -184,8 +188,9 @@ to the trait.
   failed), and one whose aircraft is not known ends them all. That is the
   one exception to an unclassified assessment not counting: a pilot shown
   current after a failure that could not be placed is the worse error
-  (decided on au-casa#93). A host should not let such a check be recorded
-  (pilot-logbook#249).
+  (decided on au-casa#93). `problems_for` refuses such a check
+  (au-casa#99), so the fallback is for records saved before it did; keep
+  it.
 - **An unknown type does not count where a category is required.** A check
   that requires a category (`guards::is_category`) needs positive evidence;
   regs 61.870(2) and (4) to (7) require none ("in an aircraft"), so any
