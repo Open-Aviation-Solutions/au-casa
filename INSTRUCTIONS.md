@@ -81,7 +81,10 @@ answers one such question:
   only in an approved flight simulation training device, reg 61.010), what
   an aircraft counts as and requires (`classify`, each term with a stable
   id; see "Term ids" below), which requirements it checks, each with a
-  stable id and a name in its regulation's words (`requirements`), the
+  stable id, a name in its regulation's words, a description of what
+  meets it, the noun its events are counted in, the key of the set its
+  regulation sets it in and its kind (`requirements`; see "Currency
+  checks"), the
   pilot's currency against them (`currency`), and CASA's own totals
   (`totals`, over the entries that count, each with a stable id and the
   total it is part of, the classes of aeroplane under aeroplane time; solo
@@ -162,10 +165,16 @@ to the trait.
   `run` applies it once, so a check does not repeat it. A check over
   assessments that reads their aircraft, which `run` does not reach, is
   given those entries by its caller (`Casa::currency`) when it is built.
-- **An assessment's aircraft is its flight's.** A check over assessments
+- **An assessment's aircraft is its entry's.** A check over assessments
   that reads it (the flight review) is given the entries, and an assessment
-  is in the aircraft of the entry for the same `flight`; one whose flight
-  has no entry is unclassified and does not count. The instrument
+  is in the aircraft of the entry it names (`Assessment::entry`, by its
+  `EntryId`); one whose entry is not among them, or is a session's, is
+  unclassified and does not count. An assessment's information is read
+  with its entry (the kernel's `Record::Assessment`), so the instrument
+  proficiency checks, which read a failure's information whether or not
+  its entry counts, are given every entry too; one naming no entry of the
+  logbook, which a host does not let happen, they read as stored, so that
+  its failure still ends them all (au-casa#99 keeps the cautious fallback). The instrument
   proficiency checks read it too (au-casa#58): a pass counts for a check
   when its aircraft is a "relevant aircraft" for it (reg 61.880(9)), so one
   in a multi-engine aeroplane counts for the aeroplane category as well as
@@ -204,9 +213,21 @@ to the trait.
   multi-engine helicopter, which Part 61 does not define, is a helicopter
   with 2 or more engines. A host may keep an id, so changing one is a breaking
   change. A new check is a `CasaRequirement` variant (a `match` on it will
-  not compile without its id, name and regulation), a row of
+  not compile without its id, name, description, events noun, set, kind
+  and regulation), a row of
   `REQUIREMENTS`, and its result paired with that variant in `currency`; a
   test fails until the last two agree.
+- **A requirement is shown in CASA's words** (au-casa#96), so that a host
+  holds no wording or grouping keyed by CASA's ids. Its `description` says
+  what meets it; the texts were pilot-logbook's `REQUIREMENT_WORDING`,
+  moved here as the owner reviewed them, and reg 61.870(3)'s the owner's
+  on au-casa#96. Its `events` noun, both forms, is given for the take-offs,
+  landings and operations regs 61.395, 61.965 and 61.870 count. Its `set`
+  is the provision that sets it together with others, for reg 61.395(1)'s
+  and (2)'s paragraphs and reg 61.965(a)'s (`61.395(1)`, `61.965(a)`); the
+  kernel calls it opaque, so a host groups by it and does not read it. Its
+  kind is recent experience (regs 61.395, 61.870, 61.875 and 61.965) or a
+  periodic assessment (regs 61.745 and 61.880).
 - **Testing:** each check's unit tests assert its boundaries (the window's
   edge and the expiry, the category guard where it has one, an entry dated after the
   reference date), with entries built by `logbook::test_support` from the
@@ -216,7 +237,7 @@ to the trait.
   groups a flight's entries, asserts the same result for both orders.
 
 `icao-shared-kernel`, logbook-shared-kernel and aircraft-type-descriptions
-are taken by a caret range (`^0.6`, `^0.9.2` and `^0.1.0`), not pinned exactly
+are taken by a caret range (`^0.6`, `^0.10.0` and `^0.1.0`), not pinned exactly
 (au-casa#24): sibling country crates (nz-caa and the like) depend on them
 too, and a consumer such as a logbook imports several at once. Exact pins on
 different patches cannot be resolved together; with caret ranges Cargo builds

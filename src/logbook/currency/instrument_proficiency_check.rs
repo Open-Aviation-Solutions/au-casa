@@ -6,12 +6,12 @@
 //! instrument rating, for an aircraft category or for multi-engine
 //! aeroplanes or helicopters.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use logbook_shared_kernel::authority::window::{add_months_clamped, count_in_window};
 use logbook_shared_kernel::{
     Assessment, AssessmentAccumulator, AssessmentCurrencyCheck, AssessmentId, CurrencyResult,
-    Entry, SubjectId,
+    Entry, EntryId, SubjectId,
 };
 use time::{Date, Duration};
 
@@ -21,7 +21,8 @@ use crate::logbook::guards::{
     category_of, is_category, is_class_rating, is_multi_engine_helicopter,
 };
 use crate::logbook::{
-    assessment_information, AssessedPurpose, CheckOutcome, CheckPurpose, CheckType,
+    assessment_information, stored_assessment_information, AssessedPurpose, CheckOutcome,
+    CheckPurpose, CheckType,
 };
 
 const REQUIRED: usize = 1;
@@ -135,14 +136,18 @@ struct Passed {
 /// passed before it counts or is renewed by a pass after it; a pass on the
 /// same day as the failure is taken as after it. A failure in a
 /// single-engine aircraft ends the multi-engine check of its category too.
-/// A failure whose aircraft is not known (its flight has no entry, or its
-/// type no known category) ends every check, as it may have been in any
+/// A failure whose aircraft is not known (its entry is missing, is not one
+/// that counts, is of a session, or its type of no known category) ends
+/// every check, as it may have been in any
 /// category; one known to be in another category ends nothing. A failed
 /// check of another kind ends nothing.
 ///
-/// A check's aircraft is that of the entry for its flight, as for a flight
-/// review: one whose flight has no entry, or whose type is not known to be
-/// a relevant aircraft, does not count.
+/// A check's aircraft is that of the entry it names, as for a flight
+/// review: one whose entry is not among those given, is of a session, or
+/// whose type is not known to be a relevant aircraft, does not count. Its
+/// information is read with that entry, or as stored when it names no entry
+/// of the logbook, which a host does not let happen: a failure in one ends
+/// every check, as its aircraft is not known.
 ///
 /// What a check was, its outcome and a flight test's purposes, each with
 /// its own outcome, are CASA's information on the assessment: one with
@@ -154,13 +159,16 @@ struct Passed {
 /// it, so the passes are kept and decided in
 /// [`result`](AssessmentCurrencyCheck::result), over the whole set, which
 /// makes the answer independent of the order assessments arrive in.
-pub(crate) struct InstrumentProficiencyCheck {
+pub(crate) struct InstrumentProficiencyCheck<'a> {
     reference: Date,
-    /// The flights an entry records in a relevant aircraft.
-    relevant: BTreeSet<SubjectId>,
-    /// The flights whose aircraft is known to be of another category only,
-    /// on which a failure does not end this check.
-    other_category: BTreeSet<SubjectId>,
+    /// Every entry of the logbook, by its id, to read an assessment's
+    /// information with the entry it names.
+    logbook: BTreeMap<&'a EntryId, &'a Entry>,
+    /// The entries that record a flight in a relevant aircraft.
+    relevant: BTreeSet<EntryId>,
+    /// The entries that record a flight in an aircraft known to be of
+    /// another category only, in which a failure does not end this check.
+    other_category: BTreeSet<EntryId>,
     /// The dates of the flight tests passed for the instrument rating, in
     /// any aircraft: reg 61.880(3)(b)(ii) asks only when the holder passed
     /// "the flight test for the rating", not in what.
@@ -171,40 +179,44 @@ pub(crate) struct InstrumentProficiencyCheck {
     failed: Vec<Date>,
 }
 
-impl InstrumentProficiencyCheck {
+impl<'a> InstrumentProficiencyCheck<'a> {
     /// The check for `check_for`, finding each assessment's aircraft among
     /// `entries`. The caller passes the entries
     /// [`Casa::counts`](crate::Casa) lets through, as the kernel's `run`
     /// would: this check is not run over entries, so it does not apply that
-    /// gate itself.
-    pub(crate) fn new<'a>(
+    /// gate itself. It reads each assessment's information with the entry
+    /// it names, from among every entry of the `logbook`, so that a failure
+    /// in an entry that does not count still ends the checks.
+    pub(crate) fn new(
         reference: Date,
         check_for: ProficiencyCheckFor,
         entries: impl IntoIterator<Item = &'a Entry>,
+        logbook: &'a [Entry],
     ) -> Self {
         let mut relevant = BTreeSet::new();
         let mut in_category = BTreeSet::new();
         let mut other_category = BTreeSet::new();
         for entry in entries {
-            let flight = entry.subject().id();
-            if !matches!(flight, SubjectId::Flight(_)) {
+            if !matches!(entry.subject().id(), SubjectId::Flight(_)) {
                 continue;
             }
+            let id = entry.id().clone();
             if check_for.is_relevant(entry) {
-                relevant.insert(flight);
+                relevant.insert(id.clone());
             }
             match category_of(entry) {
                 Some(category) if category == check_for.category() => {
-                    in_category.insert(flight);
+                    in_category.insert(id);
                 }
                 Some(_) => {
-                    other_category.insert(flight);
+                    other_category.insert(id);
                 }
                 None => {}
             }
         }
         Self {
             reference,
+            logbook: logbook.iter().map(|entry| (entry.id(), entry)).collect(),
             relevant,
             other_category: &other_category - &in_category,
             rating_tests: Vec::new(),
@@ -243,16 +255,23 @@ impl InstrumentProficiencyCheck {
     }
 }
 
-impl AssessmentAccumulator for InstrumentProficiencyCheck {
+impl AssessmentAccumulator for InstrumentProficiencyCheck<'_> {
     fn accept_assessment(&mut self, assessment: &Assessment) {
         // An assessment dated after the reference has not happened yet.
         if assessment.date > self.reference {
             return;
         }
-        let Some(information) = assessment_information(assessment) else {
+        let entry = &assessment.entry;
+        // One whose entry is not in the logbook, which a host does not let
+        // happen, is read as stored, so that its failure still ends every
+        // check.
+        let information = match self.logbook.get(entry) {
+            Some(named) => assessment_information(assessment, named),
+            None => stored_assessment_information(assessment),
+        };
+        let Some(information) = information else {
             return;
         };
-        let flight = SubjectId::Flight(assessment.flight);
         let basis = if information.check_type == Some(CheckType::FlightTest) {
             // A flight test's purposes each have their own outcome, and it
             // has none of its own; a failed one ends nothing.
@@ -275,7 +294,7 @@ impl AssessmentAccumulator for InstrumentProficiencyCheck {
                 Some(CheckOutcome::Passed) => {}
                 Some(CheckOutcome::Failed) => {
                     if information.check_type == Some(CheckType::InstrumentProficiencyCheck)
-                        && !self.other_category.contains(&flight)
+                        && !self.other_category.contains(entry)
                     {
                         self.failed.push(assessment.date);
                     }
@@ -293,7 +312,7 @@ impl AssessmentAccumulator for InstrumentProficiencyCheck {
         if basis == Basis::RatingTest {
             self.rating_tests.push(assessment.date);
         }
-        if !self.relevant.contains(&flight) {
+        if !self.relevant.contains(entry) {
             return;
         }
         self.passed.push(Passed {
@@ -304,7 +323,7 @@ impl AssessmentAccumulator for InstrumentProficiencyCheck {
     }
 }
 
-impl AssessmentCurrencyCheck for InstrumentProficiencyCheck {
+impl AssessmentCurrencyCheck for InstrumentProficiencyCheck<'_> {
     fn result(&self) -> CurrencyResult {
         // Nothing passed before the latest failure counts after it.
         let failed_on = self.failed.iter().max();
@@ -371,7 +390,7 @@ mod tests {
 
     use super::*;
     use crate::logbook::test_support::{
-        aeroplane, assessed, entry, flight_test, flown, on_flight, unclassified,
+        aeroplane, assessed, entry, flight_test, flown, unclassified,
     };
     use crate::logbook::{casa, AssessmentInformation};
 
@@ -402,7 +421,7 @@ mod tests {
                 check_purposes: Vec::new(),
             }
         };
-        assessed(id, on, 1, information)
+        assessed(id, on, "1", information)
     }
 
     fn ipc(id: &str, on: Date, outcome: CheckOutcome) -> Assessment {
@@ -420,11 +439,11 @@ mod tests {
         )
     }
 
-    /// The flights the checks here are on: 1 in a single-engine aeroplane
-    /// (a C172), 2 in a multi-engine aeroplane (a PA44), 3 in a
-    /// single-engine helicopter (an R44), 4 in a multi-engine helicopter
-    /// (an EC35) and 5 in a type of no known category; flight 6 has no
-    /// entry.
+    /// The entries the checks here name, each a flight: 1 in a
+    /// single-engine aeroplane (a C172), 2 in a multi-engine aeroplane (a
+    /// PA44), 3 in a single-engine helicopter (an R44), 4 in a multi-engine
+    /// helicopter (an EC35) and 5 in a type of no known category; there is
+    /// no entry 6.
     fn flights() -> Vec<Entry> {
         [
             aeroplane("1", REFERENCE),
@@ -433,10 +452,8 @@ mod tests {
             flown("4", REFERENCE, "EC35"),
             unclassified("5", REFERENCE),
         ]
-        .into_iter()
-        .zip(1..)
-        .map(|(parts, flight)| entry(on_flight(flight, parts)))
-        .collect()
+        .map(entry)
+        .into()
     }
 
     /// The check for `check_for` over these assessments, on [`flights`].
@@ -445,7 +462,8 @@ mod tests {
         reference: Date,
         assessments: &[Assessment],
     ) -> CurrencyResult {
-        let mut check = InstrumentProficiencyCheck::new(reference, check_for, &flights());
+        let flights = flights();
+        let mut check = InstrumentProficiencyCheck::new(reference, check_for, &flights, &flights);
         for assessment in assessments {
             check.accept_assessment(assessment);
         }
@@ -617,8 +635,9 @@ mod tests {
     fn a_flight_test_counts_by_its_instrument_purposes_outcomes() {
         use CheckOutcome::{Failed, Passed};
         let on = date!(2024 - 08 - 02);
-        let test =
-            |purposes: &[(CheckPurpose, CheckOutcome)]| assessed("t", on, 1, flight_test(purposes));
+        let test = |purposes: &[(CheckPurpose, CheckOutcome)]| {
+            assessed("t", on, "1", flight_test(purposes))
+        };
         let class = CheckPurpose::MultiEngineAeroplaneClassRating;
         let partly = test(&[(class, Passed), (CheckPurpose::InstrumentRating, Failed)]);
         assert!(!result(&[partly]).is_current());
@@ -635,7 +654,7 @@ mod tests {
         let with_its_own = assessed(
             "t",
             on,
-            1,
+            "1",
             AssessmentInformation {
                 outcome: Some(Failed),
                 ..flight_test(&[(CheckPurpose::InstrumentRating, Passed)])
@@ -841,14 +860,14 @@ mod tests {
         assert!(result(&[ipc("p", on, CheckOutcome::Passed), failed]).is_current());
     }
 
-    /// An instrument proficiency check on this flight.
+    /// An instrument proficiency check in this entry.
     fn ipc_on(id: &str, flight: u128, on: Date, outcome: CheckOutcome) -> Assessment {
         let information = AssessmentInformation {
             check_type: Some(CheckType::InstrumentProficiencyCheck),
             outcome: Some(outcome),
             check_purposes: Vec::new(),
         };
-        assessed(id, on, flight, information)
+        assessed(id, on, &flight.to_string(), information)
     }
 
     /// Which of the checks a pass on each flight makes current: a
@@ -887,7 +906,8 @@ mod tests {
     /// A failure ends the checks for its category and for multi-engine
     /// aircraft of it (reg 61.880(4)), whatever aircraft of the category it
     /// was in; one in another category ends neither, and one in an aircraft
-    /// not known ends both.
+    /// not known ends both, as does one that names no entry of the logbook
+    /// (6).
     #[test]
     fn a_failure_ends_the_checks_of_the_category_it_was_attempted_in() {
         // Passed in a multi-engine aeroplane (flight 2) or helicopter (4);
@@ -935,13 +955,13 @@ mod tests {
         let rating = assessed(
             "ir",
             date!(2023 - 01 - 10),
-            1,
+            "1",
             flight_test(&[(CheckPurpose::InstrumentRating, CheckOutcome::Passed)]),
         );
         let endorsement = assessed(
             "ie",
             date!(2023 - 09 - 15),
-            2,
+            "2",
             flight_test(&[(CheckPurpose::InstrumentEndorsement, CheckOutcome::Passed)]),
         );
         let r = result_for(MultiEngineAeroplanes, REFERENCE, &[rating, endorsement]);

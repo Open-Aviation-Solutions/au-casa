@@ -4,12 +4,12 @@
 
 //! Reg 61.745: the flight review for an aircraft class rating.
 
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 
 use logbook_shared_kernel::authority::window::add_months_clamped;
 use logbook_shared_kernel::{
     Assessment, AssessmentAccumulator, AssessmentCurrencyCheck, AssessmentId, CurrencyResult,
-    Entry, SubjectId,
+    Entry, EntryId, SubjectId,
 };
 use time::Date;
 
@@ -51,38 +51,38 @@ const REQUIRED: usize = 1;
 /// check that reg 61.745(3) takes as a completed flight
 /// review ([`satisfies_flight_review`]), and it was conducted "in an
 /// aircraft of the class covered by the rating" (reg 61.745(2)(a)). The
-/// assessment's aircraft is that of the entry for the same flight: an
-/// assessment whose flight has no entry, or whose entry's type is of no
-/// known class, does not count. A failed check counts for nothing; it does
+/// assessment's aircraft is that of the entry it names: an assessment whose
+/// entry is not among those given, is of a session, or whose entry's type is
+/// of no known class, does not count. A failed check counts for nothing; it does
 /// not end a valid review.
-pub(crate) struct FlightReview {
+pub(crate) struct FlightReview<'a> {
     reference: Date,
-    /// The flights an entry records in an aircraft of the class.
-    flights: BTreeSet<SubjectId>,
+    /// The entries that record a flight in an aircraft of the class.
+    entries: BTreeMap<&'a EntryId, &'a Entry>,
     /// The checks that count, by the date of each, up to the reference.
     passed: Vec<(Date, AssessmentId)>,
 }
 
-impl FlightReview {
+impl<'a> FlightReview<'a> {
     /// The check for `class_rating`, finding each assessment's aircraft
     /// among `entries`. The caller passes the entries
     /// [`Casa::counts`](crate::Casa) lets through, as the kernel's `run`
     /// would: this check is not run over entries, so it does not apply that
     /// gate itself.
-    pub(crate) fn new<'a>(
+    pub(crate) fn new(
         reference: Date,
         class_rating: AircraftClassRating,
         entries: impl IntoIterator<Item = &'a Entry>,
     ) -> Self {
-        let flights = entries
+        let entries = entries
             .into_iter()
+            .filter(|entry| matches!(entry.subject().id(), SubjectId::Flight(_)))
             .filter(|entry| is_class_rating(entry, class_rating))
-            .map(|entry| entry.subject().id())
-            .filter(|id| matches!(id, SubjectId::Flight(_)))
+            .map(|entry| (entry.id(), entry))
             .collect();
         Self {
             reference,
-            flights,
+            entries,
             passed: Vec::new(),
         }
     }
@@ -140,16 +140,16 @@ fn passed(information: &AssessmentInformation) -> bool {
     }
 }
 
-impl AssessmentAccumulator for FlightReview {
+impl AssessmentAccumulator for FlightReview<'_> {
     fn accept_assessment(&mut self, assessment: &Assessment) {
         // An assessment dated after the reference has not happened yet.
         if assessment.date > self.reference {
             return;
         }
-        if !self.flights.contains(&SubjectId::Flight(assessment.flight)) {
+        let Some(entry) = self.entries.get(&assessment.entry) else {
             return;
-        }
-        let Some(information) = assessment_information(assessment) else {
+        };
+        let Some(information) = assessment_information(assessment, entry) else {
             return;
         };
         if passed(&information) && information.check_type.is_some_and(satisfies_flight_review) {
@@ -158,7 +158,7 @@ impl AssessmentAccumulator for FlightReview {
     }
 }
 
-impl AssessmentCurrencyCheck for FlightReview {
+impl AssessmentCurrencyCheck for FlightReview<'_> {
     fn result(&self) -> CurrencyResult {
         let mut passed = self.passed.clone();
         passed.sort();
@@ -195,7 +195,7 @@ mod tests {
 
     use super::*;
     use crate::logbook::test_support::{
-        aeroplane, assessed, entry, flight_test, flown, on_flight, simulated, unclassified,
+        aeroplane, assessed, entry, flight_test, flown, simulated, unclassified,
     };
     use crate::logbook::{casa, CheckPurpose};
 
@@ -204,7 +204,7 @@ mod tests {
     const REFERENCE: Date = date!(2024 - 09 - 01);
     const ON: Date = date!(2024 - 05 - 24);
 
-    /// A check of this type with this outcome, on flight 1: a flight test's
+    /// A check of this type with this outcome, in entry `e`: a flight test's
     /// for the private pilot licence, as a flight test has no outcome of
     /// its own.
     fn checked(on: Date, check_type: CheckType, outcome: CheckOutcome) -> Assessment {
@@ -217,10 +217,10 @@ mod tests {
                 check_purposes: Vec::new(),
             }
         };
-        assessed("a", on, 1, information)
+        assessed("a", on, "e", information)
     }
 
-    /// A passed flight review on flight 1.
+    /// A passed flight review, in entry `e`.
     fn passed(on: Date) -> Assessment {
         checked(on, CheckType::FlightReview, CheckOutcome::Passed)
     }
@@ -239,9 +239,9 @@ mod tests {
         check.result()
     }
 
-    /// Flight 1, in a single-engine aeroplane.
+    /// Entry `e`, a flight in a single-engine aeroplane.
     fn single_engine() -> Vec<EntryParts> {
-        vec![on_flight(1, aeroplane("e", ON))]
+        vec![aeroplane("e", ON)]
     }
 
     #[test]
@@ -258,8 +258,8 @@ mod tests {
     #[test]
     fn every_day_of_a_month_is_valid_to_the_same_months_end() {
         let current_through = |on| {
-            let entries = [on_flight(1, aeroplane("e", on))];
-            let mut check = FlightReview::new(on, Sea, &entries.map(entry));
+            let entries = [aeroplane("e", on)].map(entry);
+            let mut check = FlightReview::new(on, Sea, &entries);
             check.accept_assessment(&passed(on));
             check.result().current_through()
         };
@@ -320,7 +320,7 @@ mod tests {
         let earlier = assessed(
             "b",
             date!(2023 - 01 - 10),
-            1,
+            "e",
             AssessmentInformation {
                 check_type: Some(CheckType::FlightReview),
                 outcome: Some(CheckOutcome::Passed),
@@ -347,7 +347,7 @@ mod tests {
             let later = assessed(
                 "b",
                 on,
-                1,
+                "e",
                 AssessmentInformation {
                     check_type: Some(CheckType::FlightReview),
                     outcome: Some(CheckOutcome::Passed),
@@ -375,7 +375,7 @@ mod tests {
         let no_outcome = assessed(
             "a",
             ON,
-            1,
+            "e",
             AssessmentInformation {
                 check_type: Some(CheckType::FlightReview),
                 ..AssessmentInformation::default()
@@ -388,7 +388,7 @@ mod tests {
         let no_type = assessed(
             "a",
             ON,
-            1,
+            "e",
             AssessmentInformation {
                 outcome: Some(CheckOutcome::Passed),
                 ..AssessmentInformation::default()
@@ -404,7 +404,7 @@ mod tests {
     fn a_flight_test_is_passed_when_any_of_its_purposes_is() {
         use CheckOutcome::{Failed, Passed};
         use CheckPurpose::{InstrumentRating, MultiEngineAeroplaneClassRating as Class};
-        let test = |information| assessed("a", ON, 1, information);
+        let test = |information| assessed("a", ON, "e", information);
         let partly = test(flight_test(&[(Class, Passed), (InstrumentRating, Failed)]));
         assert!(result(Sea, &single_engine(), &[partly]).is_current());
         let failed = test(flight_test(&[(Class, Failed), (InstrumentRating, Failed)]));
@@ -426,7 +426,7 @@ mod tests {
         let review = assessed(
             "a",
             ON,
-            1,
+            "e",
             AssessmentInformation {
                 check_type: Some(CheckType::FlightReview),
                 outcome: Some(Failed),
@@ -437,7 +437,7 @@ mod tests {
         let test = assessed(
             "a",
             ON,
-            1,
+            "e",
             AssessmentInformation {
                 outcome: Some(Failed),
                 ..flight_test(&[(CheckPurpose::PrivatePilotLicence, Passed)])
@@ -460,14 +460,13 @@ mod tests {
     /// "In an aircraft of the class" (reg 61.745(2)(a)): a session in a
     /// device simulating one is not a flight.
     #[test]
-    fn a_session_is_not_taken_for_a_flight_of_the_same_id() {
-        // Both have the nil id.
+    fn a_check_in_a_session_does_not_count() {
         let session = simulated("s", ON, "C172");
         assert!(is_class_rating(&entry(session.clone()), Sea));
         let review = assessed(
             "a",
             ON,
-            0,
+            "s",
             AssessmentInformation {
                 check_type: Some(CheckType::FlightReview),
                 outcome: Some(CheckOutcome::Passed),
@@ -478,10 +477,10 @@ mod tests {
     }
 
     #[test]
-    fn a_check_counts_only_for_the_class_of_its_flights_aircraft() {
-        let multi_engine = [on_flight(1, flown("e", ON, "PA44"))];
-        let helicopter = [on_flight(1, flown("e", ON, "R44"))];
-        let unknown = [on_flight(1, unclassified("e", ON))];
+    fn a_check_counts_only_for_the_class_of_its_entrys_aircraft() {
+        let multi_engine = [flown("e", ON, "PA44")];
+        let helicopter = [flown("e", ON, "R44")];
+        let unknown = [unclassified("e", ON)];
         assert!(result(Sea, &single_engine(), &[passed(ON)]).is_current());
         assert!(!result(Mea, &single_engine(), &[passed(ON)]).is_current());
         assert!(result(Mea, &multi_engine, &[passed(ON)]).is_current());
@@ -493,10 +492,10 @@ mod tests {
     }
 
     #[test]
-    fn a_check_whose_flight_has_no_entry_does_not_count() {
+    fn a_check_whose_entry_is_not_given_does_not_count() {
         assert!(!result(Sea, &[], &[passed(ON)]).is_current());
-        let another_flight = [on_flight(2, aeroplane("e", ON))];
-        assert!(!result(Sea, &another_flight, &[passed(ON)]).is_current());
+        let another_entry = [aeroplane("f", ON)];
+        assert!(!result(Sea, &another_entry, &[passed(ON)]).is_current());
     }
 
     #[test]
