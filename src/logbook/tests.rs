@@ -157,6 +157,8 @@ fn a_type_counts_as_its_category_and_class(
 #[case(AirframeKind::LandPlane, 2, Some(("multi-engine-aeroplane", "multi-engine aeroplane class rating")))]
 #[case(AirframeKind::Helicopter, 1, Some(("single-engine-helicopter", "single-engine helicopter class rating")))]
 #[case(AirframeKind::Helicopter, 2, None)]
+#[case(AirframeKind::Gyrocopter, 1, Some(("single-engine-gyroplane", "single-engine gyroplane class rating")))]
+#[case(AirframeKind::Gyrocopter, 2, None)]
 #[case(AirframeKind::TiltRotor, 2, Some(("powered-lift-aircraft", "powered-lift aircraft class rating")))]
 #[case(AirframeKind::Airship, 2, Some(("airship-class", "airship class rating")))]
 #[case(AirframeKind::Glider, 0, None)]

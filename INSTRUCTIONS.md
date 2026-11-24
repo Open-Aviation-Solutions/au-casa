@@ -85,7 +85,10 @@ answers one such question:
   (`ratings_and_endorsements`, in `logbook::ratings_and_endorsements`: the
   class ratings, the design feature endorsements, and the instrument,
   private instrument and night VFR ratings; every term `classify` requires
-  is one of them, under the same id; type ratings are left to #101), which requirements it checks, each with a
+  is one of them, under the same id. The list is not yet every rating and
+  endorsement CASA issues, as the kernel's contract asks: the other
+  operational ratings and endorsements, and the type ratings (#101), are
+  not listed yet), which requirements it checks, each with a
   stable id, a name in its regulation's words, a description of what
   meets it, the noun its events are counted in, the key of the set its
   regulation sets it in and its kind (`requirements`; see "Currency

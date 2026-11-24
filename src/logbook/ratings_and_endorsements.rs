@@ -143,6 +143,48 @@ mod tests {
         assert_eq!(listed, expected);
     }
 
+    /// A class's place in [`CLASSES`] and a design feature's in
+    /// [`DesignFeature::ALL`]. Exhaustive, with no wildcard, so a variant
+    /// added does not compile until it is given a place here, which is
+    /// where it goes in its array; the test holds each array to them.
+    fn class_position(class: AircraftClassRating) -> usize {
+        use AircraftClassRating as C;
+        match class {
+            C::SingleEngineAeroplane => 0,
+            C::MultiEngineAeroplane => 1,
+            C::SingleEngineHelicopter => 2,
+            C::PoweredLiftAircraft => 3,
+            C::SingleEngineGyroplane => 4,
+            C::Airship => 5,
+        }
+    }
+
+    fn feature_position(feature: DesignFeature) -> usize {
+        use DesignFeature as F;
+        match feature {
+            F::TailwheelUndercarriage => 0,
+            F::RetractableUndercarriage => 1,
+            F::ManualPropellerPitchControl => 2,
+            F::GasTurbineEngine => 3,
+            F::MultiEngineCentreLineThrust => 4,
+            F::PressurisationSystem => 5,
+            F::Floatplane => 6,
+            F::FloatingHull => 7,
+            F::SkiLandingGear => 8,
+            F::FloatAlightingGear => 9,
+        }
+    }
+
+    #[test]
+    fn every_class_and_design_feature_is_in_its_place() {
+        for (at, class) in CLASSES.into_iter().enumerate() {
+            assert_eq!(class_position(class), at);
+        }
+        for (at, feature) in DesignFeature::ALL.into_iter().enumerate() {
+            assert_eq!(feature_position(feature), at);
+        }
+    }
+
     /// What the kernel says a host may rely on: no id is listed twice, none
     /// is also a title of licence's, and every term `classify` requires,
     /// for any description and characteristics, is listed as it is.

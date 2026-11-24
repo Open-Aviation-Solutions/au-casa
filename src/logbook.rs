@@ -233,6 +233,10 @@ impl LicensingAuthority for Casa {
     /// 61.755, and the instrument rating (reg 61.855), the private
     /// instrument rating (reg 61.910) and the night VFR rating (reg 61.955),
     /// in that order. Each is in Part 61's words, with a stable id.
+    ///
+    /// Not yet every one CASA issues, as the kernel asks: the other
+    /// operational ratings, the endorsements other than the design feature
+    /// endorsements, and the type ratings (#101) are not listed yet.
     fn ratings_and_endorsements(&self) -> Vec<Term> {
         ratings_and_endorsements::ratings_and_endorsements()
     }
