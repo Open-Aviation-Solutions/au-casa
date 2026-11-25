@@ -243,7 +243,11 @@ impl LicensingAuthority for Casa {
 
     /// Those whose regulation applies to the holder of a title, rating or
     /// endorsement in `held`: carrying a passenger (reg 61.395) for a title
-    /// with the aeroplane category rating, night VFR recency (reg 61.965)
+    /// with the aeroplane category rating, but at night (reg 61.395(2)) only
+    /// for one authorised to fly at night: the night VFR rating or the
+    /// instrument rating, or the multi-crew or air transport pilot licence
+    /// with the aeroplane category rating (table 61.375 item 3, reg
+    /// 61.375(8)), night VFR recency (reg 61.965)
     /// for the night VFR rating with such a title, instrument recency (regs
     /// 61.870(2), (6) and (7) and 61.875) for the instrument rating, reg
     /// 61.870(3) and the instrument proficiency checks for the instrument
