@@ -24,12 +24,17 @@ mod take_offs_and_landings;
 use logbook_shared_kernel::{
     run, run_assessments, AssessmentAccumulator, AssessmentCurrencyCheck, CurrencyCheck,
     CurrencyResult, EntryAccumulator, EventsNoun, LicensingAuthority, Logbook, Requirement,
-    RequirementId, RequirementKind,
+    RequirementId, RequirementKind, TermId,
 };
 use serde::Serialize;
+use std::collections::BTreeSet;
 use time::Date;
 
 use crate::aircraft::{AircraftCategory, AircraftClassRating};
+use crate::logbook::licence_titles::holds_pilot_licence_in;
+use crate::logbook::ratings_and_endorsements::{
+    class_rating_id, InstrumentEndorsement, INSTRUMENT_RATING, NIGHT_VFR_RATING,
+};
 use crate::logbook::{class_name, Casa};
 
 use flight_review::FlightReview;
@@ -380,6 +385,78 @@ impl CasaRequirement {
     }
 }
 
+impl CasaRequirement {
+    /// It, as the kernel describes a requirement.
+    fn built(self) -> Requirement {
+        let mut built = Requirement::new(
+            self.id(),
+            self.name(),
+            self.description(),
+            self.kind(),
+            self.regulation(),
+        );
+        if let Some(events) = self.events() {
+            built = built.with_events(events);
+        }
+        if let Some(set) = self.set() {
+            built = built.with_set(set);
+        }
+        built
+    }
+
+    /// Whether it applies to a pilot who holds `held`, the ids of their
+    /// titles of licence, ratings and endorsements. Each applies to the
+    /// holder its regulation names:
+    ///
+    /// - regs 61.395(1) and (2), to the holder of a pilot licence, here in
+    ///   an aeroplane, so of a title with the aeroplane category rating;
+    /// - reg 61.965(a), to the holder of a night VFR rating, in an aircraft
+    ///   of a particular category, here an aeroplane, so of the night VFR
+    ///   rating and a title with the aeroplane category rating;
+    /// - regs 61.870(2), (6) and (7) and 61.875, to the holder of an
+    ///   instrument rating;
+    /// - reg 61.870(3), for a category, and reg 61.880(1), to the holder of
+    ///   an instrument endorsement in that category (Part 1 of table 61.890),
+    ///   since without one the rating gives no privilege in it (reg
+    ///   61.865(1)); reg 61.880(2), for multi-engine aeroplanes or
+    ///   helicopters, to the holder of the multi-engine aeroplane or
+    ///   helicopter instrument endorsement;
+    /// - reg 61.870(4) and (5), to the holder of the IAP 2D or IAP 3D
+    ///   instrument endorsement (Part 2 of table 61.890, reg 61.865(2));
+    /// - reg 61.745, to the holder of its aircraft class rating.
+    fn applies_to(self, held: &BTreeSet<TermId>) -> bool {
+        use InstrumentEndorsement as E;
+        let holds = |id: &str| held.contains(&TermId::new(id));
+        let instrument_endorsement_in = |category| {
+            E::ALL.into_iter().any(|endorsement| {
+                endorsement.category() == Some(category) && holds(endorsement.id())
+            })
+        };
+        let aeroplane_licence = || holds_pilot_licence_in(held, AircraftCategory::Aeroplane);
+        match self {
+            Self::PassengerDay(_) | Self::PassengerNight(_) => aeroplane_licence(),
+            Self::NightVfr(_) => holds(NIGHT_VFR_RATING) && aeroplane_licence(),
+            Self::InstrumentApproaches
+            | Self::AzimuthGuidance
+            | Self::CourseDeviationIndicator
+            | Self::SinglePilotIfr => holds(INSTRUMENT_RATING),
+            Self::InstrumentApproachesInCategory(category)
+            | Self::InstrumentProficiencyCheck(ProficiencyCheckFor::Category(category)) => {
+                instrument_endorsement_in(category)
+            }
+            Self::InstrumentProficiencyCheck(ProficiencyCheckFor::MultiEngineAeroplanes) => {
+                holds(E::MultiEngineAeroplane.id())
+            }
+            Self::InstrumentProficiencyCheck(ProficiencyCheckFor::MultiEngineHelicopters) => {
+                holds(E::MultiEngineHelicopter.id())
+            }
+            Self::InstrumentApproaches2D => holds(E::Iap2D.id()),
+            Self::InstrumentApproaches3D => holds(E::Iap3D.id()),
+            Self::FlightReview(class) => holds(class_rating_id(class)),
+        }
+    }
+}
+
 /// `noun` after "a", or "an" before a vowel: "an aeroplane", "a
 /// single-engine aeroplane".
 fn with_article(noun: &str) -> String {
@@ -394,23 +471,18 @@ fn with_article(noun: &str) -> String {
 /// The requirements, in [`REQUIREMENTS`]' order.
 pub(super) fn requirements() -> Vec<Requirement> {
     REQUIREMENTS
-        .iter()
-        .map(|&requirement| {
-            let mut built = Requirement::new(
-                requirement.id(),
-                requirement.name(),
-                requirement.description(),
-                requirement.kind(),
-                requirement.regulation(),
-            );
-            if let Some(events) = requirement.events() {
-                built = built.with_events(events);
-            }
-            if let Some(set) = requirement.set() {
-                built = built.with_set(set);
-            }
-            built
-        })
+        .into_iter()
+        .map(CasaRequirement::built)
+        .collect()
+}
+
+/// The requirements that apply to a pilot who holds `held`, in
+/// [`REQUIREMENTS`]' order.
+pub(super) fn requirements_for(held: &BTreeSet<TermId>) -> Vec<Requirement> {
+    REQUIREMENTS
+        .into_iter()
+        .filter(|requirement| requirement.applies_to(held))
+        .map(CasaRequirement::built)
         .collect()
 }
 
@@ -620,6 +692,169 @@ mod tests {
             )
         });
         assert_eq!(checks, expected);
+    }
+
+    /// The ids of the requirements that apply to a pilot who holds `held`.
+    fn applying_to(held: &[&str]) -> Vec<String> {
+        let held: BTreeSet<TermId> = held.iter().map(|&id| TermId::new(id)).collect();
+        requirements_for(&held)
+            .into_iter()
+            .map(|requirement| requirement.id.as_str().to_owned())
+            .collect()
+    }
+
+    const PASSENGER: [&str; 4] = [
+        "61.395(1)(a)",
+        "61.395(1)(b)",
+        "61.395(2)(a)",
+        "61.395(2)(b)",
+    ];
+
+    /// Nothing held, nothing applies; nor for an id CASA does not issue.
+    #[test]
+    fn nothing_applies_for_nothing_held() {
+        assert!(applying_to(&[]).is_empty());
+        assert!(applying_to(&["airline-transport"]).is_empty());
+    }
+
+    /// Reg 61.395 for a title with the aeroplane category rating, whatever
+    /// the licence; not for another category, nor for the glider pilot
+    /// licence, which is not a pilot licence.
+    #[test]
+    fn carrying_a_passenger_applies_to_an_aeroplane_licence() {
+        for title in [
+            "recreational-aeroplane",
+            "private-aeroplane",
+            "commercial-aeroplane",
+            "multi-crew-aeroplane",
+            "air-transport-aeroplane",
+        ] {
+            assert_eq!(applying_to(&[title]), PASSENGER, "{title}");
+        }
+        for title in ["private-helicopter", "recreational-gyroplane", "glider"] {
+            assert!(applying_to(&[title]).is_empty(), "{title}");
+        }
+    }
+
+    /// Reg 61.965(a) for the night VFR rating with an aeroplane licence; not
+    /// for the rating alone, nor with another category's licence.
+    #[test]
+    fn night_vfr_recency_applies_to_the_rating_in_an_aeroplane() {
+        let night_vfr = ["61.965(a)(i)", "61.965(a)(ii)"];
+        assert_eq!(
+            applying_to(&["private-aeroplane", "night-vfr-rating"]),
+            [PASSENGER.as_slice(), &night_vfr].concat()
+        );
+        assert!(applying_to(&["night-vfr-rating"]).is_empty());
+        assert!(applying_to(&["private-helicopter", "night-vfr-rating"]).is_empty());
+    }
+
+    /// The instrument rating with only the single-engine aeroplane
+    /// instrument endorsement: instrument recency, reg 61.870(3) and the
+    /// instrument proficiency check for aeroplanes only, and neither 2D nor
+    /// 3D without their endorsements.
+    #[test]
+    fn the_instrument_rating_applies_in_its_endorsements_categories() {
+        assert_eq!(
+            applying_to(&[
+                "instrument-rating",
+                "single-engine-aeroplane-instrument-endorsement"
+            ]),
+            [
+                "61.870(2)",
+                "61.870(3)|aeroplane",
+                "61.870(6)",
+                "61.870(7)",
+                "61.875",
+                "61.880|aeroplane",
+            ]
+        );
+        assert_eq!(
+            applying_to(&["instrument-rating"]),
+            ["61.870(2)", "61.870(6)", "61.870(7)", "61.875"]
+        );
+    }
+
+    /// Each aircraft category or class instrument endorsement makes reg
+    /// 61.870(3) and the instrument proficiency check apply for its category,
+    /// and a multi-engine one the check for its multi-engine aircraft too.
+    #[test]
+    fn each_instrument_endorsement_applies_in_its_category() {
+        let cases = [
+            (
+                "single-engine-aeroplane-instrument-endorsement",
+                vec!["61.870(3)|aeroplane", "61.880|aeroplane"],
+            ),
+            (
+                "multi-engine-aeroplane-instrument-endorsement",
+                vec![
+                    "61.870(3)|aeroplane",
+                    "61.880|aeroplane",
+                    "61.880|multi-engine-aeroplane",
+                ],
+            ),
+            (
+                "single-engine-helicopter-instrument-endorsement",
+                vec!["61.870(3)|helicopter", "61.880|helicopter"],
+            ),
+            (
+                "multi-engine-helicopter-instrument-endorsement",
+                vec![
+                    "61.870(3)|helicopter",
+                    "61.880|helicopter",
+                    "61.880|multi-engine-helicopter",
+                ],
+            ),
+            (
+                "powered-lift-aircraft-instrument-endorsement",
+                vec!["61.870(3)|powered-lift", "61.880|powered-lift"],
+            ),
+            (
+                "gyroplane-instrument-endorsement",
+                vec!["61.870(3)|gyroplane", "61.880|gyroplane"],
+            ),
+            (
+                "airship-instrument-endorsement",
+                vec!["61.870(3)|airship", "61.880|airship"],
+            ),
+            ("iap-2d-instrument-endorsement", vec!["61.870(4)"]),
+            ("iap-3d-instrument-endorsement", vec!["61.870(5)"]),
+        ];
+        for (endorsement, expected) in cases {
+            assert_eq!(applying_to(&[endorsement]), expected, "{endorsement}");
+        }
+    }
+
+    /// A flight review for each aeroplane class rating held, and none for a
+    /// class rating CASA checks no flight review for.
+    #[test]
+    fn a_flight_review_applies_to_its_class_rating() {
+        assert_eq!(
+            applying_to(&["single-engine-aeroplane-class-rating"]),
+            ["61.745|single-engine-aeroplane"]
+        );
+        assert_eq!(
+            applying_to(&["multi-engine-aeroplane-class-rating"]),
+            ["61.745|multi-engine-aeroplane"]
+        );
+        assert!(applying_to(&["single-engine-helicopter-class-rating"]).is_empty());
+    }
+
+    /// Every requirement applies to someone, in the order listed.
+    #[test]
+    fn every_requirement_applies_to_its_holder_in_the_order_listed() {
+        let everything: Vec<String> = Casa::new()
+            .ratings_and_endorsements()
+            .into_iter()
+            .map(|term| term.id.as_str().to_owned())
+            .chain(["private-aeroplane".to_owned()])
+            .collect();
+        let everything: Vec<&str> = everything.iter().map(String::as_str).collect();
+        let all: Vec<String> = requirements()
+            .into_iter()
+            .map(|requirement| requirement.id.as_str().to_owned())
+            .collect();
+        assert_eq!(applying_to(&everything), all);
     }
 
     /// Each requirement's kind and set, by its regulation, and the wording

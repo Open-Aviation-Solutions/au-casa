@@ -14,30 +14,38 @@
 //! (`single-engine-aeroplane-class-rating`), but for the airship class
 //! rating, `airship-class-rating`, as the airship class's id is already
 //! `airship-class`. A design feature endorsement has its design feature's id
-//! (`tailwheel-undercarriage`). An operational rating's id is its Part 61
-//! name joined by `-` (`instrument-rating`, `night-vfr-rating`).
+//! (`tailwheel-undercarriage`). An operational rating's id, and an
+//! instrument endorsement's, is its Part 61 name in lower case joined by `-`
+//! (`instrument-rating`, `night-vfr-rating`,
+//! `single-engine-aeroplane-instrument-endorsement`,
+//! `iap-2d-instrument-endorsement`).
 
 use logbook_shared_kernel::Term;
 
 use super::{class_name, term};
-use crate::aircraft::{AircraftClassRating, DesignFeature};
+use crate::aircraft::{AircraftCategory, AircraftClassRating, DesignFeature};
 
 /// The ratings and endorsements CASA issues, in Part 61's order: the
 /// aircraft class ratings (Division 61.L.3, one for each class of reg
 /// 61.020(1)), the design feature endorsements (reg 61.755, one for each
-/// design feature), the instrument rating (Subpart 61.M), the private
-/// instrument rating (Subpart 61.N) and the night VFR rating (Subpart 61.O).
+/// design feature), the instrument rating (Subpart 61.M) and its instrument
+/// endorsements (table 61.890), the private instrument rating (Subpart 61.N)
+/// and the night VFR rating (Subpart 61.O).
 pub(crate) fn ratings_and_endorsements() -> Vec<Term> {
     // TODO(#101): type ratings are not listed yet.
     let class_ratings = CLASSES.into_iter().map(class_rating);
     let design_feature_endorsements = DesignFeature::ALL
         .into_iter()
         .map(design_feature_endorsement);
-    let operational_ratings = OPERATIONAL_RATINGS
+    let [instrument_rating, operational_ratings @ ..] =
+        OPERATIONAL_RATINGS.map(|(id, name)| term(id, name));
+    let instrument_endorsements = InstrumentEndorsement::ALL
         .into_iter()
-        .map(|(id, name)| term(id, name));
+        .map(|endorsement| term(endorsement.id(), endorsement.name()));
     class_ratings
         .chain(design_feature_endorsements)
+        .chain([instrument_rating])
+        .chain(instrument_endorsements)
         .chain(operational_ratings)
         .collect()
 }
@@ -54,7 +62,7 @@ pub(crate) fn class_rating(class: AircraftClassRating) -> Term {
 /// A class rating's stable id, which a host may keep: its class's id
 /// followed by `-class-rating`, but for the airship class's, whose class id
 /// already ends in `-class`.
-fn class_rating_id(class: AircraftClassRating) -> &'static str {
+pub(crate) fn class_rating_id(class: AircraftClassRating) -> &'static str {
     match class {
         AircraftClassRating::SingleEngineAeroplane => "single-engine-aeroplane-class-rating",
         AircraftClassRating::MultiEngineAeroplane => "multi-engine-aeroplane-class-rating",
@@ -85,10 +93,98 @@ const CLASSES: [AircraftClassRating; 6] = [
 /// pilot-logbook reports on, the instrument rating (reg 61.855), the private
 /// instrument rating (reg 61.910) and the night VFR rating (reg 61.955).
 const OPERATIONAL_RATINGS: [(&str, &str); 3] = [
-    ("instrument-rating", "instrument rating"),
+    (INSTRUMENT_RATING, "instrument rating"),
     ("private-instrument-rating", "private instrument rating"),
-    ("night-vfr-rating", "night VFR rating"),
+    (NIGHT_VFR_RATING, "night VFR rating"),
 ];
+
+/// The instrument rating's id.
+pub(crate) const INSTRUMENT_RATING: &str = "instrument-rating";
+
+/// The night VFR rating's id.
+pub(crate) const NIGHT_VFR_RATING: &str = "night-vfr-rating";
+
+/// The kinds of instrument endorsement (reg 61.890), on an instrument
+/// rating: Part 1 of table 61.890, the aircraft category and class
+/// endorsements, and Part 2, the instrument approach endorsements. The
+/// private instrument endorsements (table 61.935) are on the private
+/// instrument rating, and are not listed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum InstrumentEndorsement {
+    SingleEngineAeroplane,
+    MultiEngineAeroplane,
+    SingleEngineHelicopter,
+    MultiEngineHelicopter,
+    PoweredLiftAircraft,
+    Gyroplane,
+    Airship,
+    Iap2D,
+    Iap3D,
+}
+
+impl InstrumentEndorsement {
+    /// Each, in table 61.890's order.
+    pub(crate) const ALL: [Self; 9] = [
+        Self::SingleEngineAeroplane,
+        Self::MultiEngineAeroplane,
+        Self::SingleEngineHelicopter,
+        Self::MultiEngineHelicopter,
+        Self::PoweredLiftAircraft,
+        Self::Gyroplane,
+        Self::Airship,
+        Self::Iap2D,
+        Self::Iap3D,
+    ];
+
+    /// Its stable id, which a host may keep: its name in lower case, joined
+    /// by `-`.
+    pub(crate) fn id(self) -> &'static str {
+        match self {
+            Self::SingleEngineAeroplane => "single-engine-aeroplane-instrument-endorsement",
+            Self::MultiEngineAeroplane => "multi-engine-aeroplane-instrument-endorsement",
+            Self::SingleEngineHelicopter => "single-engine-helicopter-instrument-endorsement",
+            Self::MultiEngineHelicopter => "multi-engine-helicopter-instrument-endorsement",
+            Self::PoweredLiftAircraft => "powered-lift-aircraft-instrument-endorsement",
+            Self::Gyroplane => "gyroplane-instrument-endorsement",
+            Self::Airship => "airship-instrument-endorsement",
+            Self::Iap2D => "iap-2d-instrument-endorsement",
+            Self::Iap3D => "iap-3d-instrument-endorsement",
+        }
+    }
+
+    /// Its name, as column 1 of table 61.890 gives it.
+    fn name(self) -> &'static str {
+        match self {
+            Self::SingleEngineAeroplane => "single-engine aeroplane instrument endorsement",
+            Self::MultiEngineAeroplane => "multi-engine aeroplane instrument endorsement",
+            Self::SingleEngineHelicopter => "single-engine helicopter instrument endorsement",
+            Self::MultiEngineHelicopter => "multi-engine helicopter instrument endorsement",
+            Self::PoweredLiftAircraft => "powered-lift aircraft instrument endorsement",
+            Self::Gyroplane => "gyroplane instrument endorsement",
+            Self::Airship => "airship instrument endorsement",
+            Self::Iap2D => "IAP 2D instrument endorsement",
+            Self::Iap3D => "IAP 3D instrument endorsement",
+        }
+    }
+
+    /// The category of the aircraft it authorises its holder to pilot under
+    /// the IFR (column 2 of Part 1 of table 61.890); `None` for an
+    /// instrument approach endorsement (Part 2).
+    pub(crate) fn category(self) -> Option<AircraftCategory> {
+        match self {
+            Self::SingleEngineAeroplane | Self::MultiEngineAeroplane => {
+                Some(AircraftCategory::Aeroplane)
+            }
+            Self::SingleEngineHelicopter | Self::MultiEngineHelicopter => {
+                Some(AircraftCategory::Helicopter)
+            }
+            Self::PoweredLiftAircraft => Some(AircraftCategory::PoweredLift),
+            Self::Gyroplane => Some(AircraftCategory::Gyroplane),
+            Self::Airship => Some(AircraftCategory::Airship),
+            Self::Iap2D | Self::Iap3D => None,
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -151,6 +247,42 @@ mod tests {
             ("ski-landing-gear", "ski landing gear"),
             ("float-alighting-gear", "float alighting gear"),
             ("instrument-rating", "instrument rating"),
+            (
+                "single-engine-aeroplane-instrument-endorsement",
+                "single-engine aeroplane instrument endorsement",
+            ),
+            (
+                "multi-engine-aeroplane-instrument-endorsement",
+                "multi-engine aeroplane instrument endorsement",
+            ),
+            (
+                "single-engine-helicopter-instrument-endorsement",
+                "single-engine helicopter instrument endorsement",
+            ),
+            (
+                "multi-engine-helicopter-instrument-endorsement",
+                "multi-engine helicopter instrument endorsement",
+            ),
+            (
+                "powered-lift-aircraft-instrument-endorsement",
+                "powered-lift aircraft instrument endorsement",
+            ),
+            (
+                "gyroplane-instrument-endorsement",
+                "gyroplane instrument endorsement",
+            ),
+            (
+                "airship-instrument-endorsement",
+                "airship instrument endorsement",
+            ),
+            (
+                "iap-2d-instrument-endorsement",
+                "IAP 2D instrument endorsement",
+            ),
+            (
+                "iap-3d-instrument-endorsement",
+                "IAP 3D instrument endorsement",
+            ),
             ("private-instrument-rating", "private instrument rating"),
             ("night-vfr-rating", "night VFR rating"),
         ]

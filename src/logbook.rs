@@ -210,13 +210,15 @@ impl LicensingAuthority for Casa {
 
     /// The aircraft class ratings, one for each class of reg 61.020(1), the
     /// design feature endorsements, one for each design feature of reg
-    /// 61.755, and the instrument rating (reg 61.855), the private
-    /// instrument rating (reg 61.910) and the night VFR rating (reg 61.955),
-    /// in that order. Each is in Part 61's words, with a stable id.
+    /// 61.755, the instrument rating (reg 61.855) and its instrument
+    /// endorsements (table 61.890), the private instrument rating (reg
+    /// 61.910) and the night VFR rating (reg 61.955), in that order. Each is
+    /// in Part 61's words, with a stable id.
     ///
     /// Not yet every one CASA issues, as the kernel asks: the other
     /// operational ratings, the endorsements other than the design feature
-    /// endorsements, and the type ratings (#101) are not listed yet.
+    /// and instrument endorsements, and the type ratings (#101) are not
+    /// listed yet.
     fn ratings_and_endorsements(&self) -> Vec<Term> {
         ratings_and_endorsements::ratings_and_endorsements()
     }
@@ -237,6 +239,19 @@ impl LicensingAuthority for Casa {
     /// stable id and a name in its regulation's words.
     fn requirements(&self) -> Vec<Requirement> {
         currency::requirements()
+    }
+
+    /// Those whose regulation applies to the holder of a title, rating or
+    /// endorsement in `held`: carrying a passenger (reg 61.395) for a title
+    /// with the aeroplane category rating, night VFR recency (reg 61.965)
+    /// for the night VFR rating with such a title, instrument recency (regs
+    /// 61.870(2), (6) and (7) and 61.875) for the instrument rating, reg
+    /// 61.870(3) and the instrument proficiency checks for the instrument
+    /// endorsements (table 61.890) in their category or multi-engine class,
+    /// regs 61.870(4) and (5) for the IAP 2D and IAP 3D instrument
+    /// endorsements, and a flight review for its aircraft class rating.
+    fn requirements_for(&self, held: &BTreeSet<TermId>) -> Vec<Requirement> {
+        currency::requirements_for(held)
     }
 
     /// Each of [`requirements`](LicensingAuthority::requirements)' results

@@ -17,7 +17,7 @@ that are Australia's alone are kept here.
 
 ## Status
 
-Early: a `0.x` release. Take it by a caret range on its minor version (such as `"0.11"`): until `1.0`
+Early: a `0.x` release. Take it by a caret range on its minor version (such as `"0.13"`): until `1.0`
 a breaking release is a minor version (0.2 stopped re-exporting the aircraft
 description types; 0.3 moved to `icao-shared-kernel` 0.5; 0.4 counts every category in reg
 61.870's checks and adds reg 61.870(3) for each category; 0.5 moves to logbook-shared-kernel
@@ -31,7 +31,7 @@ takes `^0.1.3` and `^0.1.0`, `0.2.0` takes `^0.2.0` and `^0.1.0`, and `0.3.0`
 and `0.4.0` take `^0.5` and `^0.1.0`, with
 [logbook-shared-kernel](https://github.com/Open-Aviation-Solutions/logbook-shared-kernel)
 at `^0.2`, `0.5.0` takes it at `^0.5`, `0.6.0` and `0.7.0` at `^0.6`, and
-`0.8.0` at `^0.8`, `0.9.0` at `^0.9` and `0.10.0` and `0.11.0` at `^0.9.1`, and `0.11.1` at `^0.9.2`, and `0.12.0` at `^0.10.0`; `0.9.0` to `0.12.0` take icao-shared-kernel at `^0.6`.
+`0.8.0` at `^0.8`, `0.9.0` at `^0.9` and `0.10.0` and `0.11.0` at `^0.9.1`, and `0.11.1` at `^0.9.2`, and `0.12.0` at `^0.10.0`, and `0.13.0` at `^0.11.0`; `0.9.0` to `0.13.0` take icao-shared-kernel at `^0.6`.
 
 What is covered:
 
@@ -64,8 +64,12 @@ What is covered:
   for CASA. It says which entries count (a session only in an approved flight
   simulation training device, reg 61.010), what a type counts as, the
   recency and currency requirements of regs 61.395, 61.745, 61.870, 61.875,
-  61.880 and 61.965 and the pilot's currency against them, CASA's own totals,
-  the titles of licence it issues, each with an id, and its minimum ages,
+  61.880 and 61.965, which of them apply to the titles, ratings and
+  endorsements a pilot holds, and the pilot's currency against them, CASA's
+  own totals, the titles of licence it issues, each with an id, its ratings
+  and endorsements (the class ratings, the design feature endorsements, the
+  instrument rating and its instrument endorsements, the private instrument
+  rating and the night VFR rating), and its minimum ages,
   and the questions CASA asks about an entry and an assessment, with the
   problems with their answers (such as reg 61.095(3)(b)'s "not receiving
   flight training"). CASA's answers are kept as its information on an entry
@@ -117,19 +121,19 @@ and what they fly.
 
 Add it from crates.io, with the kernel at a version it accepts. au-casa takes
 the kernel at a matching `0.x` minor (au-casa `0.1.x` with kernel `0.1.x`,
-`0.2.x` with `0.2.x`, `0.3.x` to `0.8.x` with `0.5.x`, `0.9.x` to `0.12.x` with `0.6.x`); mixing them builds two copies of `LicenceTitle`. From `0.3`, `Casa`
+`0.2.x` with `0.2.x`, `0.3.x` to `0.8.x` with `0.5.x`, `0.9.x` to `0.13.x` with `0.6.x`); mixing them builds two copies of `LicenceTitle`. From `0.3`, `Casa`
 implements logbook-shared-kernel's `LicensingAuthority`, so a consumer takes
 that crate at the minor au-casa takes too (`0.2` for au-casa `0.3` and `0.4`, `0.5` for
-au-casa `0.5`, `0.6` for `0.6` and `0.7`, `0.8` for `0.8`, `0.9` for `0.9`, and `0.9.1` for `0.10` and `0.11.0`, and `0.9.2` for `0.11.1`, and `0.10` for `0.12`): with another,
+au-casa `0.5`, `0.6` for `0.6` and `0.7`, `0.8` for `0.8`, `0.9` for `0.9`, and `0.9.1` for `0.10` and `0.11.0`, and `0.9.2` for `0.11.1`, and `0.10` for `0.12`, and `0.11` for `0.13`): with another,
 `Casa` implements a different trait from the one the consumer names. The
 published set is:
 
 ```toml
 [dependencies]
-au-casa = "0.12"
+au-casa = "0.13"
 aircraft-type-descriptions = "0.1.0"
 icao-shared-kernel = "0.6"
-logbook-shared-kernel = "0.10"
+logbook-shared-kernel = "0.11"
 ```
 
 The aircraft description types (`AircraftDescription`, `AirframeKind`,
