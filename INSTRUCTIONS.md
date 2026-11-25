@@ -91,8 +91,9 @@ answers one such question:
   operational ratings and endorsements, and the type ratings (#101), are
   not listed yet), which requirements it checks, each with a
   stable id, a name in its regulation's words, a description of what
-  meets it, the noun its events are counted in, the key of the set its
-  regulation sets it in and its kind (`requirements`; see "Currency
+  meets it, the noun its events are counted in, the set its
+  regulation sets it in (a key, a name and a description, equal on every
+  member, which apply together) and its kind (`requirements`; see "Currency
   checks"), which of them apply to what a pilot holds (`requirements_for`), the
   pilot's currency against them (`currency`), and CASA's own totals
   (`totals`, over the entries that count, each with a stable id and the
@@ -278,7 +279,7 @@ to the trait.
   groups a flight's entries, asserts the same result for both orders.
 
 `icao-shared-kernel`, logbook-shared-kernel and aircraft-type-descriptions
-are taken by a caret range (`^0.6`, `^0.11.0` and `^0.1.0`), not pinned exactly
+are taken by a caret range (`^0.6`, `^0.12.0` and `^0.1.0`), not pinned exactly
 (au-casa#24): sibling country crates (nz-caa and the like) depend on them
 too, and a consumer such as a logbook imports several at once. Exact pins on
 different patches cannot be resolved together; with caret ranges Cargo builds
@@ -470,7 +471,7 @@ Breaking includes a change to the API; a change to the Part 61 reading
 that changes an existing designator's category, class or design features, or
 a title of licence's Part 61 term; and a requirement added or removed, or a
 change to what makes an existing one current. Consumers take au-casa by a
-caret range on the current minor (such as `^0.13.0`), so a `cargo update` takes up patches but not a breaking release,
+caret range on the current minor (such as `^0.14.0`), so a `cargo update` takes up patches but not a breaking release,
 which they move to on purpose.
 
 ## Commands
