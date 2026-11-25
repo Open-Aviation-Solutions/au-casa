@@ -248,7 +248,8 @@ to the trait.
   the glider pilot licence is not a pilot licence. Reg 61.395(2) (a
   passenger at night) is listed only for a pilot who may fly an aeroplane at
   night too (au-casa#110): the night VFR rating or the instrument rating
-  (table 61.375 item 3, reg 61.855(b)), or the multi-crew or air transport
+  with an aeroplane instrument endorsement (table 61.375 item 3, regs
+  61.855(b) and 61.865(1)), or the multi-crew or air transport
   pilot licence with the aeroplane category rating (reg 61.375(8)(a)(ii),
   (b)(ii)); without one it is left out, as reg 61.965 is without the night
   VFR rating, and reg 61.395(1) is unchanged. The instrument rating

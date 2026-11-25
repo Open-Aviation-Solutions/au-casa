@@ -411,8 +411,9 @@ impl CasaRequirement {
     /// - reg 61.395(1), to the holder of a pilot licence, here in an
     ///   aeroplane, so of a title with the aeroplane category rating;
     /// - reg 61.395(2), to such a holder who may also fly an aeroplane at
-    ///   night: one with the night VFR rating or the instrument rating
-    ///   (table 61.375 item 3, reg 61.375(7); reg 61.855(b)), or the
+    ///   night: one with the night VFR rating or the instrument rating with
+    ///   an aeroplane instrument endorsement (table 61.375 item 3, reg
+    ///   61.375(7); regs 61.855(b), 61.865(1)), or the
     ///   multi-crew or air transport pilot licence with the aeroplane
     ///   category rating (reg 61.375(8)(a)(ii), (b)(ii)); a pilot licence
     ///   alone does not authorise it;
@@ -441,12 +442,14 @@ impl CasaRequirement {
         let aeroplane_licence = || holds_pilot_licence_in(held, AircraftCategory::Aeroplane);
         // Table 61.375 item 3: an operation at night under the VFR needs the
         // night VFR rating or an instrument rating (reg 61.855(b) gives the
-        // instrument rating's privilege); reg 61.375(8)(a)(ii) and (b)(ii)
+        // instrument rating's privilege, in an aircraft only with its
+        // instrument endorsement, reg 61.865(1), so here the aeroplane
+        // one); reg 61.375(8)(a)(ii) and (b)(ii)
         // need neither for the multi-crew and air transport pilot licences
         // with the aeroplane category rating.
         let authorised_at_night = || {
             holds(NIGHT_VFR_RATING)
-                || holds(INSTRUMENT_RATING)
+                || instrument_endorsement_in(AircraftCategory::Aeroplane)
                 || holds("multi-crew-aeroplane")
                 || holds("air-transport-aeroplane")
         };
@@ -778,20 +781,31 @@ mod tests {
         }
     }
 
-    /// Reg 61.395(2) for a pilot licence with the night VFR rating or the
-    /// instrument rating (table 61.375 item 3, reg 61.855(b)), and not
-    /// without one, nor for either rating without a pilot licence in an
-    /// aeroplane.
+    /// Reg 61.395(2) for a pilot licence with the night VFR rating, or the
+    /// instrument rating with an aeroplane instrument endorsement (table
+    /// 61.375 item 3, regs 61.855(b), 61.865(1)); not without one, nor for
+    /// the bare instrument rating or one with only a helicopter endorsement,
+    /// nor for the night VFR rating without a pilot licence in an aeroplane.
     #[test]
     fn carrying_a_passenger_at_night_applies_to_a_pilot_authorised_at_night() {
-        for rating in ["night-vfr-rating", "instrument-rating"] {
-            let held = applying_to(&["private-aeroplane", rating]);
-            assert!(held.contains(&"61.395(2)(a)".to_owned()), "{rating}");
-            assert!(held.contains(&"61.395(2)(b)".to_owned()), "{rating}");
-        }
-        let held = applying_to(&["private-aeroplane"]);
-        assert!(!held.iter().any(|id| id.starts_with("61.395(2)")));
-        assert!(held.contains(&"61.395(1)(a)".to_owned()));
+        let night = |held: &[&str]| {
+            applying_to(held)
+                .iter()
+                .any(|id| id.starts_with("61.395(2)"))
+        };
+        assert!(night(&["private-aeroplane", "night-vfr-rating"]));
+        assert!(night(&[
+            "private-aeroplane",
+            "single-engine-aeroplane-instrument-endorsement"
+        ]));
+        assert!(!night(&["private-aeroplane"]));
+        assert!(!night(&["private-aeroplane", "instrument-rating"]));
+        assert!(!night(&[
+            "private-aeroplane",
+            "private-helicopter",
+            "single-engine-helicopter-instrument-endorsement"
+        ]));
+        assert!(applying_to(&["private-aeroplane"]).contains(&"61.395(1)(a)".to_owned()));
         assert!(applying_to(&["private-helicopter", "night-vfr-rating"]).is_empty());
     }
 
