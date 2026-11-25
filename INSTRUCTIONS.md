@@ -265,9 +265,12 @@ to the trait.
   moved here as the owner reviewed them, and reg 61.870(3)'s the owner's
   on au-casa#96. Its `events` noun, both forms, is given for the take-offs,
   landings and operations regs 61.395, 61.965 and 61.870 count. Its `set`
-  is the provision that sets it together with others, for reg 61.395(1)'s
-  and (2)'s paragraphs and reg 61.965(a)'s (`61.395(1)`, `61.965(a)`); the
-  kernel calls it opaque, so a host groups by it and does not read it. Its
+  is for reg 61.395(1)'s and (2)'s paragraphs and reg 61.965(a)'s: a key (the
+  provision that sets them together, `61.395(1)`, `61.965(a)`; the kernel
+  calls it opaque, so a host groups by it and does not read it), a name and
+  a description in CASA's words (au-casa#109), equal on every member, which
+  nothing in the kernel checks and au-casa's test does. A set's members
+  apply together, all or none (`applies_to` chooses by kind alone). Its
   kind is recent experience (regs 61.395, 61.870, 61.875 and 61.965) or a
   periodic assessment (regs 61.745 and 61.880).
 - **Testing:** each check's unit tests assert its boundaries (the window's

@@ -362,17 +362,17 @@ impl CasaRequirement {
             Self::PassengerDay(_) => (
                 "61.395(1)",
                 "Carrying a passenger by day in an aeroplane",
-                "3 take-offs and 3 landings, by day or night, in the past 90 days",
+                "At least 3 take-offs and 3 landings, by day or night, in the past 90 days",
             ),
             Self::PassengerNight(_) => (
                 "61.395(2)",
                 "Carrying a passenger at night in an aeroplane",
-                "3 night take-offs and 3 night landings in the past 90 days",
+                "At least 3 night take-offs and 3 night landings in the past 90 days",
             ),
             Self::NightVfr(_) => (
                 "61.965(a)",
                 "Recent experience for the night VFR rating in an aeroplane",
-                "1 night take-off and 1 night landing in the past 6 months",
+                "At least 1 night take-off and 1 night landing in the past 6 months",
             ),
             _ => return None,
         };
@@ -770,6 +770,17 @@ mod tests {
             vec!["private-helicopter", "night-vfr-rating"],
         ] {
             let applying = requirements_for(&held_by(&held));
+            if held == ["private-aeroplane", "night-vfr-rating"] {
+                // Not vacuous: this holder is given every member of every set.
+                for key in &keys {
+                    assert_eq!(
+                        members_of(key, &applying),
+                        members_of(key, &everything),
+                        "{key}"
+                    );
+                    assert_eq!(members_of(key, &applying), 2, "{key}");
+                }
+            }
             for key in &keys {
                 let count = members_of(key, &applying);
                 assert!(
@@ -988,17 +999,17 @@ mod tests {
                 (
                     "61.395(1)",
                     "Carrying a passenger by day in an aeroplane",
-                    "3 take-offs and 3 landings, by day or night, in the past 90 days",
+                    "At least 3 take-offs and 3 landings, by day or night, in the past 90 days",
                 ),
                 (
                     "61.395(2)",
                     "Carrying a passenger at night in an aeroplane",
-                    "3 night take-offs and 3 night landings in the past 90 days",
+                    "At least 3 night take-offs and 3 night landings in the past 90 days",
                 ),
                 (
                     "61.965(a)",
                     "Recent experience for the night VFR rating in an aeroplane",
-                    "1 night take-off and 1 night landing in the past 6 months",
+                    "At least 1 night take-off and 1 night landing in the past 6 months",
                 ),
             ]
             .into_iter()
