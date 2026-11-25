@@ -24,7 +24,7 @@ mod take_offs_and_landings;
 use logbook_shared_kernel::{
     run, run_assessments, AssessmentAccumulator, AssessmentCurrencyCheck, CurrencyCheck,
     CurrencyResult, EntryAccumulator, EventsNoun, LicensingAuthority, Logbook, Requirement,
-    RequirementId, RequirementKind, TermId,
+    RequirementId, RequirementKind, RequirementSet, TermId,
 };
 use serde::Serialize;
 use std::collections::BTreeSet;
@@ -350,17 +350,33 @@ impl CasaRequirement {
         }
     }
 
-    /// The key it shares with the requirements its regulation sets with it:
-    /// the provision that sets them, for the take-offs and landings of regs
-    /// 61.395(1) and (2) and of reg 61.965(a) (`61.395(1)`, `61.965(a)`);
-    /// `None` for the others, each set on its own.
-    fn set(self) -> Option<&'static str> {
-        match self {
-            Self::PassengerDay(_) => Some("61.395(1)"),
-            Self::PassengerNight(_) => Some("61.395(2)"),
-            Self::NightVfr(_) => Some("61.965(a)"),
-            _ => None,
-        }
+    /// The set its regulation sets it with the others in, `None` for the
+    /// others, each set on its own: for the take-offs and landings of regs
+    /// 61.395(1) and (2) and of reg 61.965(a), the provision that sets them
+    /// as its key (`61.395(1)`, `61.965(a)`), and a name and description in
+    /// the members' words, which every member carries equal (au-casa#109).
+    /// The members apply together, since each is chosen by its kind alone
+    /// (`applies_to`).
+    fn set(self) -> Option<RequirementSet> {
+        let (key, name, description) = match self {
+            Self::PassengerDay(_) => (
+                "61.395(1)",
+                "Carrying a passenger by day in an aeroplane",
+                "At least 3 take-offs and 3 landings, by day or night, in the past 90 days",
+            ),
+            Self::PassengerNight(_) => (
+                "61.395(2)",
+                "Carrying a passenger at night in an aeroplane",
+                "At least 3 night take-offs and 3 night landings in the past 90 days",
+            ),
+            Self::NightVfr(_) => (
+                "61.965(a)",
+                "Recent experience for the night VFR rating in an aeroplane",
+                "At least 1 night take-off and 1 night landing in the past 6 months",
+            ),
+            _ => return None,
+        };
+        Some(RequirementSet::new(key, name, description))
     }
 
     /// Recent experience (regs 61.395, 61.870, 61.875 and 61.965), or a
@@ -752,6 +768,52 @@ mod tests {
         "61.395(2)(b)",
     ];
 
+    /// A set's members apply together, all or none, whatever is held.
+    #[test]
+    fn a_sets_members_apply_together() {
+        let everything = requirements();
+        let members_of = |key: &str, among: &[Requirement]| {
+            among
+                .iter()
+                .filter(|requirement| requirement.set.as_ref().is_some_and(|set| set.key == key))
+                .count()
+        };
+        let keys: BTreeSet<String> = everything
+            .iter()
+            .filter_map(|requirement| requirement.set.as_ref().map(|set| set.key.clone()))
+            .collect();
+        let held_by = |held: &[&str]| -> BTreeSet<TermId> {
+            held.iter().map(|&id| TermId::new(id)).collect()
+        };
+        for held in [
+            vec![],
+            vec!["private-aeroplane"],
+            vec!["night-vfr-rating"],
+            vec!["private-aeroplane", "night-vfr-rating"],
+            vec!["private-helicopter", "night-vfr-rating"],
+        ] {
+            let applying = requirements_for(&held_by(&held));
+            if held == ["private-aeroplane", "night-vfr-rating"] {
+                // Not vacuous: this holder is given every member of every set.
+                for key in &keys {
+                    assert_eq!(
+                        members_of(key, &applying),
+                        members_of(key, &everything),
+                        "{key}"
+                    );
+                    assert_eq!(members_of(key, &applying), 2, "{key}");
+                }
+            }
+            for key in &keys {
+                let count = members_of(key, &applying);
+                assert!(
+                    count == 0 || count == members_of(key, &everything),
+                    "{key} with {held:?}"
+                );
+            }
+        }
+    }
+
     /// Nothing held, nothing applies; nor for an id CASA does not issue.
     #[test]
     fn nothing_applies_for_nothing_held() {
@@ -987,15 +1049,35 @@ mod tests {
                 RequirementKind::RecentExperience
             };
             assert_eq!(requirement.kind, kind, "{}", requirement.id.as_str());
-            let set = ["61.395(1)", "61.395(2)", "61.965(a)"]
-                .into_iter()
-                .find(|set| requirement.id.as_str().starts_with(&format!("{set}(")));
-            assert_eq!(
-                requirement.set.as_deref(),
-                set,
-                "{}",
-                requirement.id.as_str()
-            );
+            let set = [
+                (
+                    "61.395(1)",
+                    "Carrying a passenger by day in an aeroplane",
+                    "At least 3 take-offs and 3 landings, by day or night, in the past 90 days",
+                ),
+                (
+                    "61.395(2)",
+                    "Carrying a passenger at night in an aeroplane",
+                    "At least 3 night take-offs and 3 night landings in the past 90 days",
+                ),
+                (
+                    "61.965(a)",
+                    "Recent experience for the night VFR rating in an aeroplane",
+                    "At least 1 night take-off and 1 night landing in the past 6 months",
+                ),
+            ]
+            .into_iter()
+            .find(|(key, ..)| requirement.id.as_str().starts_with(&format!("{key}(")))
+            .map(|(key, name, description)| RequirementSet::new(key, name, description));
+            assert_eq!(requirement.set, set, "{}", requirement.id.as_str());
+            // Each member's own name begins with its set's name.
+            if let Some(set) = &requirement.set {
+                assert!(
+                    requirement.name.starts_with(&format!("{}: ", set.name)),
+                    "{}",
+                    requirement.id.as_str()
+                );
+            }
         }
         let by_id = |id: &str| {
             requirements()

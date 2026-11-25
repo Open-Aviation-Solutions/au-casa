@@ -91,8 +91,9 @@ answers one such question:
   operational ratings and endorsements, and the type ratings (#101), are
   not listed yet), which requirements it checks, each with a
   stable id, a name in its regulation's words, a description of what
-  meets it, the noun its events are counted in, the key of the set its
-  regulation sets it in and its kind (`requirements`; see "Currency
+  meets it, the noun its events are counted in, the set its
+  regulation sets it in (a key, a name and a description, equal on every
+  member, which apply together) and its kind (`requirements`; see "Currency
   checks"), which of them apply to what a pilot holds (`requirements_for`), the
   pilot's currency against them (`currency`), and CASA's own totals
   (`totals`, over the entries that count, each with a stable id and the
@@ -271,9 +272,12 @@ to the trait.
   moved here as the owner reviewed them, and reg 61.870(3)'s the owner's
   on au-casa#96. Its `events` noun, both forms, is given for the take-offs,
   landings and operations regs 61.395, 61.965 and 61.870 count. Its `set`
-  is the provision that sets it together with others, for reg 61.395(1)'s
-  and (2)'s paragraphs and reg 61.965(a)'s (`61.395(1)`, `61.965(a)`); the
-  kernel calls it opaque, so a host groups by it and does not read it. Its
+  is for reg 61.395(1)'s and (2)'s paragraphs and reg 61.965(a)'s: a key (the
+  provision that sets them together, `61.395(1)`, `61.965(a)`; the kernel
+  calls it opaque, so a host groups by it and does not read it), a name and
+  a description in CASA's words (au-casa#109), equal on every member, which
+  nothing in the kernel checks and au-casa's test does. A set's members
+  apply together, all or none (`applies_to` chooses by kind alone). Its
   kind is recent experience (regs 61.395, 61.870, 61.875 and 61.965) or a
   periodic assessment (regs 61.745 and 61.880).
 - **Testing:** each check's unit tests assert its boundaries (the window's
@@ -285,7 +289,7 @@ to the trait.
   groups a flight's entries, asserts the same result for both orders.
 
 `icao-shared-kernel`, logbook-shared-kernel and aircraft-type-descriptions
-are taken by a caret range (`^0.6`, `^0.11.0` and `^0.1.0`), not pinned exactly
+are taken by a caret range (`^0.6`, `^0.12.0` and `^0.1.0`), not pinned exactly
 (au-casa#24): sibling country crates (nz-caa and the like) depend on them
 too, and a consumer such as a logbook imports several at once. Exact pins on
 different patches cannot be resolved together; with caret ranges Cargo builds
@@ -477,7 +481,7 @@ Breaking includes a change to the API; a change to the Part 61 reading
 that changes an existing designator's category, class or design features, or
 a title of licence's Part 61 term; and a requirement added or removed, or a
 change to what makes an existing one current. Consumers take au-casa by a
-caret range on the current minor (such as `^0.13.0`), so a `cargo update` takes up patches but not a breaking release,
+caret range on the current minor (such as `^0.14.0`), so a `cargo update` takes up patches but not a breaking release,
 which they move to on purpose.
 
 ## Commands
