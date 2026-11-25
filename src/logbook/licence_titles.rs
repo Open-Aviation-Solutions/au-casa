@@ -20,12 +20,15 @@
 //! kernel's `LicenceTitle`. A pair belongs to one licence and one category
 //! rating, so no two titles share an id.
 
+use std::collections::BTreeSet;
+
 use icao_shared_kernel::{
     AirlineTransportCategory, LicenceTitle, MinimumAges, PrivateOrCommercialCategory,
 };
 use logbook_shared_kernel::{LicenceTitleTerm, Term, TermId};
 
 use super::category_id;
+use crate::aircraft::AircraftCategory;
 use crate::licence::{part61_term, FlightCrewLicence, NationalTitle, Part61Term};
 
 /// Every title of licence CASA issues: Annex 1's, each under its Part 61 name
@@ -44,6 +47,20 @@ pub(crate) fn licence_titles() -> Vec<LicenceTitleTerm> {
             minimum_age: title.minimum_age(),
         });
     annex_1.chain(national).collect()
+}
+
+/// Whether `held` holds a pilot licence with the category rating for
+/// `category`: a title of licence, by its id, of a pilot licence (reg
+/// 61.010, which the glider pilot licence is not) whose category rating it
+/// is.
+pub(crate) fn holds_pilot_licence_in(held: &BTreeSet<TermId>, category: AircraftCategory) -> bool {
+    let annex_1 = ANNEX_1_TITLES.into_iter().filter_map(part61_term);
+    let national = NATIONAL_TITLES.into_iter().map(NationalTitle::part61_term);
+    annex_1.chain(national).any(|part61| {
+        part61.licence.is_pilot_licence()
+            && part61.category_rating == Some(category)
+            && held.contains(&term(part61).id)
+    })
 }
 
 /// CASA's minimum ages for Annex 1's titles: Annex 1's own. Private 17 (reg
