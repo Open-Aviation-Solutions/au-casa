@@ -477,13 +477,32 @@ pub(super) fn requirements() -> Vec<Requirement> {
 }
 
 /// The requirements that apply to a pilot who holds `held`, in
-/// [`REQUIREMENTS`]' order.
+/// [`REQUIREMENTS`]' order, with what it implies they hold too.
 pub(super) fn requirements_for(held: &BTreeSet<TermId>) -> Vec<Requirement> {
+    let held = with_implied(held);
     REQUIREMENTS
         .into_iter()
-        .filter(|requirement| requirement.applies_to(held))
+        .filter(|requirement| requirement.applies_to(&held))
         .map(CasaRequirement::built)
         .collect()
+}
+
+/// `held`, with what holding it implies: an instrument endorsement of table
+/// 61.890 the instrument rating, which its applicant must hold (reg
+/// 61.905(1)(a)), and the IAP 3D instrument endorsement the IAP 2D one,
+/// which its applicant must hold (item 9 of table 61.890, column 3, under
+/// reg 61.905(1)(b)). So a pilot who records an endorsement and not what it
+/// is granted on is not given only some of the rows it implies.
+fn with_implied(held: &BTreeSet<TermId>) -> BTreeSet<TermId> {
+    let holds = |endorsement: InstrumentEndorsement| held.contains(&TermId::new(endorsement.id()));
+    let mut implied = held.clone();
+    if InstrumentEndorsement::ALL.into_iter().any(holds) {
+        implied.insert(TermId::new(INSTRUMENT_RATING));
+    }
+    if holds(InstrumentEndorsement::Iap3D) {
+        implied.insert(TermId::new(InstrumentEndorsement::Iap2D.id()));
+    }
+    implied
 }
 
 /// Each requirement's result on `as_of`, each paired with its requirement
@@ -775,9 +794,14 @@ mod tests {
         );
     }
 
+    /// The instrument rating's own rows, which any instrument endorsement
+    /// implies.
+    const INSTRUMENT_RATING_ROWS: [&str; 4] = ["61.870(2)", "61.870(6)", "61.870(7)", "61.875"];
+
     /// Each aircraft category or class instrument endorsement makes reg
     /// 61.870(3) and the instrument proficiency check apply for its category,
-    /// and a multi-engine one the check for its multi-engine aircraft too.
+    /// and a multi-engine one the check for its multi-engine aircraft too,
+    /// besides the instrument rating's rows.
     #[test]
     fn each_instrument_endorsement_applies_in_its_category() {
         let cases = [
@@ -818,11 +842,51 @@ mod tests {
                 vec!["61.870(3)|airship", "61.880|airship"],
             ),
             ("iap-2d-instrument-endorsement", vec!["61.870(4)"]),
-            ("iap-3d-instrument-endorsement", vec!["61.870(5)"]),
+            (
+                "iap-3d-instrument-endorsement",
+                vec!["61.870(4)", "61.870(5)"],
+            ),
         ];
         for (endorsement, expected) in cases {
-            assert_eq!(applying_to(&[endorsement]), expected, "{endorsement}");
+            let applying = applying_to(&[endorsement]);
+            let (rating, own): (Vec<_>, Vec<_>) = applying
+                .iter()
+                .partition(|id| INSTRUMENT_RATING_ROWS.contains(&id.as_str()));
+            assert_eq!(rating, INSTRUMENT_RATING_ROWS, "{endorsement}");
+            assert_eq!(own, expected, "{endorsement}");
         }
+    }
+
+    /// An endorsement recorded without the instrument rating implies it, and
+    /// the IAP 3D instrument endorsement without the IAP 2D one implies that.
+    #[test]
+    fn an_endorsement_implies_what_it_is_granted_on() {
+        assert_eq!(
+            applying_to(&[
+                "single-engine-aeroplane-instrument-endorsement",
+                "iap-2d-instrument-endorsement"
+            ]),
+            [
+                "61.870(2)",
+                "61.870(3)|aeroplane",
+                "61.870(4)",
+                "61.870(6)",
+                "61.870(7)",
+                "61.875",
+                "61.880|aeroplane",
+            ]
+        );
+        assert_eq!(
+            applying_to(&["instrument-rating", "iap-3d-instrument-endorsement"]),
+            [
+                "61.870(2)",
+                "61.870(4)",
+                "61.870(5)",
+                "61.870(6)",
+                "61.870(7)",
+                "61.875",
+            ]
+        );
     }
 
     /// A flight review for each aeroplane class rating held, and none for a

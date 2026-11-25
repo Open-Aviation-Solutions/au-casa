@@ -292,8 +292,9 @@ mod tests {
         assert_eq!(listed, expected);
     }
 
-    /// A class's place in [`CLASSES`] and a design feature's in
-    /// [`DesignFeature::ALL`]. Exhaustive, with no wildcard, so a variant
+    /// A class's place in [`CLASSES`], a design feature's in
+    /// [`DesignFeature::ALL`] and an instrument endorsement's in
+    /// [`InstrumentEndorsement::ALL`]. Exhaustive, with no wildcard, so a variant
     /// added does not compile until it is given a place here, which is
     /// where it goes in its array; the test holds each array to them.
     fn class_position(class: AircraftClassRating) -> usize {
@@ -324,13 +325,31 @@ mod tests {
         }
     }
 
+    fn instrument_endorsement_position(endorsement: InstrumentEndorsement) -> usize {
+        use InstrumentEndorsement as E;
+        match endorsement {
+            E::SingleEngineAeroplane => 0,
+            E::MultiEngineAeroplane => 1,
+            E::SingleEngineHelicopter => 2,
+            E::MultiEngineHelicopter => 3,
+            E::PoweredLiftAircraft => 4,
+            E::Gyroplane => 5,
+            E::Airship => 6,
+            E::Iap2D => 7,
+            E::Iap3D => 8,
+        }
+    }
+
     #[test]
-    fn every_class_and_design_feature_is_in_its_place() {
+    fn every_class_design_feature_and_instrument_endorsement_is_in_its_place() {
         for (at, class) in CLASSES.into_iter().enumerate() {
             assert_eq!(class_position(class), at);
         }
         for (at, feature) in DesignFeature::ALL.into_iter().enumerate() {
             assert_eq!(feature_position(feature), at);
+        }
+        for (at, endorsement) in InstrumentEndorsement::ALL.into_iter().enumerate() {
+            assert_eq!(instrument_endorsement_position(endorsement), at);
         }
     }
 

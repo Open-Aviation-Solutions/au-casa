@@ -251,7 +251,11 @@ to the trait.
   aircraft category and class endorsements held (Part 1 of table 61.890), the
   multi-engine checks for the multi-engine ones only, and reg 61.870(4) and
   (5) for the IAP 2D and IAP 3D instrument endorsements; regs 61.870(2), (6)
-  and (7) and 61.875 apply for the rating. A flight review applies for its
+  and (7) and 61.875 apply for the rating. An instrument endorsement held
+  implies the instrument rating (its applicant must hold one, reg
+  61.905(1)(a)), and the IAP 3D instrument endorsement the IAP 2D one (item
+  9 of table 61.890), so an endorsement recorded alone does not give only
+  some of its rows. A flight review applies for its
   class rating. A test holds each to what it applies to, and every
   requirement to some holder.
 - **A requirement is shown in CASA's words** (au-casa#96), so that a host
