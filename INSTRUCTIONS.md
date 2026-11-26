@@ -89,7 +89,12 @@ answers one such question:
   is one of them, under the same id. The list is not yet every rating and
   endorsement CASA issues, as the kernel's contract asks: the other
   operational ratings and endorsements, and the type ratings (#101), are
-  not listed yet), which requirements it checks, each with a
+  not listed yet), the problems with what is held under a licence
+  (`licence_problems`: a refusal at the instrument rating for each part of
+  table 61.890 none of whose instrument endorsements is held with it, reg
+  61.885(1)(b)(i) and (ii), reported at the rating rather than at the
+  licence; the private instrument rating's endorsements, table 61.935,
+  are not listed, so it is not checked, #113), which requirements it checks, each with a
   stable id, a name in its regulation's words, a description of what
   meets it, the noun its events are counted in, the set its
   regulation sets it in (a key, a name and a description, equal on every
@@ -289,7 +294,7 @@ to the trait.
   groups a flight's entries, asserts the same result for both orders.
 
 `icao-shared-kernel`, logbook-shared-kernel and aircraft-type-descriptions
-are taken by a caret range (`^0.6`, `^0.12.0` and `^0.1.0`), not pinned exactly
+are taken by a caret range (`^0.7`, `^0.13.0` and `^0.1.0`), not pinned exactly
 (au-casa#24): sibling country crates (nz-caa and the like) depend on them
 too, and a consumer such as a logbook imports several at once. Exact pins on
 different patches cannot be resolved together; with caret ranges Cargo builds

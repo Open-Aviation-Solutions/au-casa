@@ -253,9 +253,9 @@ checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 
 [[package]]
 name = "icao-shared-kernel"
-version = "0.6.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e366e13ee9ffb014e2819300b86a49d95b6218b817e374c55def4d941170bcee"
+checksum = "c44420f48ab08d236ae9d26276f7351a3203325dddbc5da98e592d61d36727fc"
 dependencies = [
  "rust_decimal",
  "serde",
@@ -300,9 +300,9 @@ checksum = "65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a"
 
 [[package]]
 name = "logbook-shared-kernel"
-version = "0.12.0"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e85d2a1e80c2f592fe1bb381799801305cd790c6e341ca20d689f4560ce9472"
+checksum = "ac17fa1fa42ae04cfde953c11245fc2e6473b60e9996832a2e66d76ecc369af1"
 dependencies = [
  "aircraft-type-descriptions",
  "icao-shared-kernel",

@@ -20,7 +20,7 @@
 //! `single-engine-aeroplane-instrument-endorsement`,
 //! `iap-2d-instrument-endorsement`).
 
-use logbook_shared_kernel::Term;
+use logbook_shared_kernel::{LicenceProblem, LicenceProblemAt, ProblemKind, Term, TermId};
 
 use super::{class_name, term};
 use crate::aircraft::{AircraftCategory, AircraftClassRating, DesignFeature};
@@ -185,6 +185,54 @@ impl InstrumentEndorsement {
         }
     }
 }
+
+/// The problems with the ratings and endorsements held under one licence
+/// (`held`): a refusal at the instrument rating for each part of table 61.890
+/// none of whose instrument endorsements is held with it, as an applicant
+/// for the rating must meet the requirements for the grant of at least one
+/// from each (reg 61.885(1)(b)(i) and (ii)). A missing endorsement is
+/// reported at the rating it is required for, not at the licence as the
+/// kernel's contract has something missing reported (au-casa#108 decided
+/// so). The private instrument rating is not checked, as its endorsements
+/// (table 61.935) are not listed (#113).
+pub(crate) fn licence_problems(held: &[TermId]) -> Vec<LicenceProblem> {
+    let instrument_rating = TermId::new(INSTRUMENT_RATING);
+    if !held.contains(&instrument_rating) {
+        return Vec::new();
+    }
+    let holds_one = |part_1: bool| {
+        InstrumentEndorsement::ALL
+            .into_iter()
+            .filter(|endorsement| endorsement.category().is_some() == part_1)
+            .any(|endorsement| held.contains(&TermId::new(endorsement.id())))
+    };
+    [
+        (true, PART_1_MISSING, "61.885(1)(b)(i)"),
+        (false, PART_2_MISSING, "61.885(1)(b)(ii)"),
+    ]
+    .into_iter()
+    .filter(|(part_1, _, _)| !holds_one(*part_1))
+    .map(|(_, text, regulation)| {
+        LicenceProblem::new(
+            LicenceProblemAt::RatingOrEndorsement(instrument_rating.clone()),
+            ProblemKind::Refusal,
+            text,
+            regulation,
+        )
+    })
+    .collect()
+}
+
+/// The refusal of an instrument rating held with no instrument endorsement
+/// from Part 1 of table 61.890, quoting reg 61.885(1)(b)(i).
+const PART_1_MISSING: &str = "An instrument rating is granted only to a pilot who meets \"the \
+     requirements for the grant of: (i) at least one instrument endorsement mentioned in column 1 \
+     of an item in Part 1 of table 61.890\". Record the instrument endorsement held.";
+
+/// The same for Part 2, quoting reg 61.885(1)(b)(ii).
+const PART_2_MISSING: &str = "An instrument rating is granted only to a pilot who meets \"the \
+     requirements for the grant of: (ii) at least one instrument endorsement mentioned in column \
+     1 of an item in Part 2 of table 61.890\". Record the instrument endorsement held.";
 
 #[cfg(test)]
 mod tests {
@@ -425,5 +473,73 @@ mod tests {
                 }
             }
         }
+    }
+
+    fn held(ids: &[&str]) -> Vec<TermId> {
+        ids.iter().copied().map(TermId::new).collect()
+    }
+
+    /// Each part of table 61.890 with none of its instrument endorsements
+    /// held is refused at the instrument rating, in the table's order.
+    #[test]
+    fn an_instrument_rating_without_an_endorsement_from_each_part_is_refused() {
+        let refused = |text: &str, regulation| {
+            LicenceProblem::new(
+                LicenceProblemAt::RatingOrEndorsement(TermId::new(INSTRUMENT_RATING)),
+                ProblemKind::Refusal,
+                text,
+                regulation,
+            )
+        };
+        let part_1 = refused(
+            "An instrument rating is granted only to a pilot who meets \"the requirements for \
+             the grant of: (i) at least one instrument endorsement mentioned in column 1 of an \
+             item in Part 1 of table 61.890\". Record the instrument endorsement held.",
+            "61.885(1)(b)(i)",
+        );
+        let part_2 = refused(
+            "An instrument rating is granted only to a pilot who meets \"the requirements for \
+             the grant of: (ii) at least one instrument endorsement mentioned in column 1 of an \
+             item in Part 2 of table 61.890\". Record the instrument endorsement held.",
+            "61.885(1)(b)(ii)",
+        );
+        let problems = |ids: &[&str]| Casa::new().licence_problems(&[], &held(ids));
+        assert_eq!(
+            problems(&[INSTRUMENT_RATING]),
+            [part_1.clone(), part_2.clone()]
+        );
+        assert_eq!(
+            problems(&[INSTRUMENT_RATING, "iap-3d-instrument-endorsement"]),
+            [part_1]
+        );
+        assert_eq!(
+            problems(&[INSTRUMENT_RATING, "gyroplane-instrument-endorsement"]),
+            [part_2]
+        );
+    }
+
+    /// One endorsement from each part is enough, whichever they are; and
+    /// with no instrument rating there is nothing to refuse.
+    #[test]
+    fn one_endorsement_from_each_part_or_no_instrument_rating_has_no_problem() {
+        let casa = Casa::new();
+        for endorsement in InstrumentEndorsement::ALL {
+            let other = if endorsement.category().is_some() {
+                InstrumentEndorsement::Iap2D
+            } else {
+                InstrumentEndorsement::Airship
+            };
+            let ids = [INSTRUMENT_RATING, endorsement.id(), other.id()];
+            assert_eq!(
+                casa.licence_problems(&[], &held(&ids)),
+                [],
+                "{endorsement:?}"
+            );
+        }
+        assert_eq!(casa.licence_problems(&[], &held(&[])), []);
+        assert_eq!(
+            casa.licence_problems(&[], &held(&["private-instrument-rating", NIGHT_VFR_RATING])),
+            []
+        );
     }
 }

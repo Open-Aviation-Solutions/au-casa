@@ -166,7 +166,7 @@ impl CurrencyCheck for TakeOffsAndLandings {
 
 #[cfg(test)]
 mod tests {
-    use logbook_shared_kernel::{Contribution, EntryId, EntryParts};
+    use logbook_shared_kernel::{Contribution, EntryId, EntryParts, Expiry};
     use time::macros::date;
     use time::Duration;
 
@@ -244,10 +244,13 @@ mod tests {
             for r in result(&[by_day(3, aeroplane("a", on))]) {
                 assert!(r.is_current());
                 assert_eq!(r.found, 3);
-                assert_eq!(r.expiry_date, Some(on + Duration::days(90)));
+                assert_eq!(r.expiry, Some(Expiry::On(on + Duration::days(90))));
                 // Current for 90 days counting the day of the flight: the
-                // 90th is the last, and expiry_date is the day after it.
-                assert_eq!(r.current_through(), Some(on + Duration::days(89)));
+                // 90th is the last, and expiry is the day after it.
+                assert_eq!(
+                    r.current_through(),
+                    Some(Expiry::On(on + Duration::days(89)))
+                );
                 assert_eq!(r.look_back_days, 90);
                 // The one flight supplied all three.
                 assert_eq!(
@@ -273,7 +276,7 @@ mod tests {
         }
 
         #[test]
-        fn expired_currency_still_reports_a_past_expiry_date() {
+        fn expired_currency_still_reports_a_past_expiry() {
             for r in result(&[
                 by_day(1, aeroplane("a", date!(2024 - 05 - 28))),
                 by_day(1, aeroplane("b", date!(2024 - 05 - 25))),
@@ -281,17 +284,17 @@ mod tests {
             ]) {
                 assert!(!r.is_current());
                 assert_eq!(r.found, 0);
-                assert!(r.expiry_date.is_some_and(|expiry| expiry < REFERENCE));
+                assert!(matches!(r.expiry, Some(Expiry::On(expiry)) if expiry < REFERENCE));
             }
         }
 
         #[test]
         fn expiry_is_none_when_the_pilot_has_never_had_enough() {
             for r in result(&[by_day(1, aeroplane("a", date!(2024 - 08 - 20)))]) {
-                assert_eq!(r.expiry_date, None);
+                assert_eq!(r.expiry, None);
             }
             for r in result(&[]) {
-                assert_eq!(r.expiry_date, None);
+                assert_eq!(r.expiry, None);
             }
         }
 
@@ -363,7 +366,7 @@ mod tests {
             for r in result(&[by_day(3, aeroplane("a", outside))]) {
                 assert!(!r.is_current());
                 assert_eq!(r.found, 0);
-                assert_eq!(r.expiry_date, Some(REFERENCE));
+                assert_eq!(r.expiry, Some(Expiry::On(REFERENCE)));
             }
         }
 
@@ -385,7 +388,7 @@ mod tests {
             for r in result(&[by_day(3, aeroplane("a", REFERENCE + Duration::days(1)))]) {
                 assert_eq!(r.found, 0);
                 assert_eq!(r.qualifying, []);
-                assert_eq!(r.expiry_date, None);
+                assert_eq!(r.expiry, None);
             }
 
             // The reference date itself has "happened" and counts.
@@ -407,7 +410,7 @@ mod tests {
             let on = date!(2024 - 08 - 20);
             for r in result(&[at_night(3, aeroplane("a", on))]) {
                 assert!(r.is_current());
-                assert_eq!(r.expiry_date, Some(on + Duration::days(90)));
+                assert_eq!(r.expiry, Some(Expiry::On(on + Duration::days(90))));
             }
         }
 
@@ -489,12 +492,12 @@ mod tests {
         fn one_at_night_is_recent_through_the_day_before_the_same_date_6_months_on() {
             for r in result(&[at_night(1, aeroplane("a", date!(2024 - 06 - 01)))]) {
                 assert!(r.is_current());
-                assert_eq!(r.current_through(), Some(date!(2024 - 11 - 30)));
+                assert_eq!(r.current_through(), Some(Expiry::On(date!(2024 - 11 - 30))));
             }
             // Six months on from 31 August is in February, which is shorter:
             // it is recent through February's last day.
             for r in result(&[at_night(1, aeroplane("a", date!(2023 - 08 - 31)))]) {
-                assert_eq!(r.current_through(), Some(date!(2024 - 02 - 29)));
+                assert_eq!(r.current_through(), Some(Expiry::On(date!(2024 - 02 - 29))));
             }
         }
 
@@ -502,10 +505,10 @@ mod tests {
         fn one_outside_the_window_leaves_a_past_expiry() {
             for r in result(&[at_night(1, aeroplane("a", date!(2023 - 06 - 13)))]) {
                 assert!(!r.is_current());
-                assert!(r.expiry_date.is_some());
+                assert!(r.expiry.is_some());
             }
             for r in result(&[]) {
-                assert_eq!(r.expiry_date, None);
+                assert_eq!(r.expiry, None);
             }
         }
 
@@ -569,7 +572,7 @@ mod tests {
             for r in result(&[at_night(1, aeroplane("a", date!(2024 - 03 - 01)))]) {
                 assert!(!r.is_current());
                 assert_eq!(r.found, 0);
-                assert_eq!(r.expiry_date, Some(REFERENCE));
+                assert_eq!(r.expiry, Some(Expiry::On(REFERENCE)));
             }
         }
 

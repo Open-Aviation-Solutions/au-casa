@@ -122,7 +122,7 @@ impl CurrencyCheck for SinglePilotIfr {
 #[cfg(test)]
 mod tests {
     use icao_shared_kernel::FlightDuration;
-    use logbook_shared_kernel::{ApproachType, EntryParts, Subject};
+    use logbook_shared_kernel::{ApproachType, EntryParts, Expiry, Subject};
     use time::macros::date;
     use uuid::Uuid;
 
@@ -170,11 +170,11 @@ mod tests {
     #[test]
     fn a_qualifying_flight_is_recent_through_the_day_before_the_same_date_6_months_on() {
         let r = result(&[qualifying("a", date!(2025 - 12 - 09), 1)]);
-        assert_eq!(r.current_through(), Some(date!(2026 - 06 - 08)));
+        assert_eq!(r.current_through(), Some(Expiry::On(date!(2026 - 06 - 08))));
         assert!(!r.is_current());
 
         let r = result(&[qualifying("a", date!(2026 - 03 - 31), 1)]);
-        assert_eq!(r.current_through(), Some(date!(2026 - 09 - 30)));
+        assert_eq!(r.current_through(), Some(Expiry::On(date!(2026 - 09 - 30))));
         assert!(r.is_current());
         assert_eq!(r.found, 1);
     }
@@ -330,7 +330,7 @@ mod tests {
         for entries in [[before.clone(), after.clone()], [after, before]] {
             let r = result(&entries);
             assert!(r.is_current());
-            assert_eq!(r.current_through(), Some(date!(2026 - 09 - 28)));
+            assert_eq!(r.current_through(), Some(Expiry::On(date!(2026 - 09 - 28))));
             assert_eq!(r.qualifying[0].entry.as_str(), "a");
         }
     }
@@ -362,7 +362,7 @@ mod tests {
                 let r = result(&entries);
                 assert!(r.is_current());
                 assert_eq!(r.qualifying[0].entry.as_str(), "b");
-                assert_eq!(r.current_through(), Some(date!(2026 - 11 - 30)));
+                assert_eq!(r.current_through(), Some(Expiry::On(date!(2026 - 11 - 30))));
             }
         }
     }

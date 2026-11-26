@@ -73,7 +73,7 @@ impl CurrencyCheck for GuidanceOperations {
 
 #[cfg(test)]
 mod tests {
-    use logbook_shared_kernel::{ApproachType, EntryParts};
+    use logbook_shared_kernel::{ApproachType, EntryParts, Expiry};
     use time::macros::date;
     use time::Duration;
 
@@ -134,7 +134,11 @@ mod tests {
         for (name, r) in results(Some(true), aeroplane("a", ON)) {
             assert!(r.is_current(), "{name}");
             assert_eq!(r.found, 1, "{name}");
-            assert_eq!(r.expiry_date, Some(ON + Duration::days(90)), "{name}");
+            assert_eq!(
+                r.expiry,
+                Some(Expiry::On(ON + Duration::days(90))),
+                "{name}"
+            );
         }
     }
 
