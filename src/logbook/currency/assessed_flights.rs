@@ -60,6 +60,10 @@ pub(super) struct AssessedFlights<'a> {
     logbook: BTreeMap<&'a EntryId, &'a Entry>,
     /// The flight each entry that counts and records a flight is for.
     flights: BTreeMap<EntryId, SubjectId>,
+    /// Those dated after the reference, which are left out of `flown` unless
+    /// an assessment names one, as the flight is then the one it was passed
+    /// on.
+    later: BTreeMap<EntryId, &'a Entry>,
     /// What each of those flights recorded.
     flown: BTreeMap<SubjectId, Flown>,
     /// The dates of the flight tests passed for the instrument rating, which
@@ -68,38 +72,50 @@ pub(super) struct AssessedFlights<'a> {
     passes: Vec<Pass>,
 }
 
+/// Adds what `entry` recorded to its flight's.
+fn fold(flown: &mut BTreeMap<SubjectId, Flown>, subject: SubjectId, entry: &Entry) {
+    let approaches = entry.approaches();
+    let flight = flown.entry(subject).or_insert(Flown {
+        circling: false,
+        three_d: false,
+        single_pilot: true,
+    });
+    flight.circling |= approaches.iter().any(|approach| approach.circled());
+    flight.three_d |= approaches.iter().any(is_3d);
+    flight.single_pilot &= entry.capacity() != Capacity::CoPilot;
+}
+
 impl<'a> AssessedFlights<'a> {
     /// Over `entries`, the entries [`Casa::counts`](crate::Casa) lets
     /// through, and every entry of the `logbook`, to read an assessment's
-    /// information with its entry. An entry dated after the reference has
-    /// not happened yet, and is left out.
+    /// information with its entry. Another entry for a flight dated after the
+    /// reference has not happened yet, and is left out of what the flight
+    /// recorded; the entry an assessment names is not, whatever its date.
     pub(super) fn new(
         reference: Date,
         entries: impl IntoIterator<Item = &'a Entry>,
         logbook: &'a [Entry],
     ) -> Self {
         let mut flights = BTreeMap::new();
+        let mut later = BTreeMap::new();
         let mut flown: BTreeMap<SubjectId, Flown> = BTreeMap::new();
         for entry in entries {
             let subject = entry.subject().id();
-            if !matches!(subject, SubjectId::Flight(_)) || entry.date() > reference {
+            if !matches!(subject, SubjectId::Flight(_)) {
                 continue;
             }
-            let approaches = entry.approaches();
-            let flight = flown.entry(subject).or_insert(Flown {
-                circling: false,
-                three_d: false,
-                single_pilot: true,
-            });
-            flight.circling |= approaches.iter().any(|approach| approach.circled());
-            flight.three_d |= approaches.iter().any(is_3d);
-            flight.single_pilot &= entry.capacity() != Capacity::CoPilot;
+            if entry.date() > reference {
+                later.insert(entry.id().clone(), entry);
+            } else {
+                fold(&mut flown, subject, entry);
+            }
             flights.insert(entry.id().clone(), subject);
         }
         Self {
             reference,
             logbook: logbook.iter().map(|entry| (entry.id(), entry)).collect(),
             flights,
+            later,
             flown,
             rating_tests: Vec::new(),
             passes: Vec::new(),
@@ -113,6 +129,12 @@ impl<'a> AssessedFlights<'a> {
         let mut passes: Vec<&Pass> = self.passes.iter().filter(|pass| qualifies(pass)).collect();
         passes.sort_by(|a, b| a.on.cmp(&b.on).then_with(|| a.id.cmp(&b.id)));
         passes
+    }
+
+    /// The passes `also` accepts, of those reg 61.880's check counts as an
+    /// instrument proficiency check (`qualifies`), earliest first.
+    pub(super) fn checks(&self, also: impl Fn(&Pass) -> bool) -> Vec<&Pass> {
+        self.passes(|pass| qualifies(pass.basis, pass.on, &self.rating_tests) && also(pass))
     }
 
     /// "The holder's most recent instrument proficiency check": of the
@@ -182,6 +204,12 @@ impl AssessmentAccumulator for AssessedFlights<'_> {
         };
         if basis == Basis::RatingTest {
             self.rating_tests.push(assessment.date);
+        }
+        if let (Some(entry), Some(subject)) = (
+            self.later.get(&assessment.entry),
+            self.flights.get(&assessment.entry),
+        ) {
+            fold(&mut self.flown, *subject, entry);
         }
         let flown = self
             .flights

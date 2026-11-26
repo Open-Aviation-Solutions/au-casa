@@ -18,18 +18,19 @@ const CIRCLING_TEST_MONTHS: u32 = 12;
 /// aircraft; or (b) completed an instrument proficiency check in a
 /// single-pilot aircraft".
 ///
-/// Met for good by a passed flight test for the rating, or a passed
-/// instrument proficiency check (not an operator proficiency check, which
-/// reg 61.860(4) counts for subregulation (3)(b) only), whose flight was a
-/// single-pilot operation as reg 61.875's check reads one: no entry for it
-/// logged as co-pilot. That stands in for the regulation's "single-pilot
-/// aircraft", an aircraft certificated for one pilot, which nothing recorded
-/// gives (the owner, on au-casa#116). The regulation sets no period. The
-/// latest is reported.
+/// Met for good by a passed flight test for the rating, a passed instrument
+/// proficiency check, or an endorsement flight test that reg 61.880(3)(b)
+/// counts as one (more than 6 months after a flight test for the rating),
+/// read as for reg 61.860(3)(b) (the owner, on au-casa#116); an operator
+/// proficiency check does not count here. Its flight must be a single-pilot
+/// operation as reg 61.875's check reads one: no entry for it logged as
+/// co-pilot. That stands in for the regulation's "single-pilot aircraft", an
+/// aircraft certificated for one pilot, which nothing recorded gives (the
+/// owner, on au-casa#116). The regulation sets no period. The latest is
+/// reported.
 pub(super) fn single_pilot_operation(assessed: &AssessedFlights) -> CurrencyResult {
-    let passes = assessed.passes(|pass| {
-        matches!(pass.basis, Basis::RatingTest | Basis::ProficiencyCheck)
-            && pass.flown.is_some_and(|flown| flown.single_pilot)
+    let passes = assessed.checks(|pass| {
+        pass.basis != Basis::OperatorCheck && pass.flown.is_some_and(|flown| flown.single_pilot)
     });
     match passes.last() {
         Some(latest) => assessed.never(latest),
@@ -101,7 +102,7 @@ mod tests {
     }
 
     #[test]
-    fn an_operator_check_endorsement_test_or_multi_crew_flight_does_not_meet_single_pilot() {
+    fn an_operator_check_early_endorsement_test_or_multi_crew_flight_does_not_meet_single_pilot() {
         let on = date!(2026 - 01 - 05);
         let co_pilot = entry(EntryParts {
             capacity: Capacity::CoPilot,
@@ -301,12 +302,98 @@ mod tests {
                 ..aeroplane("later", date!(2026 - 09 - 02))
             },
         ));
-        let entries = [flight("e", on, Vec::new()), later];
+        let first = flight("e", on, Vec::new());
+        for entries in [[first.clone(), later.clone()], [later, first]] {
+            let r = checked(
+                single_pilot_operation,
+                REFERENCE,
+                &entries,
+                &[passed("ipc", on, "e", Basis::ProficiencyCheck)],
+            );
+            assert_eq!(r.expiry, Some(Expiry::Never));
+        }
+    }
+
+    /// An endorsement test is an instrument proficiency check, for reg
+    /// 61.860(2)(b) as for (3)(b), when flown more than 6 months after a
+    /// flight test for the rating (reg 61.880(3)(b)).
+    #[test]
+    fn a_later_single_pilot_endorsement_test_meets_single_pilot_after_a_multi_crew_rating_test() {
+        let rating = date!(2025 - 01 - 05);
+        let co_pilot = entry(on_flight(
+            flight_of("r"),
+            EntryParts {
+                capacity: Capacity::CoPilot,
+                ..aeroplane("r", rating)
+            },
+        ));
+        for (on, met) in [
+            (date!(2025 - 07 - 05), false),
+            (date!(2025 - 07 - 06), true),
+        ] {
+            let entries = [co_pilot.clone(), flight("e", on, Vec::new())];
+            let assessments = [
+                passed("t", rating, "r", Basis::RatingTest),
+                passed("end", on, "e", Basis::EndorsementTest),
+            ];
+            let r = checked(single_pilot_operation, REFERENCE, &entries, &assessments);
+            assert_eq!(r.expiry, met.then_some(Expiry::Never), "{on}");
+        }
+    }
+
+    /// Reg 61.860(3)(b): an endorsement test ends the most recent check's
+    /// circling approach only when it is itself the most recent check, more
+    /// than 6 months after the flight test for the rating.
+    #[test]
+    fn an_endorsement_test_without_circling_ends_the_check_only_beyond_6_months() {
+        let rating = date!(2026 - 01 - 05);
+        for (on, held) in [
+            (date!(2026 - 07 - 05), true),
+            (date!(2026 - 07 - 06), false),
+        ] {
+            let entries = [
+                flight("r", rating, Vec::new()),
+                flight(
+                    "circled",
+                    date!(2026 - 02 - 01),
+                    vec![circled(ApproachType::Vor)],
+                ),
+                flight("e", on, Vec::new()),
+            ];
+            let assessments = [
+                passed("t", rating, "r", Basis::RatingTest),
+                passed(
+                    "ipc",
+                    date!(2026 - 02 - 01),
+                    "circled",
+                    Basis::ProficiencyCheck,
+                ),
+                passed("end", on, "e", Basis::EndorsementTest),
+            ];
+            let r = checked(circling_approach, REFERENCE, &entries, &assessments);
+            assert_eq!(r.expiry, held.then_some(Expiry::Never), "{on}");
+        }
+    }
+
+    /// An assessment's entry dated after the reference, on a flight past
+    /// midnight, still gives the flight, though the assessment is not.
+    #[test]
+    fn the_entry_an_assessment_names_is_read_though_dated_after_the_reference() {
+        let entries = [flight(
+            "e",
+            date!(2026 - 09 - 02),
+            vec![circled(ApproachType::Vor)],
+        )];
         let r = checked(
-            single_pilot_operation,
+            circling_approach,
             REFERENCE,
             &entries,
-            &[passed("ipc", on, "e", Basis::ProficiencyCheck)],
+            &[passed(
+                "ipc",
+                date!(2026 - 08 - 31),
+                "e",
+                Basis::ProficiencyCheck,
+            )],
         );
         assert_eq!(r.expiry, Some(Expiry::Never));
     }
@@ -323,13 +410,15 @@ mod tests {
                 ..aeroplane("other", on)
             },
         ));
-        let entries = [flight("e", on, Vec::new()), other];
-        let r = checked(
-            circling_approach,
-            REFERENCE,
-            &entries,
-            &[passed("ipc", on, "e", Basis::ProficiencyCheck)],
-        );
-        assert_eq!(r.expiry, Some(Expiry::Never));
+        let first = flight("e", on, Vec::new());
+        for entries in [[first.clone(), other.clone()], [other, first]] {
+            let r = checked(
+                circling_approach,
+                REFERENCE,
+                &entries,
+                &[passed("ipc", on, "e", Basis::ProficiencyCheck)],
+            );
+            assert_eq!(r.expiry, Some(Expiry::Never));
+        }
     }
 }

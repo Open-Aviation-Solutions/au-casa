@@ -303,7 +303,10 @@ to the trait.
   *passed* check. A latest check au-casa cannot read, one in a session
   (pilot-logbook#278) or naming no entry of the logbook, included nothing,
   so it ends regs 61.860(3)(b) and 61.900(2)(b)(i) until #278 records
-  assessments on sessions. Reg 61.860(2)'s "single-pilot aircraft" is an
+  assessments on sessions. Reg 61.860(2)(b)'s "instrument proficiency check" is read as for reg
+  61.860(3)(b) (the owner, on au-casa#116): a passed one, or a flight test the
+  reg 61.880 check counts as one (reg 61.880(3)(a), (b)), but not an operator
+  proficiency check. Reg 61.860(2)'s "single-pilot aircraft" is an
   aircraft certificated for one pilot, which nothing recorded gives; it is
   read as reg 61.875's check reads a single-pilot operation, no entry for
   the flight logged as co-pilot, so a single-pilot aircraft flown with a

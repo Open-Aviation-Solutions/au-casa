@@ -296,7 +296,8 @@ impl AssessmentAccumulator for InstrumentProficiencyCheck<'_> {
         let Some(information) = information else {
             return;
         };
-        // A failed flight test ends nothing.
+        // A failed instrument proficiency check ends it (reg 61.880(4)); a
+        // failed flight test, or a check of another kind, ends nothing.
         if information.check_type == Some(CheckType::InstrumentProficiencyCheck)
             && information.outcome == Some(CheckOutcome::Failed)
             && !self.other_category.contains(entry)

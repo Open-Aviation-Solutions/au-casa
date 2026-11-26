@@ -40,7 +40,7 @@ const DEMONSTRATED_MONTHS: u32 = 15;
 ///
 /// (a) is not checked: which endorsement a flight test was for is not
 /// recorded (au-casa#123), and (b)(ii) already counts a passed flight test
-/// whose entry recorded a 3D approach. (c) is not recorded.
+/// whose flight recorded a 3D approach. (c) is not recorded.
 pub(super) fn three_d_approach(assessed: &AssessedFlights) -> CurrencyResult {
     if let Some(check) = assessed.most_recent_check(|flown| flown.three_d) {
         return assessed.never(check);
