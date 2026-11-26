@@ -64,7 +64,11 @@ pub(crate) fn holds_pilot_licence_in(held: &BTreeSet<TermId>, category: Aircraft
 }
 
 /// Those of `titles` that are a pilot licence (reg 61.010) with a category
-/// rating, each with its Part 61 term, in the order given.
+/// rating, each with its Part 61 term, in the order given, but for the
+/// multi-crew pilot licence: its holder holds a multi-crew aeroplane type
+/// rating (reg 61.655(2)(e)) and it is for work as co-pilot in aircraft that
+/// need a type rating (regs 61.635 and 61.375(5)(a)), so a class rating is
+/// not looked for.
 pub(crate) fn pilot_licences_with_category(
     titles: &[LicenceTitleId],
 ) -> Vec<(LicenceTitleId, Part61Term)> {
@@ -79,7 +83,11 @@ pub(crate) fn pilot_licences_with_category(
     titles
         .iter()
         .filter_map(|held| all.iter().find(|(id, _)| id == held).cloned())
-        .filter(|(_, part61)| part61.licence.is_pilot_licence() && part61.category_rating.is_some())
+        .filter(|(_, part61)| {
+            part61.licence.is_pilot_licence()
+                && part61.licence != FlightCrewLicence::MultiCrew
+                && part61.category_rating.is_some()
+        })
         .collect()
 }
 

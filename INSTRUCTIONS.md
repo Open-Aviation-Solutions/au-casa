@@ -97,7 +97,8 @@ answers one such question:
   are not listed, so it is not checked, #113; and a warning at the first
   pilot licence title of each category with class ratings, reg 61.020(1),
   when none of that category's class ratings is held, reg 61.375(3), as a
-  type rating may serve instead and is not listed yet, #101), which requirements it checks, each with a
+  type rating may serve instead and is not listed yet, #101; not the
+  multi-crew pilot licence, whose holders hold a type rating), which requirements it checks, each with a
   stable id, a name in its regulation's words, a description of what
   meets it, the noun its events are counted in, the set its
   regulation sets it in (a key, a name and a description, equal on every
