@@ -49,8 +49,9 @@ use icao_shared_kernel::MinimumAges;
 use logbook_shared_kernel::{
     AircraftCharacteristic, AircraftDescription, Assessment, AuthorityId,
     AuthoritySpecificInformation, AuthorityTotal, Classification, CurrencyResult, DateRange, Entry,
-    LicenceTitleTerm, LicensingAuthority, Logbook, MigrationRefused, Problem, ProblemAt,
-    ProblemKind, Questions, Record, Requirement, RequirementId, Subject, Term, TermId,
+    LicenceProblem, LicenceTitleId, LicenceTitleTerm, LicensingAuthority, Logbook,
+    MigrationRefused, Problem, ProblemAt, ProblemKind, Questions, Record, Requirement,
+    RequirementId, Subject, Term, TermId,
 };
 use time::Date;
 
@@ -221,6 +222,17 @@ impl LicensingAuthority for Casa {
     /// listed yet.
     fn ratings_and_endorsements(&self) -> Vec<Term> {
         ratings_and_endorsements::ratings_and_endorsements()
+    }
+
+    /// A refusal at the instrument rating for each part of table 61.890 that
+    /// has none of its instrument endorsements held with it (reg
+    /// 61.885(1)(b)). The titles are not read.
+    fn licence_problems(
+        &self,
+        _titles: &[LicenceTitleId],
+        ratings_and_endorsements: &[TermId],
+    ) -> Vec<LicenceProblem> {
+        ratings_and_endorsements::licence_problems(ratings_and_endorsements)
     }
 
     /// Annex 1's, as CASA's are the same (regs 61.515(1), 61.580(1),

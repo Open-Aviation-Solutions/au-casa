@@ -20,7 +20,7 @@
 //! `single-engine-aeroplane-instrument-endorsement`,
 //! `iap-2d-instrument-endorsement`).
 
-use logbook_shared_kernel::Term;
+use logbook_shared_kernel::{LicenceProblem, LicenceProblemAt, ProblemKind, Term, TermId};
 
 use super::{class_name, term};
 use crate::aircraft::{AircraftCategory, AircraftClassRating, DesignFeature};
@@ -184,6 +184,41 @@ impl InstrumentEndorsement {
             Self::Iap2D | Self::Iap3D => None,
         }
     }
+}
+
+/// The problems with the ratings and endorsements held under one licence
+/// (`held`): a refusal at the instrument rating for each part of table 61.890
+/// none of whose instrument endorsements is held with it, as an applicant
+/// for the rating must meet the requirements for the grant of at least one
+/// from each (reg 61.885(1)(b)). The private instrument rating is not
+/// checked, as its endorsements (table 61.935) are not listed (#113).
+pub(crate) fn licence_problems(held: &[TermId]) -> Vec<LicenceProblem> {
+    let instrument_rating = TermId::new(INSTRUMENT_RATING);
+    if !held.contains(&instrument_rating) {
+        return Vec::new();
+    }
+    let holds_one = |part_1: bool| {
+        InstrumentEndorsement::ALL
+            .into_iter()
+            .filter(|endorsement| endorsement.category().is_some() == part_1)
+            .any(|endorsement| held.contains(&TermId::new(endorsement.id())))
+    };
+    [(true, "1"), (false, "2")]
+        .into_iter()
+        .filter(|(part_1, _)| !holds_one(*part_1))
+        .map(|(_, part)| {
+            LicenceProblem::new(
+                LicenceProblemAt::RatingOrEndorsement(instrument_rating.clone()),
+                ProblemKind::Refusal,
+                format!(
+                    "An applicant for an instrument rating must \"meet the requirements for the \
+                     grant of at least one instrument endorsement mentioned in column 1 of an \
+                     item in Part {part} of table 61.890\""
+                ),
+                "61.885(1)(b)",
+            )
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -425,5 +460,67 @@ mod tests {
                 }
             }
         }
+    }
+
+    fn held(ids: &[&str]) -> Vec<TermId> {
+        ids.iter().copied().map(TermId::new).collect()
+    }
+
+    /// Each part of table 61.890 with none of its instrument endorsements
+    /// held is refused at the instrument rating, in the table's order.
+    #[test]
+    fn an_instrument_rating_without_an_endorsement_from_each_part_is_refused() {
+        let part =
+            |n: u8| {
+                let text = match n {
+                1 => "An applicant for an instrument rating must \"meet the requirements for the \
+                      grant of at least one instrument endorsement mentioned in column 1 of an \
+                      item in Part 1 of table 61.890\"",
+                _ => "An applicant for an instrument rating must \"meet the requirements for the \
+                      grant of at least one instrument endorsement mentioned in column 1 of an \
+                      item in Part 2 of table 61.890\"",
+            };
+                LicenceProblem::new(
+                    LicenceProblemAt::RatingOrEndorsement(TermId::new(INSTRUMENT_RATING)),
+                    ProblemKind::Refusal,
+                    text,
+                    "61.885(1)(b)",
+                )
+            };
+        let problems = |ids: &[&str]| Casa::new().licence_problems(&[], &held(ids));
+        assert_eq!(problems(&[INSTRUMENT_RATING]), [part(1), part(2)]);
+        assert_eq!(
+            problems(&[INSTRUMENT_RATING, "iap-3d-instrument-endorsement"]),
+            [part(1)]
+        );
+        assert_eq!(
+            problems(&[INSTRUMENT_RATING, "gyroplane-instrument-endorsement"]),
+            [part(2)]
+        );
+    }
+
+    /// One endorsement from each part is enough, whichever they are; and
+    /// with no instrument rating there is nothing to refuse.
+    #[test]
+    fn one_endorsement_from_each_part_or_no_instrument_rating_has_no_problem() {
+        let casa = Casa::new();
+        for endorsement in InstrumentEndorsement::ALL {
+            let other = if endorsement.category().is_some() {
+                InstrumentEndorsement::Iap2D
+            } else {
+                InstrumentEndorsement::Airship
+            };
+            let ids = [INSTRUMENT_RATING, endorsement.id(), other.id()];
+            assert_eq!(
+                casa.licence_problems(&[], &held(&ids)),
+                [],
+                "{endorsement:?}"
+            );
+        }
+        assert_eq!(casa.licence_problems(&[], &held(&[])), []);
+        assert_eq!(
+            casa.licence_problems(&[], &held(&["private-instrument-rating", NIGHT_VFR_RATING])),
+            []
+        );
     }
 }
