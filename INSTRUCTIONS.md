@@ -292,13 +292,23 @@ to the trait.
   periodic assessment (regs 61.745 and 61.880, and regs 61.860(2) and (3)
   and 61.900(2), met by what a test or check included).
 - **What a test or check included** (au-casa#116): regs 61.860(2) and (3)
-  and 61.900(2) are read from the approaches and capacity recorded on the
-  entry a passed instrument flight test or proficiency check names
-  (`currency/assessed_flights.rs`), in a flight that counts; one in a
-  session is pilot-logbook#278's. "The most recent instrument proficiency
-  check" is the latest passed instrument or operator proficiency check
-  (regs 61.860(4), 61.900(3)); a failed one is not, since reg 61.880's check
-  already ends at it. Reg 61.860(2) once met, and regs 61.860(3)(b) and
+  and 61.900(2) are read from the approaches and capacities recorded on
+  every entry that counts for the flight a passed instrument flight test or
+  proficiency check names (`currency/assessed_flights.rs`). "The most
+  recent instrument proficiency check" is the latest of the passes reg
+  61.880's check counts as one (its `qualifies`: an instrument or operator
+  proficiency check, regs 61.860(4) and 61.900(3), or a flight test of reg
+  61.880(3)(a) or (b)), and two on that day count if either included the
+  approach. A failed check is not one: the owner decided on the latest
+  *passed* check. A latest check au-casa cannot read, one in a session
+  (pilot-logbook#278) or naming no entry of the logbook, included nothing,
+  so it ends regs 61.860(3)(b) and 61.900(2)(b)(i) until #278 records
+  assessments on sessions. Reg 61.860(2)'s "single-pilot aircraft" is an
+  aircraft certificated for one pilot, which nothing recorded gives; it is
+  read as reg 61.875's check reads a single-pilot operation, no entry for
+  the flight logged as co-pilot, so a single-pilot aircraft flown with a
+  co-pilot logged does not count, and one certificated for two crew flown
+  with none logged does. Reg 61.860(2) once met, and regs 61.860(3)(b) and
   61.900(2)(b)(i) while the most recent check holds them, are
   `Expiry::Never`. Not checked:
   - the operator's training and checking systems of regs 61.860(3)(c) and

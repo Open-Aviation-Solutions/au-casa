@@ -63,8 +63,8 @@ What is covered:
 - **A pilot's logbook** (`Casa`): logbook-shared-kernel's `LicensingAuthority`
   for CASA. It says which entries count (a session only in an approved flight
   simulation training device, reg 61.010), what a type counts as, the
-  recency and currency requirements of regs 61.395, 61.745, 61.870, 61.875,
-  61.880 and 61.965, which of them apply to the titles, ratings and
+  recency and currency requirements of regs 61.395, 61.745, 61.860, 61.870,
+  61.875, 61.880, 61.900 and 61.965, which of them apply to the titles, ratings and
   endorsements a pilot holds, and the pilot's currency against them, CASA's
   own totals, the titles of licence it issues, each with an id, its ratings
   and endorsements (the class ratings, the design feature endorsements, the

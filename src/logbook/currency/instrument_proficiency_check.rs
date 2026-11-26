@@ -21,8 +21,8 @@ use crate::logbook::guards::{
     category_of, is_category, is_class_rating, is_multi_engine_helicopter,
 };
 use crate::logbook::{
-    assessment_information, stored_assessment_information, AssessedPurpose, CheckOutcome,
-    CheckPurpose, CheckType,
+    assessment_information, stored_assessment_information, AssessedPurpose, AssessmentInformation,
+    CheckOutcome, CheckPurpose, CheckType,
 };
 
 const REQUIRED: usize = 1;
@@ -87,7 +87,7 @@ impl ProficiencyCheckFor {
 
 /// Why a passed assessment can qualify, of the paragraphs of reg 61.880(3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Basis {
+pub(super) enum Basis {
     /// (a): "the flight test for the instrument rating".
     RatingTest,
     /// (b): "the flight test for an instrument endorsement", which
@@ -236,22 +236,46 @@ impl<'a> InstrumentProficiencyCheck<'a> {
             look_back_days: DISPLAY_WINDOW_DAYS,
         }
     }
+}
 
-    /// Whether a pass counts, given the dates of every rating test passed.
-    fn qualifies(passed: &Passed, rating_tests: &[Date]) -> bool {
-        match passed.basis {
-            Basis::RatingTest | Basis::OperatorCheck | Basis::ProficiencyCheck => true,
-            Basis::EndorsementTest => rating_tests
-                .iter()
-                .filter(|on| **on < passed.on)
-                .max()
-                .is_some_and(|latest| {
-                    // Six months on from the 31st, in a shorter month, is
-                    // that month's last day.
-                    passed.on
-                        > add_months_clamped(*latest, ENDORSEMENT_AFTER_MONTHS).unwrap_or(Date::MAX)
-                }),
+/// Whether a pass on `on` counts as an instrument proficiency check (reg
+/// 61.880(3)), given the dates of every flight test passed for the rating.
+pub(super) fn qualifies(basis: Basis, on: Date, rating_tests: &[Date]) -> bool {
+    match basis {
+        Basis::RatingTest | Basis::OperatorCheck | Basis::ProficiencyCheck => true,
+        Basis::EndorsementTest => rating_tests
+            .iter()
+            .filter(|test| **test < on)
+            .max()
+            .is_some_and(|latest| {
+                // Six months on from the 31st, in a shorter month, is that
+                // month's last day.
+                on > add_months_clamped(*latest, ENDORSEMENT_AFTER_MONTHS).unwrap_or(Date::MAX)
+            }),
+    }
+}
+
+/// Of reg 61.880(3)'s kinds, what a passed assessment was, from CASA's
+/// information on it; `None` when it was not passed, or is of another kind.
+/// A flight test's purposes each have their own outcome, and it has none of
+/// its own; one passed for both the rating and an endorsement is the
+/// rating's.
+pub(super) fn passed_basis(information: &AssessmentInformation) -> Option<Basis> {
+    let passed = |purpose| {
+        information.check_purposes.contains(&AssessedPurpose {
+            purpose,
+            outcome: CheckOutcome::Passed,
+        })
+    };
+    match information.check_type? {
+        CheckType::FlightTest if passed(CheckPurpose::InstrumentRating) => Some(Basis::RatingTest),
+        CheckType::FlightTest if passed(CheckPurpose::InstrumentEndorsement) => {
+            Some(Basis::EndorsementTest)
         }
+        _ if information.outcome != Some(CheckOutcome::Passed) => None,
+        CheckType::InstrumentProficiencyCheck => Some(Basis::ProficiencyCheck),
+        CheckType::OperatorProficiencyCheck => Some(Basis::OperatorCheck),
+        _ => None,
     }
 }
 
@@ -272,42 +296,15 @@ impl AssessmentAccumulator for InstrumentProficiencyCheck<'_> {
         let Some(information) = information else {
             return;
         };
-        let basis = if information.check_type == Some(CheckType::FlightTest) {
-            // A flight test's purposes each have their own outcome, and it
-            // has none of its own; a failed one ends nothing.
-            let passed = |purpose| {
-                information.check_purposes.contains(&AssessedPurpose {
-                    purpose,
-                    outcome: CheckOutcome::Passed,
-                })
-            };
-            if passed(CheckPurpose::InstrumentRating) {
-                Basis::RatingTest
-            } else if passed(CheckPurpose::InstrumentEndorsement) {
-                Basis::EndorsementTest
-            } else {
-                // Passed for neither, or for another purpose only.
-                return;
-            }
-        } else {
-            match information.outcome {
-                Some(CheckOutcome::Passed) => {}
-                Some(CheckOutcome::Failed) => {
-                    if information.check_type == Some(CheckType::InstrumentProficiencyCheck)
-                        && !self.other_category.contains(entry)
-                    {
-                        self.failed.push(assessment.date);
-                    }
-                    return;
-                }
-                None => return,
-            }
-            match information.check_type {
-                Some(CheckType::InstrumentProficiencyCheck) => Basis::ProficiencyCheck,
-                Some(CheckType::OperatorProficiencyCheck) => Basis::OperatorCheck,
-                // A check of another kind.
-                _ => return,
-            }
+        // A failed flight test ends nothing.
+        if information.check_type == Some(CheckType::InstrumentProficiencyCheck)
+            && information.outcome == Some(CheckOutcome::Failed)
+            && !self.other_category.contains(entry)
+        {
+            self.failed.push(assessment.date);
+        }
+        let Some(basis) = passed_basis(&information) else {
+            return;
         };
         if basis == Basis::RatingTest {
             self.rating_tests.push(assessment.date);
@@ -331,7 +328,7 @@ impl AssessmentCurrencyCheck for InstrumentProficiencyCheck<'_> {
             .passed
             .iter()
             .filter(|passed| failed_on.is_none_or(|failed| passed.on >= *failed))
-            .filter(|passed| Self::qualifies(passed, &self.rating_tests))
+            .filter(|passed| qualifies(passed.basis, passed.on, &self.rating_tests))
             .collect();
         events.sort_by(|a, b| a.on.cmp(&b.on).then_with(|| a.id.cmp(&b.id)));
         if events.is_empty() {

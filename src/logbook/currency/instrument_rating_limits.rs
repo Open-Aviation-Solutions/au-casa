@@ -7,7 +7,7 @@
 
 use logbook_shared_kernel::CurrencyResult;
 
-use super::assessed_flights::{AssessedFlights, Pass, Passed};
+use super::assessed_flights::{AssessedFlights, Basis, Pass};
 
 /// "Within the previous 12 months" (reg 61.860(3)(a)), in calendar months.
 const CIRCLING_TEST_MONTHS: u32 = 12;
@@ -22,11 +22,13 @@ const CIRCLING_TEST_MONTHS: u32 = 12;
 /// instrument proficiency check (not an operator proficiency check, which
 /// reg 61.860(4) counts for subregulation (3)(b) only), whose flight was a
 /// single-pilot operation as reg 61.875's check reads one: no entry for it
-/// logged as co-pilot. The regulation sets no period. The latest is
-/// reported.
+/// logged as co-pilot. That stands in for the regulation's "single-pilot
+/// aircraft", an aircraft certificated for one pilot, which nothing recorded
+/// gives (the owner, on au-casa#116). The regulation sets no period. The
+/// latest is reported.
 pub(super) fn single_pilot_operation(assessed: &AssessedFlights) -> CurrencyResult {
     let passes = assessed.passes(|pass| {
-        matches!(pass.passed, Passed::RatingTest | Passed::ProficiencyCheck)
+        matches!(pass.basis, Basis::RatingTest | Basis::ProficiencyCheck)
             && pass.flown.is_some_and(|flown| flown.single_pilot)
     });
     match passes.last() {
@@ -43,18 +45,19 @@ pub(super) fn single_pilot_operation(assessed: &AssessedFlights) -> CurrencyResu
 /// approach; or (c)" an approved operator's training and checking system,
 /// which is not recorded.
 ///
-/// (b) holds, with no end, while the most recent passed instrument or
-/// operator proficiency check (reg 61.860(4)) recorded an approach that
-/// ended in a circling manoeuvre on its entry; otherwise, (a) while a
-/// passed flight test for the rating whose entry recorded one is within the
-/// previous 12 months, to the day. A check whose entry is not a flight that
-/// counts included none that is recorded.
+/// (b) holds, with no end, while the most recent check
+/// ([`AssessedFlights::most_recent_check`], an operator proficiency check
+/// among them, reg 61.860(4)) recorded an approach that ended in a circling
+/// manoeuvre on its flight; otherwise, (a) while a passed flight test for
+/// the rating whose flight recorded one is within the previous 12 months,
+/// to the day.
 pub(super) fn circling_approach(assessed: &AssessedFlights) -> CurrencyResult {
-    let circled = |pass: &Pass| pass.flown.is_some_and(|flown| flown.circling);
-    if let Some(check) = assessed.most_recent_check().filter(|check| circled(check)) {
+    if let Some(check) = assessed.most_recent_check(|flown| flown.circling) {
         return assessed.never(check);
     }
-    let tests = assessed.passes(|pass| pass.passed == Passed::RatingTest && circled(pass));
+    let tests = assessed.passes(|pass: &Pass| {
+        pass.basis == Basis::RatingTest && pass.flown.is_some_and(|flown| flown.circling)
+    });
     assessed.within(CIRCLING_TEST_MONTHS, &tests)
 }
 
@@ -65,24 +68,27 @@ mod tests {
     use time::macros::date;
     use time::Date;
 
-    use super::super::assessed_flights::{checked, passed};
+    use super::super::assessed_flights::{checked, flight_of, passed, Basis};
     use super::*;
-    use crate::logbook::test_support::{aeroplane, approach, circled, entry, simulated};
+    use crate::logbook::test_support::{aeroplane, approach, circled, entry, on_flight, simulated};
 
     const REFERENCE: Date = date!(2026 - 09 - 01);
 
     fn flight(id: &str, on: Date, approaches: Vec<Approach>) -> Entry {
-        entry(EntryParts {
-            approaches,
-            ..aeroplane(id, on)
-        })
+        entry(on_flight(
+            flight_of(id),
+            EntryParts {
+                approaches,
+                ..aeroplane(id, on)
+            },
+        ))
     }
 
     #[test]
     fn a_single_pilot_rating_test_or_proficiency_check_is_met_for_good() {
         let on = date!(2010 - 01 - 05);
         let entries = [flight("e", on, Vec::new())];
-        for kind in [Passed::RatingTest, Passed::ProficiencyCheck] {
+        for kind in [Basis::RatingTest, Basis::ProficiencyCheck] {
             let r = checked(
                 single_pilot_operation,
                 REFERENCE,
@@ -103,11 +109,11 @@ mod tests {
         });
         let entries = [flight("e", on, Vec::new()), co_pilot];
         let assessments = [
-            passed("op", on, "e", Passed::OperatorCheck),
-            passed("end", on, "e", Passed::EndorsementTest),
-            passed("ipc", on, "c", Passed::ProficiencyCheck),
+            passed("op", on, "e", Basis::OperatorCheck),
+            passed("end", on, "e", Basis::EndorsementTest),
+            passed("ipc", on, "c", Basis::ProficiencyCheck),
             // Dated after the reference: not yet passed.
-            passed("later", date!(2026 - 09 - 02), "e", Passed::RatingTest),
+            passed("later", date!(2026 - 09 - 02), "e", Basis::RatingTest),
         ];
         let r = checked(single_pilot_operation, REFERENCE, &entries, &assessments);
         assert_eq!(r.expiry, None);
@@ -128,30 +134,81 @@ mod tests {
                 vec![approach(ApproachType::Vor)],
             ),
         ];
-        let earlier = passed(
-            "old",
-            date!(2020 - 01 - 01),
-            "circled",
-            Passed::OperatorCheck,
-        );
-        let r = checked(circling_approach, REFERENCE, &entries, &[earlier]);
+        let earlier = || {
+            passed(
+                "old",
+                date!(2020 - 01 - 01),
+                "circled",
+                Basis::OperatorCheck,
+            )
+        };
+        let r = checked(circling_approach, REFERENCE, &entries, &[earlier()]);
         assert_eq!(r.expiry, Some(Expiry::Never));
         assert_eq!(r.qualifying_assessments, [AssessmentId::new("old")]);
 
-        // A later check with no circling approach replaces it.
-        let later = passed(
-            "new",
-            date!(2026 - 01 - 01),
-            "straight",
-            Passed::ProficiencyCheck,
-        );
-        let earlier = passed(
-            "old",
-            date!(2020 - 01 - 01),
-            "circled",
-            Passed::OperatorCheck,
-        );
-        let r = checked(circling_approach, REFERENCE, &entries, &[later, earlier]);
+        // A later check with no circling approach replaces it, in whichever
+        // order they arrive.
+        let later = || {
+            passed(
+                "new",
+                date!(2026 - 01 - 01),
+                "straight",
+                Basis::ProficiencyCheck,
+            )
+        };
+        for assessments in [[later(), earlier()], [earlier(), later()]] {
+            let r = checked(circling_approach, REFERENCE, &entries, &assessments);
+            assert_eq!(r.expiry, None);
+        }
+    }
+
+    /// Two checks on the latest day count if either included one, whatever
+    /// their ids.
+    #[test]
+    fn of_two_checks_on_the_latest_day_either_can_hold_it() {
+        let on = date!(2026 - 01 - 01);
+        let entries = [
+            flight("circled", on, vec![circled(ApproachType::Vor)]),
+            flight("straight", on, vec![approach(ApproachType::Vor)]),
+        ];
+        for (circling, straight) in [("a", "b"), ("b", "a")] {
+            let assessments = [
+                passed(circling, on, "circled", Basis::ProficiencyCheck),
+                passed(straight, on, "straight", Basis::ProficiencyCheck),
+            ];
+            let r = checked(circling_approach, REFERENCE, &entries, &assessments);
+            assert_eq!(r.expiry, Some(Expiry::Never));
+            assert_eq!(r.qualifying_assessments, [AssessmentId::new(circling)]);
+        }
+    }
+
+    /// A rating test is a proficiency check (reg 61.880(3)(a)), so a later
+    /// one with no circling approach ends (b) for an earlier check's; it
+    /// then counts under (a) only if it had one.
+    #[test]
+    fn a_later_rating_test_is_the_most_recent_check() {
+        let entries = [
+            flight(
+                "circled",
+                date!(2020 - 01 - 01),
+                vec![circled(ApproachType::Vor)],
+            ),
+            flight(
+                "straight",
+                date!(2026 - 01 - 01),
+                vec![approach(ApproachType::Vor)],
+            ),
+        ];
+        let assessments = [
+            passed(
+                "ipc",
+                date!(2020 - 01 - 01),
+                "circled",
+                Basis::ProficiencyCheck,
+            ),
+            passed("test", date!(2026 - 01 - 01), "straight", Basis::RatingTest),
+        ];
+        let r = checked(circling_approach, REFERENCE, &entries, &assessments);
         assert_eq!(r.expiry, None);
     }
 
@@ -173,28 +230,44 @@ mod tests {
                 "flown",
                 date!(2025 - 01 - 01),
                 "circled",
-                Passed::ProficiencyCheck,
+                Basis::ProficiencyCheck,
             ),
             passed(
                 "session",
                 date!(2026 - 01 - 01),
                 "s",
-                Passed::ProficiencyCheck,
+                Basis::ProficiencyCheck,
             ),
         ];
         let r = checked(circling_approach, REFERENCE, &entries, &assessments);
         assert_eq!(r.expiry, None);
     }
 
+    /// Under (a), once a later check with no circling approach is the most
+    /// recent.
     #[test]
     fn a_rating_test_with_a_circling_approach_counts_for_12_months_to_the_day() {
         let on = date!(2025 - 09 - 02);
-        let entries = [flight("e", on, vec![circled(ApproachType::Vor)])];
+        let entries = [
+            flight("e", on, vec![circled(ApproachType::Vor)]),
+            flight("straight", date!(2026 - 01 - 01), Vec::new()),
+        ];
+        let assessments = |test| {
+            [
+                passed("t", on, "e", test),
+                passed(
+                    "ipc",
+                    date!(2026 - 01 - 01),
+                    "straight",
+                    Basis::ProficiencyCheck,
+                ),
+            ]
+        };
         let r = checked(
             circling_approach,
             REFERENCE,
             &entries,
-            &[passed("t", on, "e", Passed::RatingTest)],
+            &assessments(Basis::RatingTest),
         );
         assert_eq!(r.expiry, Some(Expiry::On(date!(2026 - 09 - 02))));
         assert!(r.is_current());
@@ -202,7 +275,7 @@ mod tests {
             circling_approach,
             date!(2026 - 09 - 02),
             &entries,
-            &[passed("t", on, "e", Passed::RatingTest)],
+            &assessments(Basis::RatingTest),
         );
         assert!(!r.is_current());
 
@@ -211,8 +284,52 @@ mod tests {
             circling_approach,
             REFERENCE,
             &entries,
-            &[passed("t", on, "e", Passed::EndorsementTest)],
+            &assessments(Basis::EndorsementTest),
         );
         assert_eq!(r.expiry, None);
+    }
+
+    /// An entry for the flight dated after the reference has not happened,
+    /// so its co-pilot capacity does not change the flight.
+    #[test]
+    fn an_entry_after_the_reference_does_not_change_the_flight() {
+        let on = date!(2026 - 01 - 05);
+        let later = entry(on_flight(
+            flight_of("e"),
+            EntryParts {
+                capacity: Capacity::CoPilot,
+                ..aeroplane("later", date!(2026 - 09 - 02))
+            },
+        ));
+        let entries = [flight("e", on, Vec::new()), later];
+        let r = checked(
+            single_pilot_operation,
+            REFERENCE,
+            &entries,
+            &[passed("ipc", on, "e", Basis::ProficiencyCheck)],
+        );
+        assert_eq!(r.expiry, Some(Expiry::Never));
+    }
+
+    /// A circling approach on another entry for the check's flight is the
+    /// flight's.
+    #[test]
+    fn the_approaches_are_the_flights() {
+        let on = date!(2026 - 01 - 05);
+        let other = entry(on_flight(
+            flight_of("e"),
+            EntryParts {
+                approaches: vec![circled(ApproachType::Vor)],
+                ..aeroplane("other", on)
+            },
+        ));
+        let entries = [flight("e", on, Vec::new()), other];
+        let r = checked(
+            circling_approach,
+            REFERENCE,
+            &entries,
+            &[passed("ipc", on, "e", Basis::ProficiencyCheck)],
+        );
+        assert_eq!(r.expiry, Some(Expiry::Never));
     }
 }

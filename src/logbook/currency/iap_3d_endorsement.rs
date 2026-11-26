@@ -7,7 +7,7 @@
 
 use logbook_shared_kernel::CurrencyResult;
 
-use super::assessed_flights::{AssessedFlights, Pass, Passed};
+use super::assessed_flights::{AssessedFlights, Pass};
 
 /// "Within the previous 15 months" (reg 61.900(2)(b)(ii)), in calendar
 /// months.
@@ -26,13 +26,15 @@ const DEMONSTRATED_MONTHS: u32 = 15;
 /// of a 3D instrument approach operation; or (c)" an approved operator's
 /// training and checking system.
 ///
-/// (b)(i) holds, with no end, while the most recent passed instrument or
-/// operator proficiency check (reg 61.900(3)) recorded a 3D instrument
-/// approach operation on its entry; otherwise (b)(ii) while a passed
-/// instrument proficiency check, or a flight test passed for the instrument
-/// rating or an instrument endorsement, whose entry recorded one is within
-/// the previous 15 months, to the day. Each is conducted by an examiner,
-/// one of subregulation (4)'s persons; a flight review, conducted by an
+/// (b)(i) holds, with no end, while the most recent check
+/// ([`AssessedFlights::most_recent_check`], an operator proficiency check
+/// among them, reg 61.900(3)) recorded a 3D instrument approach operation
+/// on its flight; otherwise (b)(ii) while a passed instrument or operator
+/// proficiency check (reg 61.900(3) makes the latter one "for paragraph
+/// (2)(b)"), or a flight test passed for the instrument rating or an
+/// instrument endorsement, whose flight recorded one is within the previous
+/// 15 months, to the day. Each is conducted by an examiner, one of
+/// subregulation (4)'s persons; a flight review, conducted by an
 /// instructor, is not. A demonstration not recorded as an assessment is not
 /// read.
 ///
@@ -40,12 +42,10 @@ const DEMONSTRATED_MONTHS: u32 = 15;
 /// recorded (au-casa#123), and (b)(ii) already counts a passed flight test
 /// whose entry recorded a 3D approach. (c) is not recorded.
 pub(super) fn three_d_approach(assessed: &AssessedFlights) -> CurrencyResult {
-    let three_d = |pass: &Pass| pass.flown.is_some_and(|flown| flown.three_d);
-    if let Some(check) = assessed.most_recent_check().filter(|check| three_d(check)) {
+    if let Some(check) = assessed.most_recent_check(|flown| flown.three_d) {
         return assessed.never(check);
     }
-    let demonstrated =
-        assessed.passes(|pass| pass.passed != Passed::OperatorCheck && three_d(pass));
+    let demonstrated = assessed.passes(|pass: &Pass| pass.flown.is_some_and(|flown| flown.three_d));
     assessed.within(DEMONSTRATED_MONTHS, &demonstrated)
 }
 
@@ -55,17 +55,32 @@ mod tests {
     use time::macros::date;
     use time::Date;
 
-    use super::super::assessed_flights::{checked, passed};
+    use super::super::assessed_flights::{checked, flight_of, passed, Basis};
     use super::*;
-    use crate::logbook::test_support::{aeroplane, approach, entry};
+    use crate::logbook::test_support::{aeroplane, approach, entry, on_flight};
 
     const REFERENCE: Date = date!(2026 - 09 - 01);
+    const ILS_ON: Date = date!(2025 - 06 - 02);
+    const VOR_ON: Date = date!(2026 - 01 - 01);
 
     fn flight(id: &str, on: Date, procedure: ApproachType) -> Entry {
-        entry(EntryParts {
-            approaches: vec![approach(procedure)],
-            ..aeroplane(id, on)
-        })
+        entry(on_flight(
+            flight_of(id),
+            EntryParts {
+                approaches: vec![approach(procedure)],
+                ..aeroplane(id, on)
+            },
+        ))
+    }
+
+    /// An ILS on `ILS_ON`, a VOR on `VOR_ON`, and an ILS dated after the
+    /// reference, which has not happened yet.
+    fn flights() -> [Entry; 3] {
+        [
+            flight("ils", ILS_ON, ApproachType::Ils),
+            flight("vor", VOR_ON, ApproachType::Vor),
+            flight("later", date!(2026 - 09 - 02), ApproachType::Ils),
+        ]
     }
 
     #[test]
@@ -76,52 +91,56 @@ mod tests {
             three_d_approach,
             REFERENCE,
             &entries,
-            &[passed("opc", on, "e", Passed::OperatorCheck)],
+            &[passed("opc", on, "e", Basis::OperatorCheck)],
         );
         assert_eq!(r.expiry, Some(Expiry::Never));
     }
 
+    /// An ILS on a test or check, any of them an operator proficiency check
+    /// (reg 61.900(3)), and a later check with none.
     #[test]
     fn otherwise_a_test_or_check_with_one_counts_for_15_months_to_the_day() {
-        let entries = [
-            flight("ils", date!(2025 - 06 - 02), ApproachType::Ils),
-            flight("vor", date!(2026 - 01 - 01), ApproachType::Vor),
-        ];
-        let latest = passed(
-            "vor",
-            date!(2026 - 01 - 01),
-            "vor",
-            Passed::ProficiencyCheck,
-        );
-        for kind in [
-            Passed::ProficiencyCheck,
-            Passed::RatingTest,
-            Passed::EndorsementTest,
+        for basis in [
+            Basis::ProficiencyCheck,
+            Basis::OperatorCheck,
+            Basis::RatingTest,
+            Basis::EndorsementTest,
         ] {
             let assessments = [
-                passed("ils", date!(2025 - 06 - 02), "ils", kind),
-                passed(
-                    "vor",
-                    date!(2026 - 01 - 01),
-                    "vor",
-                    Passed::ProficiencyCheck,
-                ),
+                passed("ils", ILS_ON, "ils", basis),
+                passed("vor", VOR_ON, "vor", Basis::ProficiencyCheck),
             ];
-            let r = checked(three_d_approach, REFERENCE, &entries, &assessments);
+            let r = checked(three_d_approach, REFERENCE, &flights(), &assessments);
             assert_eq!(
                 r.expiry,
                 Some(Expiry::On(date!(2026 - 09 - 02))),
-                "{kind:?}"
+                "{basis:?}"
             );
             assert!(r.is_current());
+            let r = checked(
+                three_d_approach,
+                date!(2026 - 09 - 02),
+                &flights(),
+                &assessments,
+            );
+            assert!(!r.is_current(), "{basis:?}");
         }
-        // An operator proficiency check is not read as a demonstration to
-        // an examiner under (b)(ii).
+    }
+
+    /// A check dated after the reference is not the most recent one, and
+    /// its flight's approach is not counted.
+    #[test]
+    fn a_check_after_the_reference_does_not_count() {
         let assessments = [
-            passed("ils", date!(2025 - 06 - 02), "ils", Passed::OperatorCheck),
-            latest,
+            passed("vor", VOR_ON, "vor", Basis::ProficiencyCheck),
+            passed(
+                "later",
+                date!(2026 - 09 - 02),
+                "later",
+                Basis::ProficiencyCheck,
+            ),
         ];
-        let r = checked(three_d_approach, REFERENCE, &entries, &assessments);
+        let r = checked(three_d_approach, REFERENCE, &flights(), &assessments);
         assert_eq!(r.expiry, None);
     }
 }
