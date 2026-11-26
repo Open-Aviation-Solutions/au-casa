@@ -25,7 +25,7 @@ use std::collections::BTreeSet;
 use icao_shared_kernel::{
     AirlineTransportCategory, LicenceTitle, MinimumAges, PrivateOrCommercialCategory,
 };
-use logbook_shared_kernel::{LicenceTitleTerm, Term, TermId};
+use logbook_shared_kernel::{LicenceTitleId, LicenceTitleTerm, Term, TermId};
 
 use super::category_id;
 use crate::aircraft::AircraftCategory;
@@ -61,6 +61,34 @@ pub(crate) fn holds_pilot_licence_in(held: &BTreeSet<TermId>, category: Aircraft
             && part61.category_rating == Some(category)
             && held.contains(&term(part61).id)
     })
+}
+
+/// Those of `titles` that are a pilot licence (reg 61.010) with a category
+/// rating, each with its Part 61 term, in the order given, but for the
+/// multi-crew pilot licence: its holder holds a multi-crew aeroplane type
+/// rating (reg 61.655(2)(e)) and it is for work as co-pilot in aircraft that
+/// need a type rating (regs 61.635 and 61.375(5)(a)), so a class rating is
+/// not looked for.
+pub(crate) fn pilot_licences_with_category(
+    titles: &[LicenceTitleId],
+) -> Vec<(LicenceTitleId, Part61Term)> {
+    let annex_1 = ANNEX_1_TITLES.into_iter().filter_map(|title| {
+        part61_term(title).map(|part61| (LicenceTitleId::Annex1(title), part61))
+    });
+    let national = NATIONAL_TITLES.into_iter().map(|title| {
+        let part61 = title.part61_term();
+        (LicenceTitleId::National(term(part61).id), part61)
+    });
+    let all: Vec<_> = annex_1.chain(national).collect();
+    titles
+        .iter()
+        .filter_map(|held| all.iter().find(|(id, _)| id == held).cloned())
+        .filter(|(_, part61)| {
+            part61.licence.is_pilot_licence()
+                && part61.licence != FlightCrewLicence::MultiCrew
+                && part61.category_rating.is_some()
+        })
+        .collect()
 }
 
 /// CASA's minimum ages for Annex 1's titles: Annex 1's own. Private 17 (reg

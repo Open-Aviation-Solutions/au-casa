@@ -20,8 +20,11 @@
 //! `single-engine-aeroplane-instrument-endorsement`,
 //! `iap-2d-instrument-endorsement`).
 
-use logbook_shared_kernel::{LicenceProblem, LicenceProblemAt, ProblemKind, Term, TermId};
+use logbook_shared_kernel::{
+    LicenceProblem, LicenceProblemAt, LicenceTitleId, ProblemKind, Term, TermId,
+};
 
+use super::licence_titles::pilot_licences_with_category;
 use super::{class_name, term};
 use crate::aircraft::{AircraftCategory, AircraftClassRating, DesignFeature};
 
@@ -186,8 +189,11 @@ impl InstrumentEndorsement {
     }
 }
 
-/// The problems with the ratings and endorsements held under one licence
-/// (`held`): a refusal at the instrument rating for each part of table 61.890
+/// The problems with what is held under one licence: its `titles` and the
+/// ratings and endorsements (`held`). A warning at the first title of each
+/// category with class ratings (reg 61.020(1)) when none of the category's
+/// class ratings is held (reg 61.375(3); see [`class_rating_warnings`]); and
+/// a refusal at the instrument rating for each part of table 61.890
 /// none of whose instrument endorsements is held with it, as an applicant
 /// for the rating must meet the requirements for the grant of at least one
 /// from each (reg 61.885(1)(b)(i) and (ii)). A missing endorsement is
@@ -195,7 +201,70 @@ impl InstrumentEndorsement {
 /// kernel's contract has something missing reported (au-casa#108 decided
 /// so). The private instrument rating is not checked, as its endorsements
 /// (table 61.935) are not listed (#113).
-pub(crate) fn licence_problems(held: &[TermId]) -> Vec<LicenceProblem> {
+pub(crate) fn licence_problems(titles: &[LicenceTitleId], held: &[TermId]) -> Vec<LicenceProblem> {
+    let mut problems = instrument_rating_problems(held);
+    problems.extend(class_rating_warnings(titles, held));
+    problems
+}
+
+/// A warning for each category with class ratings, in order of the first
+/// title given in it, when none of the category's class ratings is held. A
+/// class rating is held under the licence, not with a title, so one warning
+/// serves every title in the category (a private and a commercial pilot
+/// licence, aeroplane category rating, need one aeroplane class rating
+/// between them), and it is reported at the first. Reg 61.375(3) and (5) only
+/// limit where the licence's privileges are exercised, and a type rating
+/// serves in a type-rated aircraft, so it is a warning (au-casa#112); type
+/// ratings are not listed yet (#101), so one does not count.
+fn class_rating_warnings(titles: &[LicenceTitleId], held: &[TermId]) -> Vec<LicenceProblem> {
+    let mut warned = Vec::new();
+    let mut warnings = Vec::new();
+    for (title, part61) in pilot_licences_with_category(titles) {
+        let Some(category) = part61.category_rating else {
+            continue;
+        };
+        let class_ratings = || {
+            CLASSES
+                .into_iter()
+                .filter(|class| class_category(*class) == category)
+        };
+        if warned.contains(&category)
+            || class_ratings().next().is_none()
+            || class_ratings().any(|class| held.contains(&TermId::new(class_rating_id(class))))
+        {
+            continue;
+        }
+        warned.push(category);
+        warnings.push(LicenceProblem::new(
+            LicenceProblemAt::Title(title),
+            ProblemKind::Warning,
+            format!(
+                "Other than in an aircraft mentioned in reg 61.375(5), the holder of a pilot \
+                 licence is authorised to exercise its privileges in an aircraft only if the \
+                 holder also holds \"an appropriate aircraft class rating for the aircraft\". \
+                 No {category} class rating is recorded with the {part61}. Record the class \
+                 rating or pilot type rating held."
+            ),
+            "61.375(3)",
+        ));
+    }
+    warnings
+}
+
+/// The category a class belongs to (reg 61.020(1)).
+fn class_category(class: AircraftClassRating) -> AircraftCategory {
+    match class {
+        AircraftClassRating::SingleEngineAeroplane | AircraftClassRating::MultiEngineAeroplane => {
+            AircraftCategory::Aeroplane
+        }
+        AircraftClassRating::SingleEngineHelicopter => AircraftCategory::Helicopter,
+        AircraftClassRating::PoweredLiftAircraft => AircraftCategory::PoweredLift,
+        AircraftClassRating::SingleEngineGyroplane => AircraftCategory::Gyroplane,
+        AircraftClassRating::Airship => AircraftCategory::Airship,
+    }
+}
+
+fn instrument_rating_problems(held: &[TermId]) -> Vec<LicenceProblem> {
     let instrument_rating = TermId::new(INSTRUMENT_RATING);
     if !held.contains(&instrument_rating) {
         return Vec::new();
@@ -541,5 +610,57 @@ mod tests {
             casa.licence_problems(&[], &held(&["private-instrument-rating", NIGHT_VFR_RATING])),
             []
         );
+    }
+
+    /// One warning for a category with none of its class ratings held, at
+    /// its first title and quoting reg 61.375(3); none once one is held,
+    /// whichever class, or for a title without class ratings.
+    #[test]
+    fn a_pilot_licence_without_a_class_rating_in_its_category_is_warned_once() {
+        use icao_shared_kernel::{LicenceTitle, PrivateOrCommercialCategory as Pc};
+
+        let annex_1 = |title| LicenceTitleId::Annex1(title);
+        let private = annex_1(LicenceTitle::Private(Pc::Aeroplane));
+        let commercial = annex_1(LicenceTitle::Commercial(Pc::Aeroplane));
+        let helicopter = annex_1(LicenceTitle::Private(Pc::Helicopter));
+        let casa = Casa::new();
+
+        let warned = casa.licence_problems(&[commercial.clone(), private.clone()], &[]);
+        assert_eq!(
+            warned,
+            [LicenceProblem::new(
+                LicenceProblemAt::Title(commercial.clone()),
+                ProblemKind::Warning,
+                "Other than in an aircraft mentioned in reg 61.375(5), the holder of a pilot \
+                 licence is authorised to exercise its privileges in an aircraft only if the \
+                 holder also holds \"an appropriate aircraft class rating for the aircraft\". \
+                 No aeroplane class rating is recorded with the commercial pilot licence, \
+                 aeroplane category rating. Record the class rating or pilot type rating held.",
+                "61.375(3)",
+            )]
+        );
+
+        let both = casa.licence_problems(&[private.clone(), helicopter.clone()], &[]);
+        assert_eq!(both.len(), 2);
+        let multi = held(&["multi-engine-aeroplane-class-rating"]);
+        let rest = casa.licence_problems(&[private.clone(), helicopter.clone()], &multi);
+        assert_eq!(rest, [both[1].clone()]);
+
+        // The multi-crew pilot licence is not warned; the air transport pilot
+        // licence is, even with it.
+        let multi_crew = annex_1(LicenceTitle::MultiCrew);
+        assert_eq!(
+            casa.licence_problems(std::slice::from_ref(&multi_crew), &[]),
+            []
+        );
+        let air_transport = annex_1(LicenceTitle::AirlineTransport(
+            icao_shared_kernel::AirlineTransportCategory::Aeroplane,
+        ));
+        let with_mpl = casa.licence_problems(&[multi_crew, air_transport.clone()], &[]);
+        assert_eq!(with_mpl.len(), 1);
+        assert_eq!(with_mpl[0].at, LicenceProblemAt::Title(air_transport));
+
+        let glider = annex_1(LicenceTitle::Glider);
+        assert_eq!(casa.licence_problems(&[glider], &[]), []);
     }
 }
