@@ -11,12 +11,15 @@
 //! check over assessments ([`AssessmentCurrencyCheck`]) that reads their
 //! aircraft is given the entries it reads it from.
 
+mod assessed_flights;
 mod flight_review;
 mod guidance_operations;
+mod iap_3d_endorsement;
 mod instrument_approaches;
 mod instrument_approaches_2d;
 mod instrument_approaches_3d;
 mod instrument_proficiency_check;
+mod instrument_rating_limits;
 mod renewal;
 mod single_pilot_ifr;
 mod take_offs_and_landings;
@@ -37,12 +40,15 @@ use crate::logbook::ratings_and_endorsements::{
 };
 use crate::logbook::{class_name, Casa};
 
+use assessed_flights::AssessedFlights;
 use flight_review::FlightReview;
 use guidance_operations::GuidanceOperations;
+use iap_3d_endorsement::three_d_approach;
 use instrument_approaches::InstrumentApproaches;
 use instrument_approaches_2d::InstrumentApproaches2D;
 use instrument_approaches_3d::InstrumentApproaches3D;
 use instrument_proficiency_check::{InstrumentProficiencyCheck, ProficiencyCheckFor};
+use instrument_rating_limits::{circling_approach, single_pilot_operation};
 use single_pilot_ifr::SinglePilotIfr;
 use take_offs_and_landings::{TakeOffsAndLandings, TakeOffsOrLandings, TAKE_OFFS_AND_LANDINGS};
 
@@ -69,6 +75,15 @@ enum CasaRequirement {
     /// Reg 61.880's instrument proficiency check, for a category ((1)) or
     /// for multi-engine aeroplanes or helicopters ((2)).
     InstrumentProficiencyCheck(ProficiencyCheckFor),
+    /// Reg 61.860(2)'s flight test or instrument proficiency check in a
+    /// single-pilot aircraft.
+    SinglePilotOperation,
+    /// Reg 61.860(3)'s flight test or proficiency check that included a
+    /// circling approach.
+    CirclingApproach,
+    /// Reg 61.900(2)'s flight test or proficiency check that included a 3D
+    /// instrument approach operation.
+    ThreeDApproachAssessed,
 }
 
 /// Reg 61.015's categories of aircraft, in its order, each with a
@@ -97,11 +112,12 @@ const PROFICIENCY_CHECKS: [ProficiencyCheckFor; 7] = [
 /// The requirements, in the order they are reported. Aeroplane recency
 /// comes first, take-offs before landings for each regulation, then
 /// instrument recency, then the flight reviews and the instrument
-/// proficiency checks, as pilot-logbook listed them; instrument
-/// recency is in reg 61.870's order, with a requirement of its subregulation
-/// (3) for each category in reg 61.015's, and the instrument proficiency
-/// checks in [`PROFICIENCY_CHECKS`]' order.
-const REQUIREMENTS: [CasaRequirement; 26] = [
+/// proficiency checks, as pilot-logbook listed them, then the limits that
+/// turn on what a test or check included, in their regulations' order;
+/// instrument recency is in reg 61.870's order, with a requirement of its
+/// subregulation (3) for each category in reg 61.015's, and the instrument
+/// proficiency checks in [`PROFICIENCY_CHECKS`]' order.
+const REQUIREMENTS: [CasaRequirement; 29] = [
     CasaRequirement::PassengerDay(TakeOffsOrLandings::TakeOffs),
     CasaRequirement::PassengerDay(TakeOffsOrLandings::Landings),
     CasaRequirement::PassengerNight(TakeOffsOrLandings::TakeOffs),
@@ -128,6 +144,9 @@ const REQUIREMENTS: [CasaRequirement; 26] = [
     CasaRequirement::InstrumentProficiencyCheck(PROFICIENCY_CHECKS[4]),
     CasaRequirement::InstrumentProficiencyCheck(PROFICIENCY_CHECKS[5]),
     CasaRequirement::InstrumentProficiencyCheck(PROFICIENCY_CHECKS[6]),
+    CasaRequirement::SinglePilotOperation,
+    CasaRequirement::CirclingApproach,
+    CasaRequirement::ThreeDApproachAssessed,
 ];
 
 impl CasaRequirement {
@@ -147,6 +166,9 @@ impl CasaRequirement {
             Self::SinglePilotIfr => "61.875",
             Self::FlightReview(_) => "61.745",
             Self::InstrumentProficiencyCheck(_) => "61.880",
+            Self::SinglePilotOperation => "61.860(2)",
+            Self::CirclingApproach => "61.860(3)",
+            Self::ThreeDApproachAssessed => "61.900(2)",
         }
     }
 
@@ -242,12 +264,18 @@ impl CasaRequirement {
                     "Instrument proficiency check for multi-engine helicopters".to_owned()
                 }
             },
+            Self::SinglePilotOperation => "Single-pilot operation under the IFR".to_owned(),
+            Self::CirclingApproach => "Circling approach under the IFR".to_owned(),
+            Self::ThreeDApproachAssessed => {
+                "3D instrument approach operation: flight test or proficiency check".to_owned()
+            }
         }
     }
 
     /// What meets it, in CASA's words: pilot-logbook's wording of it until
-    /// au-casa#96 moved it here, and for reg 61.870(3), the owner's on
-    /// au-casa#96.
+    /// au-casa#96 moved it here, for reg 61.870(3), the owner's on
+    /// au-casa#96, and for regs 61.860(2) and (3) and 61.900(2), the owner's
+    /// on au-casa#116.
     fn description(self) -> String {
         match self {
             Self::PassengerDay(kind) => format!("3 {} in the past 90 days", kind.plural()),
@@ -306,6 +334,21 @@ impl CasaRequirement {
                      to the end of the 12th month after the month it is completed"
                 )
             }
+            Self::SinglePilotOperation => "The flight test for the instrument rating passed, or \
+                                           an instrument proficiency check completed, in a \
+                                           single-pilot aircraft"
+                .to_owned(),
+            Self::CirclingApproach => "The flight test for the instrument rating passed within \
+                                       the previous 12 months, or the most recent instrument \
+                                       proficiency check, including a circling approach"
+                .to_owned(),
+            Self::ThreeDApproachAssessed => "The most recent instrument proficiency check \
+                                             including a 3D instrument approach operation; \
+                                             otherwise, competence in one demonstrated to an \
+                                             examiner within the previous 15 months, in a flight \
+                                             test or check, or in a demonstration not recorded \
+                                             as an assessment"
+                .to_owned(),
         }
     }
 
@@ -344,9 +387,12 @@ impl CasaRequirement {
                 "course deviation indicator operation",
                 "course deviation indicator operations",
             ),
-            Self::SinglePilotIfr | Self::FlightReview(_) | Self::InstrumentProficiencyCheck(_) => {
-                None
-            }
+            Self::SinglePilotIfr
+            | Self::FlightReview(_)
+            | Self::InstrumentProficiencyCheck(_)
+            | Self::SinglePilotOperation
+            | Self::CirclingApproach
+            | Self::ThreeDApproachAssessed => None,
         }
     }
 
@@ -380,13 +426,16 @@ impl CasaRequirement {
     }
 
     /// Recent experience (regs 61.395, 61.870, 61.875 and 61.965), or a
-    /// periodic assessment: a flight review (reg 61.745) or an instrument
-    /// proficiency check (reg 61.880).
+    /// periodic assessment: a flight review (reg 61.745), an instrument
+    /// proficiency check (reg 61.880), or what a flight test or check
+    /// included (regs 61.860(2) and (3), 61.900(2)).
     fn kind(self) -> RequirementKind {
         match self {
-            Self::FlightReview(_) | Self::InstrumentProficiencyCheck(_) => {
-                RequirementKind::PeriodicAssessment
-            }
+            Self::FlightReview(_)
+            | Self::InstrumentProficiencyCheck(_)
+            | Self::SinglePilotOperation
+            | Self::CirclingApproach
+            | Self::ThreeDApproachAssessed => RequirementKind::PeriodicAssessment,
             Self::PassengerDay(_)
             | Self::PassengerNight(_)
             | Self::NightVfr(_)
@@ -436,8 +485,8 @@ impl CasaRequirement {
     /// - reg 61.965(a), to the holder of a night VFR rating, in an aircraft
     ///   of a particular category, here an aeroplane, so of the night VFR
     ///   rating and a title with the aeroplane category rating;
-    /// - regs 61.870(2), (6) and (7) and 61.875, to the holder of an
-    ///   instrument rating;
+    /// - regs 61.860(2) and (3), 61.870(2), (6) and (7) and 61.875, to the
+    ///   holder of an instrument rating;
     /// - reg 61.870(3), for a category, and reg 61.880(1), to the holder of
     ///   an instrument endorsement in that category (Part 1 of table 61.890),
     ///   since without one the rating gives no privilege in it (reg
@@ -445,7 +494,8 @@ impl CasaRequirement {
     ///   helicopters, to the holder of the multi-engine aeroplane or
     ///   helicopter instrument endorsement;
     /// - reg 61.870(4) and (5), to the holder of the IAP 2D or IAP 3D
-    ///   instrument endorsement (Part 2 of table 61.890, reg 61.865(2));
+    ///   instrument endorsement (Part 2 of table 61.890, reg 61.865(2)), and
+    ///   reg 61.900(2) to the holder of the IAP 3D one;
     /// - reg 61.745, to the holder of its aircraft class rating.
     fn applies_to(self, held: &BTreeSet<TermId>) -> bool {
         use InstrumentEndorsement as E;
@@ -476,7 +526,9 @@ impl CasaRequirement {
             Self::InstrumentApproaches
             | Self::AzimuthGuidance
             | Self::CourseDeviationIndicator
-            | Self::SinglePilotIfr => holds(INSTRUMENT_RATING),
+            | Self::SinglePilotIfr
+            | Self::SinglePilotOperation
+            | Self::CirclingApproach => holds(INSTRUMENT_RATING),
             Self::InstrumentApproachesInCategory(category)
             | Self::InstrumentProficiencyCheck(ProficiencyCheckFor::Category(category)) => {
                 instrument_endorsement_in(category)
@@ -488,7 +540,7 @@ impl CasaRequirement {
                 holds(E::MultiEngineHelicopter.id())
             }
             Self::InstrumentApproaches2D => holds(E::Iap2D.id()),
-            Self::InstrumentApproaches3D => holds(E::Iap3D.id()),
+            Self::InstrumentApproaches3D | Self::ThreeDApproachAssessed => holds(E::Iap3D.id()),
             Self::FlightReview(class) => holds(class_rating_id(class)),
         }
     }
@@ -550,8 +602,9 @@ fn with_implied(held: &BTreeSet<TermId>) -> BTreeSet<TermId> {
 /// `run`, which applies [`Casa::counts`]. The flight reviews read an
 /// assessment's aircraft from the entry it names, which `run` does not
 /// reach, so they are given the entries `counts` lets through, as are the
-/// instrument proficiency checks, which are also given every entry, to read
-/// an assessment's information with its entry whether or not it counts.
+/// instrument proficiency checks and the limits on what a test or check
+/// included, which are also given every entry, to read an assessment's
+/// information with its entry whether or not it counts.
 pub(super) fn currency(
     casa: &Casa,
     as_of: Date,
@@ -603,8 +656,12 @@ pub(super) fn currency(
     let mut proficiency_checks = PROFICIENCY_CHECKS.map(|check_for| {
         InstrumentProficiencyCheck::new(as_of, check_for, counted(), &logbook.entries)
     });
-    let mut assessment_accumulators: Vec<&mut dyn AssessmentAccumulator> =
-        vec![&mut single_engine_review, &mut multi_engine_review];
+    let mut assessed = AssessedFlights::new(as_of, counted(), &logbook.entries);
+    let mut assessment_accumulators: Vec<&mut dyn AssessmentAccumulator> = vec![
+        &mut single_engine_review,
+        &mut multi_engine_review,
+        &mut assessed,
+    ];
     assessment_accumulators.extend(
         proficiency_checks
             .iter_mut()
@@ -676,6 +733,20 @@ pub(super) fn currency(
                     )
                 }),
         )
+        .chain([
+            (
+                CasaRequirement::SinglePilotOperation,
+                single_pilot_operation(&assessed),
+            ),
+            (
+                CasaRequirement::CirclingApproach,
+                circling_approach(&assessed),
+            ),
+            (
+                CasaRequirement::ThreeDApproachAssessed,
+                three_d_approach(&assessed),
+            ),
+        ])
         .map(|(requirement, result)| (requirement.id(), result))
         .collect()
 }
@@ -902,17 +973,23 @@ mod tests {
                 "61.870(7)",
                 "61.875",
                 "61.880|aeroplane",
+                "61.860(2)",
+                "61.860(3)",
             ]
         );
-        assert_eq!(
-            applying_to(&["instrument-rating"]),
-            ["61.870(2)", "61.870(6)", "61.870(7)", "61.875"]
-        );
+        assert_eq!(applying_to(&["instrument-rating"]), INSTRUMENT_RATING_ROWS);
     }
 
     /// The instrument rating's own rows, which any instrument endorsement
     /// implies.
-    const INSTRUMENT_RATING_ROWS: [&str; 4] = ["61.870(2)", "61.870(6)", "61.870(7)", "61.875"];
+    const INSTRUMENT_RATING_ROWS: [&str; 6] = [
+        "61.870(2)",
+        "61.870(6)",
+        "61.870(7)",
+        "61.875",
+        "61.860(2)",
+        "61.860(3)",
+    ];
 
     /// Each aircraft category or class instrument endorsement makes reg
     /// 61.870(3) and the instrument proficiency check apply for its category,
@@ -960,7 +1037,7 @@ mod tests {
             ("iap-2d-instrument-endorsement", vec!["61.870(4)"]),
             (
                 "iap-3d-instrument-endorsement",
-                vec!["61.870(4)", "61.870(5)"],
+                vec!["61.870(4)", "61.870(5)", "61.900(2)"],
             ),
         ];
         for (endorsement, expected) in cases {
@@ -990,6 +1067,8 @@ mod tests {
                 "61.870(7)",
                 "61.875",
                 "61.880|aeroplane",
+                "61.860(2)",
+                "61.860(3)",
             ]
         );
         assert_eq!(
@@ -1001,6 +1080,9 @@ mod tests {
                 "61.870(6)",
                 "61.870(7)",
                 "61.875",
+                "61.860(2)",
+                "61.860(3)",
+                "61.900(2)",
             ]
         );
     }
@@ -1042,7 +1124,8 @@ mod tests {
     #[test]
     fn each_requirement_has_its_kind_set_and_words() {
         for requirement in requirements() {
-            let periodic = ["61.745", "61.880"].contains(&requirement.regulation);
+            let periodic = ["61.745", "61.880", "61.860(2)", "61.860(3)", "61.900(2)"]
+                .contains(&requirement.regulation);
             let kind = if periodic {
                 RequirementKind::PeriodicAssessment
             } else {
@@ -1145,6 +1228,10 @@ mod tests {
                 "61.870(6)",
                 "61.745|single-engine-aeroplane",
                 "61.880|aeroplane",
+                // The proficiency check's flight was a single-pilot
+                // operation with a 3D approach.
+                "61.860(2)",
+                "61.900(2)",
             ]
         );
     }

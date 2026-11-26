@@ -267,8 +267,9 @@ to the trait.
   endorsement (reg 61.865), so reg 61.870(3) and reg 61.880 apply for the
   aircraft category and class endorsements held (Part 1 of table 61.890), the
   multi-engine checks for the multi-engine ones only, and reg 61.870(4) and
-  (5) for the IAP 2D and IAP 3D instrument endorsements; regs 61.870(2), (6)
-  and (7) and 61.875 apply for the rating. An instrument endorsement held
+  (5) for the IAP 2D and IAP 3D instrument endorsements, and reg 61.900(2)
+  for the IAP 3D one; regs 61.860(2) and (3), 61.870(2), (6) and (7) and
+  61.875 apply for the rating. An instrument endorsement held
   implies the instrument rating (its applicant must hold one, reg
   61.905(1)(a)), and the IAP 3D instrument endorsement the IAP 2D one (item
   9 of table 61.890), so an endorsement recorded alone does not give only
@@ -288,7 +289,40 @@ to the trait.
   nothing in the kernel checks and au-casa's test does. A set's members
   apply together, all or none (`applies_to` chooses by kind alone). Its
   kind is recent experience (regs 61.395, 61.870, 61.875 and 61.965) or a
-  periodic assessment (regs 61.745 and 61.880).
+  periodic assessment (regs 61.745 and 61.880, and regs 61.860(2) and (3)
+  and 61.900(2), met by what a test or check included).
+- **What a test or check included** (au-casa#116): regs 61.860(2) and (3)
+  and 61.900(2) are read from the approaches and capacities recorded on
+  every entry that counts for the flight a passed instrument flight test or
+  proficiency check names (`currency/assessed_flights.rs`). "The most
+  recent instrument proficiency check" is the latest of the passes reg
+  61.880's check counts as one (its `qualifies`: an instrument or operator
+  proficiency check, regs 61.860(4) and 61.900(3), or a flight test of reg
+  61.880(3)(a) or (b)), and two on that day count if either included the
+  approach. A failed check is not one: the owner decided on the latest
+  *passed* check. A latest check au-casa cannot read, one in a session
+  (pilot-logbook#278) or naming no entry of the logbook, included nothing,
+  so it ends regs 61.860(3)(b) and 61.900(2)(b)(i) until #278 records
+  assessments on sessions. Reg 61.860(2)(b)'s "instrument proficiency check" is read as for reg
+  61.860(3)(b) (the owner, on au-casa#116): a passed one, or a flight test the
+  reg 61.880 check counts as one (reg 61.880(3)(a), (b)), but not an operator
+  proficiency check. Reg 61.860(2)'s "single-pilot aircraft" is an
+  aircraft certificated for one pilot, which nothing recorded gives; it is
+  read as reg 61.875's check reads a single-pilot operation, no entry for
+  the flight logged as co-pilot, so a single-pilot aircraft flown with a
+  co-pilot logged does not count, and one certificated for two crew flown
+  with none logged does. Reg 61.860(2) once met, and regs 61.860(3)(b) and
+  61.900(2)(b)(i) while the most recent check holds them, are
+  `Expiry::Never`. Not checked:
+  - the operator's training and checking systems of regs 61.860(3)(c) and
+    61.900(2)(c), as reg 61.880(3)(d)'s is not: they are not recorded;
+  - reg 61.900(1), an instrument approach operation in IMC with a
+    navigation system of a kind the holder has never used: entries do not
+    record the navigation system, and it is a once-in-a-career condition;
+  - reg 61.900(2)(a), the flight test for the IAP 3D instrument endorsement
+    within 12 months: which endorsement a flight test was for is not
+    recorded (au-casa#123 would record it), and (b)(ii) already counts a
+    passed flight test whose flight had a 3D approach, for 15 months.
 - **Testing:** each check's unit tests assert its boundaries (the window's
   edge and the expiry, the category guard where it has one, an entry dated after the
   reference date), with entries built by `logbook::test_support` from the
