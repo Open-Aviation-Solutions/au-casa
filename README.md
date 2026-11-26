@@ -17,13 +17,13 @@ that are Australia's alone are kept here.
 
 ## Status
 
-Early: a `0.x` release. Take it by a caret range on its minor version (such as `"0.14"`): until `1.0`
+Early: a `0.x` release. Take it by a caret range on its minor version (such as `"0.15"`): until `1.0`
 a breaking release is a minor version (0.2 stopped re-exporting the aircraft
 description types; 0.3 moved to `icao-shared-kernel` 0.5; 0.4 counts every category in reg
 61.870's checks and adds reg 61.870(3) for each category; 0.5 moves to logbook-shared-kernel
 0.5, counts take-offs and landings separately, and changes CASA's information on an
 assessment to its format version 2; 0.6 moves to logbook-shared-kernel 0.6 and words the
-flight test's question in Part 61's words, marking a failed outcome as adverse; 0.7 makes CASA's information on an entry and on an assessment crate-private, so a host reads it only through `LicensingAuthority`, and drops the assessment migration with it; 0.8 moves to logbook-shared-kernel 0.8, classifies an aircraft from its recorded characteristics as well as its type's description, giving the design features it requires and an id for each term and total, puts a multi-engine centre-line thrust aeroplane in the single-engine class, and drops the classification override and the public design features, and lists the titles of licence CASA issues, with an id for each, and its minimum ages, through `LicensingAuthority`; 0.9 moves to logbook-shared-kernel 0.9 and icao-shared-kernel 0.6, and classifies a session's type with the characteristics of the configuration its device represented, so a centre-line thrust twin counts as single-engine whether flown or simulated; 0.10 asks whether a flight was a cross-country flight, totals cross-country flight time, and changes CASA's information on an entry to its format version 2, with a migration from version 1; 0.11 counts reg 61.965's 6 months as calendar months and counts only flights, and no simulator session, towards that night VFR recent experience; has a flight review valid to the end of the 24th month after the month it was completed in (reg 61.745(1A)(a)), and one completed within 3 months before the currently valid review expires valid to the end of the 24th month after that expiry (reg 61.745(1A)(b)), where each was counted in days; renews an instrument proficiency check early (reg 61.880(3)(f)) only by an instrument proficiency check, not an operator proficiency check or a flight test; replaces the single instrument proficiency check of reg 61.880 with one for each category and one each for multi-engine aeroplanes and helicopters, each counting the checks in its relevant aircraft; and asks only for the DME or GNSS arrivals not also recorded in the entry's approaches; 0.12 moves to logbook-shared-kernel 0.10, words each requirement and gives its kind, refuses an assessment whose entry's aircraft can't be classified, lists CASA's ratings and endorsements and requires each aircraft's class rating, and makes the superseded entry migration (`logbook::migrate_entry_information_from_version_1`) crate-private; 0.13 moves to logbook-shared-kernel 0.11, answers which requirements apply to the titles, ratings and endorsements a pilot holds (`requirements_for`), and lists table 61.890's instrument endorsements, each with a new id, after the instrument rating in `ratings_and_endorsements`, which moves the private instrument and night VFR ratings after them; 0.14 moves to logbook-shared-kernel 0.12 and gives the take-off and landing requirements of regs 61.395(1) and (2) and 61.965(a) each a set with a name and description, so a host shows one check for each), as
+flight test's question in Part 61's words, marking a failed outcome as adverse; 0.7 makes CASA's information on an entry and on an assessment crate-private, so a host reads it only through `LicensingAuthority`, and drops the assessment migration with it; 0.8 moves to logbook-shared-kernel 0.8, classifies an aircraft from its recorded characteristics as well as its type's description, giving the design features it requires and an id for each term and total, puts a multi-engine centre-line thrust aeroplane in the single-engine class, and drops the classification override and the public design features, and lists the titles of licence CASA issues, with an id for each, and its minimum ages, through `LicensingAuthority`; 0.9 moves to logbook-shared-kernel 0.9 and icao-shared-kernel 0.6, and classifies a session's type with the characteristics of the configuration its device represented, so a centre-line thrust twin counts as single-engine whether flown or simulated; 0.10 asks whether a flight was a cross-country flight, totals cross-country flight time, and changes CASA's information on an entry to its format version 2, with a migration from version 1; 0.11 counts reg 61.965's 6 months as calendar months and counts only flights, and no simulator session, towards that night VFR recent experience; has a flight review valid to the end of the 24th month after the month it was completed in (reg 61.745(1A)(a)), and one completed within 3 months before the currently valid review expires valid to the end of the 24th month after that expiry (reg 61.745(1A)(b)), where each was counted in days; renews an instrument proficiency check early (reg 61.880(3)(f)) only by an instrument proficiency check, not an operator proficiency check or a flight test; replaces the single instrument proficiency check of reg 61.880 with one for each category and one each for multi-engine aeroplanes and helicopters, each counting the checks in its relevant aircraft; and asks only for the DME or GNSS arrivals not also recorded in the entry's approaches; 0.12 moves to logbook-shared-kernel 0.10, words each requirement and gives its kind, refuses an assessment whose entry's aircraft can't be classified, lists CASA's ratings and endorsements and requires each aircraft's class rating, and makes the superseded entry migration (`logbook::migrate_entry_information_from_version_1`) crate-private; 0.13 moves to logbook-shared-kernel 0.11, answers which requirements apply to the titles, ratings and endorsements a pilot holds (`requirements_for`), and lists table 61.890's instrument endorsements, each with a new id, after the instrument rating in `ratings_and_endorsements`, which moves the private instrument and night VFR ratings after them; 0.14 moves to logbook-shared-kernel 0.12 and gives the take-off and landing requirements of regs 61.395(1) and (2) and 61.965(a) each a set with a name and description, so a host shows one check for each; 0.15 moves to logbook-shared-kernel 0.13 and icao-shared-kernel 0.7, refuses an instrument rating without a Part 1 and Part 2 instrument endorsement (reg 61.885(1)(b)) through `licence_problems`, warns of a licence title in a category with class ratings but no class rating (reg 61.375(3); the multi-crew pilot licence is left out), and adds the requirements of regs 61.860(2), 61.860(3) and 61.900(2)), as
 [`INSTRUCTIONS.md`, "Releasing"](INSTRUCTIONS.md#releasing) sets out. It takes `icao-shared-kernel` and
 [aircraft-type-descriptions](https://github.com/Open-Aviation-Solutions/aircraft-type-descriptions)
 by caret range; `0.1.0` pinned them exactly (`=0.1.3` and `=0.1.0`), `0.1.1`
@@ -31,7 +31,7 @@ takes `^0.1.3` and `^0.1.0`, `0.2.0` takes `^0.2.0` and `^0.1.0`, and `0.3.0`
 and `0.4.0` take `^0.5` and `^0.1.0`, with
 [logbook-shared-kernel](https://github.com/Open-Aviation-Solutions/logbook-shared-kernel)
 at `^0.2`, `0.5.0` takes it at `^0.5`, `0.6.0` and `0.7.0` at `^0.6`, and
-`0.8.0` at `^0.8`, `0.9.0` at `^0.9` and `0.10.0` and `0.11.0` at `^0.9.1`, and `0.11.1` at `^0.9.2`, and `0.12.0` at `^0.10.0`, and `0.13.0` at `^0.11.0`, and `0.14.0` at `^0.12.0`; `0.9.0` to `0.14.0` take icao-shared-kernel at `^0.6`.
+`0.8.0` at `^0.8`, `0.9.0` at `^0.9` and `0.10.0` and `0.11.0` at `^0.9.1`, and `0.11.1` at `^0.9.2`, and `0.12.0` at `^0.10.0`, and `0.13.0` at `^0.11.0`, and `0.14.0` at `^0.12.0`, and `0.15.0` at `^0.13.0`; `0.9.0` to `0.14.0` take icao-shared-kernel at `^0.6`, and `0.15.0` at `^0.7`.
 
 What is covered:
 
@@ -121,19 +121,19 @@ and what they fly.
 
 Add it from crates.io, with the kernel at a version it accepts. au-casa takes
 the kernel at a matching `0.x` minor (au-casa `0.1.x` with kernel `0.1.x`,
-`0.2.x` with `0.2.x`, `0.3.x` to `0.8.x` with `0.5.x`, `0.9.x` to `0.14.x` with `0.6.x`); mixing them builds two copies of `LicenceTitle`. From `0.3`, `Casa`
+`0.2.x` with `0.2.x`, `0.3.x` to `0.8.x` with `0.5.x`, `0.9.x` to `0.14.x` with `0.6.x`, `0.15.x` with `0.7.x`); mixing them builds two copies of `LicenceTitle`. From `0.3`, `Casa`
 implements logbook-shared-kernel's `LicensingAuthority`, so a consumer takes
 that crate at the minor au-casa takes too (`0.2` for au-casa `0.3` and `0.4`, `0.5` for
-au-casa `0.5`, `0.6` for `0.6` and `0.7`, `0.8` for `0.8`, `0.9` for `0.9`, and `0.9.1` for `0.10` and `0.11.0`, and `0.9.2` for `0.11.1`, and `0.10` for `0.12`, and `0.11` for `0.13`, and `0.12` for `0.14`): with another,
+au-casa `0.5`, `0.6` for `0.6` and `0.7`, `0.8` for `0.8`, `0.9` for `0.9`, and `0.9.1` for `0.10` and `0.11.0`, and `0.9.2` for `0.11.1`, and `0.10` for `0.12`, and `0.11` for `0.13`, and `0.12` for `0.14`, and `0.13` for `0.15`): with another,
 `Casa` implements a different trait from the one the consumer names. The
 published set is:
 
 ```toml
 [dependencies]
-au-casa = "0.14"
-aircraft-type-descriptions = "0.1.0"
-icao-shared-kernel = "0.6"
-logbook-shared-kernel = "0.12"
+au-casa = "0.15"
+aircraft-type-descriptions = "0.1.1"
+icao-shared-kernel = "0.7"
+logbook-shared-kernel = "0.13"
 ```
 
 The aircraft description types (`AircraftDescription`, `AirframeKind`,
