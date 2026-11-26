@@ -92,7 +92,8 @@ answers one such question:
   not listed yet), the problems with what is held under a licence
   (`licence_problems`: a refusal at the instrument rating for each part of
   table 61.890 none of whose instrument endorsements is held with it, reg
-  61.885(1)(b); the private instrument rating's endorsements, table 61.935,
+  61.885(1)(b)(i) and (ii), reported at the rating rather than at the
+  licence; the private instrument rating's endorsements, table 61.935,
   are not listed, so it is not checked, #113), which requirements it checks, each with a
   stable id, a name in its regulation's words, a description of what
   meets it, the noun its events are counted in, the set its

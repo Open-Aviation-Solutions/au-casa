@@ -226,7 +226,8 @@ impl LicensingAuthority for Casa {
 
     /// A refusal at the instrument rating for each part of table 61.890 that
     /// has none of its instrument endorsements held with it (reg
-    /// 61.885(1)(b)). The titles are not read.
+    /// 61.885(1)(b)(i) and (ii)), reported at the rating the missing
+    /// endorsement is required for. The titles are not read.
     fn licence_problems(
         &self,
         _titles: &[LicenceTitleId],

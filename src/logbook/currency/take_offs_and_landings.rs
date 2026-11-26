@@ -276,7 +276,7 @@ mod tests {
         }
 
         #[test]
-        fn expired_currency_still_reports_a_past_expiry_date() {
+        fn expired_currency_still_reports_a_past_expiry() {
             for r in result(&[
                 by_day(1, aeroplane("a", date!(2024 - 05 - 28))),
                 by_day(1, aeroplane("b", date!(2024 - 05 - 25))),
