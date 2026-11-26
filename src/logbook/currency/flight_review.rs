@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use logbook_shared_kernel::authority::window::add_months_clamped;
 use logbook_shared_kernel::{
     Assessment, AssessmentAccumulator, AssessmentCurrencyCheck, AssessmentId, CurrencyResult,
-    Entry, EntryId, SubjectId,
+    Entry, EntryId, Expiry, SubjectId,
 };
 use time::Date;
 
@@ -175,7 +175,7 @@ impl AssessmentCurrencyCheck for FlightReview<'_> {
         valid.sort();
         CurrencyResult {
             // The first day it is not valid.
-            expiry_date: latest.and_then(Date::next_day),
+            expiry: latest.and_then(Date::next_day).map(Expiry::On),
             reference: self.reference,
             qualifying: Vec::new(),
             found: valid.len(),
@@ -249,7 +249,7 @@ mod tests {
         let r = result(Sea, &single_engine(), &[passed(ON)]);
         assert!(r.is_current());
         assert_eq!(r.found, 1);
-        assert_eq!(r.current_through(), Some(date!(2026 - 05 - 31)));
+        assert_eq!(r.current_through(), Some(Expiry::On(date!(2026 - 05 - 31))));
         assert_eq!(r.qualifying_assessments, [AssessmentId::new("a")]);
     }
 
@@ -277,7 +277,7 @@ mod tests {
         ] {
             let mut on = first;
             while on <= last {
-                assert_eq!(current_through(on), Some(through), "{on}");
+                assert_eq!(current_through(on), Some(Expiry::On(through)), "{on}");
                 on = on.next_day().unwrap();
             }
         }
@@ -290,13 +290,16 @@ mod tests {
         let inside = result(Sea, &single_engine(), &[passed(date!(2022 - 09 - 01))]);
         assert!(inside.is_current());
         assert_eq!(inside.found, 1);
-        assert_eq!(inside.current_through(), Some(date!(2024 - 09 - 30)));
+        assert_eq!(
+            inside.current_through(),
+            Some(Expiry::On(date!(2024 - 09 - 30)))
+        );
         // Reaching back 3 months further, for a review that renews one.
         assert_eq!(inside.look_back_days, 824);
         let outside = result(Sea, &single_engine(), &[passed(date!(2022 - 08 - 31))]);
         assert!(!outside.is_current());
         assert_eq!(outside.found, 0);
-        assert_eq!(outside.expiry_date, Some(REFERENCE));
+        assert_eq!(outside.expiry, Some(Expiry::On(REFERENCE)));
     }
 
     /// A review is counted as found exactly while it is valid, and the
@@ -333,7 +336,7 @@ mod tests {
             r.qualifying_assessments,
             [AssessmentId::new("a"), AssessmentId::new("b")]
         );
-        assert_eq!(r.current_through(), Some(date!(2026 - 05 - 31)));
+        assert_eq!(r.current_through(), Some(Expiry::On(date!(2026 - 05 - 31))));
     }
 
     /// A review completed from the 1st of the 3rd month before the one the
@@ -362,16 +365,28 @@ mod tests {
             r.current_through()
         };
         // The previous flight review is valid to 31 May 2026.
-        assert_eq!(renewed(date!(2026 - 02 - 28)), Some(date!(2028 - 02 - 29)));
-        assert_eq!(renewed(date!(2026 - 03 - 01)), Some(date!(2028 - 05 - 31)));
-        assert_eq!(renewed(date!(2026 - 05 - 31)), Some(date!(2028 - 05 - 31)));
-        assert_eq!(renewed(date!(2026 - 06 - 01)), Some(date!(2028 - 06 - 30)));
+        assert_eq!(
+            renewed(date!(2026 - 02 - 28)),
+            Some(Expiry::On(date!(2028 - 02 - 29)))
+        );
+        assert_eq!(
+            renewed(date!(2026 - 03 - 01)),
+            Some(Expiry::On(date!(2028 - 05 - 31)))
+        );
+        assert_eq!(
+            renewed(date!(2026 - 05 - 31)),
+            Some(Expiry::On(date!(2028 - 05 - 31)))
+        );
+        assert_eq!(
+            renewed(date!(2026 - 06 - 01)),
+            Some(Expiry::On(date!(2028 - 06 - 30)))
+        );
     }
 
     #[test]
     fn only_a_passed_check_counts() {
         let failed = checked(ON, CheckType::FlightReview, CheckOutcome::Failed);
-        assert_eq!(result(Sea, &single_engine(), &[failed]).expiry_date, None);
+        assert_eq!(result(Sea, &single_engine(), &[failed]).expiry, None);
         let no_outcome = assessed(
             "a",
             ON,
@@ -381,10 +396,7 @@ mod tests {
                 ..AssessmentInformation::default()
             },
         );
-        assert_eq!(
-            result(Sea, &single_engine(), &[no_outcome]).expiry_date,
-            None
-        );
+        assert_eq!(result(Sea, &single_engine(), &[no_outcome]).expiry, None);
         let no_type = assessed(
             "a",
             ON,
@@ -394,7 +406,7 @@ mod tests {
                 ..AssessmentInformation::default()
             },
         );
-        assert_eq!(result(Sea, &single_engine(), &[no_type]).expiry_date, None);
+        assert_eq!(result(Sea, &single_engine(), &[no_type]).expiry, None);
     }
 
     /// Until au-casa#69 reads which, a flight test passed for any of its
@@ -515,6 +527,6 @@ mod tests {
     #[test]
     fn an_assessment_dated_after_the_reference_has_not_happened_yet() {
         let future = passed(REFERENCE + Duration::days(1));
-        assert_eq!(result(Sea, &single_engine(), &[future]).expiry_date, None);
+        assert_eq!(result(Sea, &single_engine(), &[future]).expiry, None);
     }
 }

@@ -11,7 +11,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use logbook_shared_kernel::authority::window::{add_months_clamped, count_in_window};
 use logbook_shared_kernel::{
     Assessment, AssessmentAccumulator, AssessmentCurrencyCheck, AssessmentId, CurrencyResult,
-    Entry, EntryId, SubjectId,
+    Entry, EntryId, Expiry, SubjectId,
 };
 use time::{Date, Duration};
 
@@ -227,7 +227,7 @@ impl<'a> InstrumentProficiencyCheck<'a> {
 
     fn none(&self) -> CurrencyResult {
         CurrencyResult {
-            expiry_date: None,
+            expiry: None,
             reference: self.reference,
             qualifying: Vec::new(),
             qualifying_assessments: Vec::new(),
@@ -371,7 +371,7 @@ impl AssessmentCurrencyCheck for InstrumentProficiencyCheck<'_> {
         }
         CurrencyResult {
             // The first day it is not valid.
-            expiry_date: valid_to.and_then(Date::next_day),
+            expiry: valid_to.and_then(Date::next_day).map(Expiry::On),
             reference: self.reference,
             qualifying: Vec::new(),
             qualifying_assessments: shown,
@@ -492,8 +492,8 @@ mod tests {
         let r = result(&[ipc("a", date!(2024 - 08 - 02), CheckOutcome::Passed)]);
         assert!(r.is_current());
         assert_eq!(r.found, 1);
-        assert_eq!(r.current_through(), Some(date!(2025 - 08 - 31)));
-        assert_eq!(r.expiry_date, Some(date!(2025 - 09 - 01)));
+        assert_eq!(r.current_through(), Some(Expiry::On(date!(2025 - 08 - 31))));
+        assert_eq!(r.expiry, Some(Expiry::On(date!(2025 - 09 - 01))));
         assert_eq!(ids(&r), ["a"]);
 
         let passed = [ipc("a", date!(2024 - 08 - 02), CheckOutcome::Passed)];
@@ -506,8 +506,8 @@ mod tests {
         let r = result(&[ipc("a", date!(2023 - 07 - 28), CheckOutcome::Passed)]);
         assert!(!r.is_current());
         assert_eq!(r.found, 0);
-        assert_eq!(r.expiry_date, Some(date!(2024 - 08 - 01)));
-        assert_eq!(result(&[]).expiry_date, None);
+        assert_eq!(r.expiry, Some(Expiry::On(date!(2024 - 08 - 01))));
+        assert_eq!(result(&[]).expiry, None);
     }
 
     #[test]
@@ -517,7 +517,7 @@ mod tests {
             ipc("f", date!(2024 - 08 - 22), CheckOutcome::Failed),
         ]);
         assert!(!pass_then_fail.is_current());
-        assert_eq!(pass_then_fail.expiry_date, None);
+        assert_eq!(pass_then_fail.expiry, None);
         assert_eq!(pass_then_fail.found, 0);
 
         let fail_then_pass = result(&[
@@ -528,7 +528,7 @@ mod tests {
 
         let fail_alone = result(&[ipc("f", date!(2024 - 08 - 22), CheckOutcome::Failed)]);
         assert!(!fail_alone.is_current());
-        assert_eq!(fail_alone.expiry_date, None);
+        assert_eq!(fail_alone.expiry, None);
     }
 
     #[test]
@@ -540,7 +540,7 @@ mod tests {
             ipc("f", date!(2024 - 03 - 01), CheckOutcome::Failed),
             ipc("b", date!(2024 - 04 - 15), CheckOutcome::Passed),
         ]);
-        assert_eq!(r.current_through(), Some(date!(2025 - 04 - 30)));
+        assert_eq!(r.current_through(), Some(Expiry::On(date!(2025 - 04 - 30))));
         assert_eq!(ids(&r), ["b"]);
 
         // Renewed to 2025-06-30, then failed: a pass after the failure is
@@ -551,7 +551,7 @@ mod tests {
             ipc("f", date!(2024 - 05 - 01), CheckOutcome::Failed),
             ipc("c", date!(2024 - 05 - 10), CheckOutcome::Passed),
         ]);
-        assert_eq!(r.current_through(), Some(date!(2025 - 05 - 31)));
+        assert_eq!(r.current_through(), Some(Expiry::On(date!(2025 - 05 - 31))));
         assert_eq!(r.found, 1);
         assert_eq!(ids(&r), ["c"]);
     }
@@ -729,14 +729,20 @@ mod tests {
             ipc("a", date!(2023 - 06 - 01), CheckOutcome::Passed),
             ipc("b", date!(2024 - 04 - 15), CheckOutcome::Passed),
         ]);
-        assert_eq!(chained.current_through(), Some(date!(2025 - 06 - 30)));
+        assert_eq!(
+            chained.current_through(),
+            Some(Expiry::On(date!(2025 - 06 - 30)))
+        );
 
         // 2024-02-01 is before 2024-04-01, so it runs from its own month.
         let natural = result(&[
             ipc("a", date!(2023 - 06 - 01), CheckOutcome::Passed),
             ipc("b", date!(2024 - 02 - 01), CheckOutcome::Passed),
         ]);
-        assert_eq!(natural.current_through(), Some(date!(2025 - 02 - 28)));
+        assert_eq!(
+            natural.current_through(),
+            Some(Expiry::On(date!(2025 - 02 - 28)))
+        );
     }
 
     /// Reg 61.880(3)(f)(ii) renews early only on "successfully completes an
@@ -757,9 +763,9 @@ mod tests {
         let through = |second: &Assessment| {
             result_on(date!(2026 - 02 - 01), &[first.clone(), second.clone()]).current_through()
         };
-        assert_eq!(through(&renewing), Some(date!(2027 - 03 - 31)));
-        assert_eq!(through(&opc), Some(date!(2027 - 01 - 31)));
-        assert_eq!(through(&flight), Some(date!(2027 - 01 - 31)));
+        assert_eq!(through(&renewing), Some(Expiry::On(date!(2027 - 03 - 31))));
+        assert_eq!(through(&opc), Some(Expiry::On(date!(2027 - 01 - 31))));
+        assert_eq!(through(&flight), Some(Expiry::On(date!(2027 - 01 - 31))));
     }
 
     #[test]
@@ -775,21 +781,21 @@ mod tests {
         let june = date!(2023 - 06 - 01);
         assert_eq!(
             renewed_on(june, date!(2024 - 03 - 31)),
-            Some(date!(2025 - 03 - 31))
+            Some(Expiry::On(date!(2025 - 03 - 31)))
         );
         assert_eq!(
             renewed_on(june, date!(2024 - 04 - 01)),
-            Some(date!(2025 - 06 - 30))
+            Some(Expiry::On(date!(2025 - 06 - 30)))
         );
         // Valid to 2024-02-29: the window opens on 2023-12-01.
         let february = date!(2023 - 02 - 10);
         assert_eq!(
             renewed_on(february, date!(2023 - 11 - 30)),
-            Some(date!(2024 - 11 - 30))
+            Some(Expiry::On(date!(2024 - 11 - 30)))
         );
         assert_eq!(
             renewed_on(february, date!(2023 - 12 - 01)),
-            Some(date!(2025 - 02 - 28))
+            Some(Expiry::On(date!(2025 - 02 - 28)))
         );
     }
 
@@ -824,7 +830,7 @@ mod tests {
                 ipc("c", date!(2024 - 05 - 01), CheckOutcome::Passed),
             ],
         );
-        assert_eq!(r.current_through(), Some(date!(2025 - 06 - 30)));
+        assert_eq!(r.current_through(), Some(Expiry::On(date!(2025 - 06 - 30))));
         assert_eq!(ids(&r), ["b"]);
     }
 
@@ -965,7 +971,7 @@ mod tests {
             flight_test(&[(CheckPurpose::InstrumentEndorsement, CheckOutcome::Passed)]),
         );
         let r = result_for(MultiEngineAeroplanes, REFERENCE, &[rating, endorsement]);
-        assert_eq!(r.current_through(), Some(date!(2024 - 09 - 30)));
+        assert_eq!(r.current_through(), Some(Expiry::On(date!(2024 - 09 - 30))));
         assert_eq!(ids(&r), ["ie"]);
     }
 }

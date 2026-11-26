@@ -47,7 +47,7 @@ impl CurrencyCheck for InstrumentApproaches3D {
 
 #[cfg(test)]
 mod tests {
-    use logbook_shared_kernel::{ApproachType, EntryParts, RnpApchMinima};
+    use logbook_shared_kernel::{ApproachType, EntryParts, Expiry, RnpApchMinima};
     use time::macros::date;
     use time::Duration;
 
@@ -76,7 +76,7 @@ mod tests {
     fn one_3d_approach_is_current_and_expires_90_days_on() {
         let r = result(&[flying(ApproachType::Ils, ON)]);
         assert!(r.is_current());
-        assert_eq!(r.expiry_date, Some(ON + Duration::days(90)));
+        assert_eq!(r.expiry, Some(Expiry::On(ON + Duration::days(90))));
     }
 
     #[test]
