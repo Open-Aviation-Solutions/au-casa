@@ -94,7 +94,10 @@ answers one such question:
   table 61.890 none of whose instrument endorsements is held with it, reg
   61.885(1)(b)(i) and (ii), reported at the rating rather than at the
   licence; the private instrument rating's endorsements, table 61.935,
-  are not listed, so it is not checked, #113), which requirements it checks, each with a
+  are not listed, so it is not checked, #113; and a warning at the first
+  pilot licence title of each category with class ratings, reg 61.020(1),
+  when none of that category's class ratings is held, reg 61.375(3), as a
+  type rating may serve instead and is not listed yet, #101), which requirements it checks, each with a
   stable id, a name in its regulation's words, a description of what
   meets it, the noun its events are counted in, the set its
   regulation sets it in (a key, a name and a description, equal on every

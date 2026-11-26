@@ -227,13 +227,15 @@ impl LicensingAuthority for Casa {
     /// A refusal at the instrument rating for each part of table 61.890 that
     /// has none of its instrument endorsements held with it (reg
     /// 61.885(1)(b)(i) and (ii)), reported at the rating the missing
-    /// endorsement is required for. The titles are not read.
+    /// endorsement is required for; and a warning at a pilot licence's title
+    /// for each category with class ratings (reg 61.020(1)) in which none of
+    /// that category's class ratings is held (reg 61.375(3)).
     fn licence_problems(
         &self,
-        _titles: &[LicenceTitleId],
+        titles: &[LicenceTitleId],
         ratings_and_endorsements: &[TermId],
     ) -> Vec<LicenceProblem> {
-        ratings_and_endorsements::licence_problems(ratings_and_endorsements)
+        ratings_and_endorsements::licence_problems(titles, ratings_and_endorsements)
     }
 
     /// Annex 1's, as CASA's are the same (regs 61.515(1), 61.580(1),
