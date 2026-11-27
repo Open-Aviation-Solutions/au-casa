@@ -63,9 +63,8 @@ pub(crate) fn holds_pilot_licence_in(held: &BTreeSet<TermId>, category: Aircraft
     })
 }
 
-/// The ids `titles` are held under with the ratings and endorsements, as
-/// `requirements_for` reads them: each title's term id.
-pub(crate) fn held_term_ids(titles: &[LicenceTitleId]) -> Vec<TermId> {
+/// Every title of the kernel and of CASA's own, each with its Part 61 term.
+fn titles_with_part61_terms() -> Vec<(LicenceTitleId, Part61Term)> {
     let annex_1 = ANNEX_1_TITLES.into_iter().filter_map(|title| {
         part61_term(title).map(|part61| (LicenceTitleId::Annex1(title), part61))
     });
@@ -73,7 +72,13 @@ pub(crate) fn held_term_ids(titles: &[LicenceTitleId]) -> Vec<TermId> {
         let part61 = title.part61_term();
         (LicenceTitleId::National(term(part61).id), part61)
     });
-    let all: Vec<_> = annex_1.chain(national).collect();
+    annex_1.chain(national).collect()
+}
+
+/// The ids `titles` are held under with the ratings and endorsements, as
+/// `requirements_for` reads them: each title's term id.
+pub(crate) fn held_term_ids(titles: &[LicenceTitleId]) -> Vec<TermId> {
+    let all = titles_with_part61_terms();
     titles
         .iter()
         .filter_map(|held| all.iter().find(|(id, _)| id == held))
@@ -90,14 +95,7 @@ pub(crate) fn held_term_ids(titles: &[LicenceTitleId]) -> Vec<TermId> {
 pub(crate) fn pilot_licences_with_category(
     titles: &[LicenceTitleId],
 ) -> Vec<(LicenceTitleId, Part61Term)> {
-    let annex_1 = ANNEX_1_TITLES.into_iter().filter_map(|title| {
-        part61_term(title).map(|part61| (LicenceTitleId::Annex1(title), part61))
-    });
-    let national = NATIONAL_TITLES.into_iter().map(|title| {
-        let part61 = title.part61_term();
-        (LicenceTitleId::National(term(part61).id), part61)
-    });
-    let all: Vec<_> = annex_1.chain(national).collect();
+    let all = titles_with_part61_terms();
     titles
         .iter()
         .filter_map(|held| all.iter().find(|(id, _)| id == held).cloned())
