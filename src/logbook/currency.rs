@@ -576,6 +576,64 @@ pub(super) fn requirements_for(held: &BTreeSet<TermId>) -> Vec<Requirement> {
         .collect()
 }
 
+/// What the report leaves out of those that apply to `held` until an
+/// endorsement of `endorsements` is recorded too: the requirements that apply
+/// with any one of them and not without, as "regs 61.870(4) and (5) and
+/// 61.900(2)" or "reg 61.870(3) and the instrument proficiency check", the
+/// distinct regulations in [`REQUIREMENTS`]' order (a regulation sharing its
+/// base with the one before is written as its subregulation only) and then
+/// the reg 61.880 checks as one. `None` when there are none.
+pub(super) fn left_out_until(
+    held: &BTreeSet<TermId>,
+    endorsements: impl IntoIterator<Item = InstrumentEndorsement>,
+) -> Option<String> {
+    let without = with_implied(held);
+    let withs: Vec<BTreeSet<TermId>> = endorsements
+        .into_iter()
+        .map(|endorsement| {
+            let mut with = held.clone();
+            with.insert(TermId::new(endorsement.id()));
+            with_implied(&with)
+        })
+        .collect();
+    let mut regulations: Vec<&str> = Vec::new();
+    let mut check = false;
+    for requirement in REQUIREMENTS {
+        if requirement.applies_to(&without)
+            || !withs.iter().any(|with| requirement.applies_to(with))
+        {
+            continue;
+        }
+        if matches!(requirement, CasaRequirement::InstrumentProficiencyCheck(_)) {
+            check = true;
+        } else if !regulations.contains(&requirement.regulation()) {
+            regulations.push(requirement.regulation());
+        }
+    }
+    let mut parts: Vec<String> = Vec::new();
+    if !regulations.is_empty() {
+        let noun = if regulations.len() == 1 {
+            "reg"
+        } else {
+            "regs"
+        };
+        let base = |regulation: &str| regulation.split('(').next().unwrap_or_default().to_owned();
+        let mut list: Vec<String> = Vec::new();
+        for (at, regulation) in regulations.iter().enumerate() {
+            let shares_base = at > 0 && base(regulations[at - 1]) == base(regulation);
+            list.push(match regulation.find('(') {
+                Some(from) if shares_base => regulation[from..].to_owned(),
+                _ => (*regulation).to_owned(),
+            });
+        }
+        parts.push(format!("{noun} {}", list.join(" and ")));
+    }
+    if check {
+        parts.push("the instrument proficiency check".to_owned());
+    }
+    (!parts.is_empty()).then(|| parts.join(" and "))
+}
+
 /// `held`, with what holding it implies: an instrument endorsement of table
 /// 61.890 the instrument rating, which its applicant must hold (reg
 /// 61.905(1)(a)), and the IAP 3D instrument endorsement the IAP 2D one,

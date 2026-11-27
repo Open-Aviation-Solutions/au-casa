@@ -31,7 +31,7 @@ takes `^0.1.3` and `^0.1.0`, `0.2.0` takes `^0.2.0` and `^0.1.0`, and `0.3.0`
 and `0.4.0` take `^0.5` and `^0.1.0`, with
 [logbook-shared-kernel](https://github.com/Open-Aviation-Solutions/logbook-shared-kernel)
 at `^0.2`, `0.5.0` takes it at `^0.5`, `0.6.0` and `0.7.0` at `^0.6`, and
-`0.8.0` at `^0.8`, `0.9.0` at `^0.9` and `0.10.0` and `0.11.0` at `^0.9.1`, and `0.11.1` at `^0.9.2`, and `0.12.0` at `^0.10.0`, and `0.13.0` at `^0.11.0`, and `0.14.0` at `^0.12.0`, and `0.15.0` at `^0.13.0`; `0.9.0` to `0.14.0` take icao-shared-kernel at `^0.6`, and `0.15.0` at `^0.7`.
+`0.8.0` at `^0.8`, `0.9.0` at `^0.9` and `0.10.0` and `0.11.0` at `^0.9.1`, and `0.11.1` at `^0.9.2`, and `0.12.0` at `^0.10.0`, and `0.13.0` at `^0.11.0`, and `0.14.0` at `^0.12.0`, and `0.15.0` at `^0.13.0`, and `0.15.1` at `^0.13.1`; `0.9.0` to `0.14.0` take icao-shared-kernel at `^0.6`, and `0.15.0` and `0.15.1` at `^0.7`.
 
 What is covered:
 
@@ -124,7 +124,7 @@ the kernel at a matching `0.x` minor (au-casa `0.1.x` with kernel `0.1.x`,
 `0.2.x` with `0.2.x`, `0.3.x` to `0.8.x` with `0.5.x`, `0.9.x` to `0.14.x` with `0.6.x`, `0.15.x` with `0.7.x`); mixing them builds two copies of `LicenceTitle`. From `0.3`, `Casa`
 implements logbook-shared-kernel's `LicensingAuthority`, so a consumer takes
 that crate at the minor au-casa takes too (`0.2` for au-casa `0.3` and `0.4`, `0.5` for
-au-casa `0.5`, `0.6` for `0.6` and `0.7`, `0.8` for `0.8`, `0.9` for `0.9`, and `0.9.1` for `0.10` and `0.11.0`, and `0.9.2` for `0.11.1`, and `0.10` for `0.12`, and `0.11` for `0.13`, and `0.12` for `0.14`, and `0.13` for `0.15`): with another,
+au-casa `0.5`, `0.6` for `0.6` and `0.7`, `0.8` for `0.8`, `0.9` for `0.9`, and `0.9.1` for `0.10` and `0.11.0`, and `0.9.2` for `0.11.1`, and `0.10` for `0.12`, and `0.11` for `0.13`, and `0.12` for `0.14`, and `0.13` for `0.15.0`, and `0.13.1` for `0.15.1`): with another,
 `Casa` implements a different trait from the one the consumer names. The
 published set is:
 
@@ -133,7 +133,7 @@ published set is:
 au-casa = "0.15"
 aircraft-type-descriptions = "0.1.1"
 icao-shared-kernel = "0.7"
-logbook-shared-kernel = "0.13"
+logbook-shared-kernel = "0.13.1"
 ```
 
 The aircraft description types (`AircraftDescription`, `AirframeKind`,

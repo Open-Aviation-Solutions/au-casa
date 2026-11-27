@@ -63,6 +63,29 @@ pub(crate) fn holds_pilot_licence_in(held: &BTreeSet<TermId>, category: Aircraft
     })
 }
 
+/// Every title of the kernel and of CASA's own, each with its Part 61 term.
+fn titles_with_part61_terms() -> Vec<(LicenceTitleId, Part61Term)> {
+    let annex_1 = ANNEX_1_TITLES.into_iter().filter_map(|title| {
+        part61_term(title).map(|part61| (LicenceTitleId::Annex1(title), part61))
+    });
+    let national = NATIONAL_TITLES.into_iter().map(|title| {
+        let part61 = title.part61_term();
+        (LicenceTitleId::National(term(part61).id), part61)
+    });
+    annex_1.chain(national).collect()
+}
+
+/// The ids `titles` are held under with the ratings and endorsements, as
+/// `requirements_for` reads them: each title's term id.
+pub(crate) fn held_term_ids(titles: &[LicenceTitleId]) -> Vec<TermId> {
+    let all = titles_with_part61_terms();
+    titles
+        .iter()
+        .filter_map(|held| all.iter().find(|(id, _)| id == held))
+        .map(|(_, part61)| term(*part61).id)
+        .collect()
+}
+
 /// Those of `titles` that are a pilot licence (reg 61.010) with a category
 /// rating, each with its Part 61 term, in the order given, but for the
 /// multi-crew pilot licence: its holder holds a multi-crew aeroplane type
@@ -72,14 +95,7 @@ pub(crate) fn holds_pilot_licence_in(held: &BTreeSet<TermId>, category: Aircraft
 pub(crate) fn pilot_licences_with_category(
     titles: &[LicenceTitleId],
 ) -> Vec<(LicenceTitleId, Part61Term)> {
-    let annex_1 = ANNEX_1_TITLES.into_iter().filter_map(|title| {
-        part61_term(title).map(|part61| (LicenceTitleId::Annex1(title), part61))
-    });
-    let national = NATIONAL_TITLES.into_iter().map(|title| {
-        let part61 = title.part61_term();
-        (LicenceTitleId::National(term(part61).id), part61)
-    });
-    let all: Vec<_> = annex_1.chain(national).collect();
+    let all = titles_with_part61_terms();
     titles
         .iter()
         .filter_map(|held| all.iter().find(|(id, _)| id == held).cloned())
