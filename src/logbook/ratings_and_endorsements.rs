@@ -276,21 +276,33 @@ fn instrument_rating_problems(held: &[TermId]) -> Vec<LicenceProblem> {
             .any(|endorsement| held.contains(&TermId::new(endorsement.id())))
     };
     [
-        (true, PART_1_MISSING, "61.885(1)(b)(i)"),
-        (false, PART_2_MISSING, "61.885(1)(b)(ii)"),
+        (true, PART_1_MISSING, PART_1_LEAVES_OUT, "61.885(1)(b)(i)"),
+        (false, PART_2_MISSING, PART_2_LEAVES_OUT, "61.885(1)(b)(ii)"),
     ]
     .into_iter()
-    .filter(|(part_1, _, _)| !holds_one(*part_1))
-    .map(|(_, text, regulation)| {
+    .filter(|(part_1, _, _, _)| !holds_one(*part_1))
+    .map(|(_, text, leaves_out, regulation)| {
         LicenceProblem::new(
             LicenceProblemAt::RatingOrEndorsement(instrument_rating.clone()),
             ProblemKind::Refusal,
             text,
             regulation,
         )
+        .with_report_leaves_out(leaves_out)
     })
     .collect()
 }
+
+/// What the report leaves out while no Part 1 endorsement is held: reg
+/// 61.870(3) and reg 61.880's checks apply to the holder of one (see
+/// `CasaRequirement::applies_to`).
+const PART_1_LEAVES_OUT: &str = "The report leaves out reg 61.870(3) and the instrument \
+     proficiency check until the endorsements are recorded.";
+
+/// The same for Part 2: regs 61.870(4) and (5) and 61.900(2) apply to the
+/// holder of an IAP 2D or IAP 3D instrument endorsement.
+const PART_2_LEAVES_OUT: &str = "The report leaves out regs 61.870(4) and (5) and 61.900(2) \
+     until the endorsement is recorded.";
 
 /// The refusal of an instrument rating held with no instrument endorsement
 /// from Part 1 of table 61.890, quoting reg 61.885(1)(b)(i).
@@ -559,6 +571,13 @@ mod tests {
                 text,
                 regulation,
             )
+            .with_report_leaves_out(if regulation == "61.885(1)(b)(i)" {
+                "The report leaves out reg 61.870(3) and the instrument proficiency check \
+                 until the endorsements are recorded."
+            } else {
+                "The report leaves out regs 61.870(4) and (5) and 61.900(2) until the \
+                 endorsement is recorded."
+            })
         };
         let part_1 = refused(
             "An instrument rating is granted only to a pilot who meets \"the requirements for \
@@ -585,6 +604,57 @@ mod tests {
             problems(&[INSTRUMENT_RATING, "gyroplane-instrument-endorsement"]),
             [part_2]
         );
+    }
+
+    /// Each refusal's note names requirements the report really leaves out
+    /// of those that apply to the holder, and the others it does not.
+    #[test]
+    fn each_refusals_note_names_what_the_report_leaves_out() {
+        let casa = Casa::new();
+        let applying = |ids: &[&str]| -> Vec<String> {
+            casa.requirements_for(&held(ids).into_iter().collect())
+                .into_iter()
+                .map(|requirement| requirement.id.as_str().to_owned())
+                .collect()
+        };
+        let any_of = |ids: &[String], prefix: &str| ids.iter().any(|id| id.starts_with(prefix));
+        let notes = |ids: &[&str]| -> Vec<Option<String>> {
+            casa.licence_problems(&[], &held(ids))
+                .into_iter()
+                .map(|problem| problem.report_leaves_out)
+                .collect()
+        };
+        let part_1 = Some(PART_1_LEAVES_OUT.to_owned());
+        let part_2 = Some(PART_2_LEAVES_OUT.to_owned());
+
+        // Neither part: all of them are left out.
+        let bare = applying(&[INSTRUMENT_RATING]);
+        for prefix in ["61.870(3)", "61.880", "61.870(4)", "61.870(5)", "61.900(2)"] {
+            assert!(!any_of(&bare, prefix), "{prefix}");
+        }
+        assert_eq!(
+            notes(&[INSTRUMENT_RATING]),
+            [part_1.clone(), part_2.clone()]
+        );
+
+        // Part 2 held, Part 1 missing: the Part 1 note's requirements are left out.
+        let ids = ["iap-2d-instrument-endorsement"];
+        let with_part_2 = applying(&[INSTRUMENT_RATING, ids[0]]);
+        assert!(!any_of(&with_part_2, "61.870(3)"));
+        assert!(!any_of(&with_part_2, "61.880"));
+        assert!(any_of(&with_part_2, "61.870(4)"));
+        assert_eq!(notes(&[INSTRUMENT_RATING, ids[0]]), [part_1]);
+
+        // Part 1 held, Part 2 missing: the Part 2 note's are left out, and
+        // the Part 1 ones are not.
+        let ids = ["single-engine-aeroplane-instrument-endorsement"];
+        let with_part_1 = applying(&[INSTRUMENT_RATING, ids[0]]);
+        assert!(any_of(&with_part_1, "61.870(3)"));
+        assert!(any_of(&with_part_1, "61.880"));
+        for prefix in ["61.870(4)", "61.870(5)", "61.900(2)"] {
+            assert!(!any_of(&with_part_1, prefix), "{prefix}");
+        }
+        assert_eq!(notes(&[INSTRUMENT_RATING, ids[0]]), [part_2]);
     }
 
     /// One endorsement from each part is enough, whichever they are; and
