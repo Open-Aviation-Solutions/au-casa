@@ -20,11 +20,14 @@
 //! `single-engine-aeroplane-instrument-endorsement`,
 //! `iap-2d-instrument-endorsement`).
 
+use std::collections::BTreeSet;
+
 use logbook_shared_kernel::{
     LicenceProblem, LicenceProblemAt, LicenceTitleId, ProblemKind, Term, TermId,
 };
 
-use super::licence_titles::pilot_licences_with_category;
+use super::currency::left_out_until;
+use super::licence_titles::{held_term_ids, pilot_licences_with_category};
 use super::{class_name, term};
 use crate::aircraft::{AircraftCategory, AircraftClassRating, DesignFeature};
 
@@ -199,10 +202,11 @@ impl InstrumentEndorsement {
 /// from each (reg 61.885(1)(b)(i) and (ii)). A missing endorsement is
 /// reported at the rating it is required for, not at the licence as the
 /// kernel's contract has something missing reported (au-casa#108 decided
-/// so). The private instrument rating is not checked, as its endorsements
+/// so). Each refusal names, in `report_leaves_out`, what the report leaves
+/// out until the endorsement is recorded. The private instrument rating is not checked, as its endorsements
 /// (table 61.935) are not listed (#113).
 pub(crate) fn licence_problems(titles: &[LicenceTitleId], held: &[TermId]) -> Vec<LicenceProblem> {
-    let mut problems = instrument_rating_problems(held);
+    let mut problems = instrument_rating_problems(titles, held);
     problems.extend(class_rating_warnings(titles, held));
     problems
 }
@@ -264,11 +268,17 @@ fn class_category(class: AircraftClassRating) -> AircraftCategory {
     }
 }
 
-fn instrument_rating_problems(held: &[TermId]) -> Vec<LicenceProblem> {
+/// Each refusal's note says what the report leaves out until the missing
+/// endorsement is recorded: the requirements that apply to the holder with a
+/// stand-in endorsement of the missing part (the single-engine aeroplane
+/// one for Part 1, the IAP 3D one, which implies the IAP 2D one, for Part 2)
+/// and not without it (`currency::left_out_until`).
+fn instrument_rating_problems(titles: &[LicenceTitleId], held: &[TermId]) -> Vec<LicenceProblem> {
     let instrument_rating = TermId::new(INSTRUMENT_RATING);
     if !held.contains(&instrument_rating) {
         return Vec::new();
     }
+    let all_held: BTreeSet<TermId> = held.iter().cloned().chain(held_term_ids(titles)).collect();
     let holds_one = |part_1: bool| {
         InstrumentEndorsement::ALL
             .into_iter()
@@ -276,33 +286,39 @@ fn instrument_rating_problems(held: &[TermId]) -> Vec<LicenceProblem> {
             .any(|endorsement| held.contains(&TermId::new(endorsement.id())))
     };
     [
-        (true, PART_1_MISSING, PART_1_LEAVES_OUT, "61.885(1)(b)(i)"),
-        (false, PART_2_MISSING, PART_2_LEAVES_OUT, "61.885(1)(b)(ii)"),
+        (
+            true,
+            PART_1_MISSING,
+            InstrumentEndorsement::SingleEngineAeroplane,
+            "the endorsements are",
+            "61.885(1)(b)(i)",
+        ),
+        (
+            false,
+            PART_2_MISSING,
+            InstrumentEndorsement::Iap3D,
+            "the endorsement is",
+            "61.885(1)(b)(ii)",
+        ),
     ]
     .into_iter()
-    .filter(|(part_1, _, _, _)| !holds_one(*part_1))
-    .map(|(_, text, leaves_out, regulation)| {
-        LicenceProblem::new(
+    .filter(|(part_1, _, _, _, _)| !holds_one(*part_1))
+    .map(|(_, text, stand_in, recorded, regulation)| {
+        let problem = LicenceProblem::new(
             LicenceProblemAt::RatingOrEndorsement(instrument_rating.clone()),
             ProblemKind::Refusal,
             text,
             regulation,
-        )
-        .with_report_leaves_out(leaves_out)
+        );
+        match left_out_until(&all_held, stand_in) {
+            Some(list) => problem.with_report_leaves_out(format!(
+                "The report leaves out {list} until {recorded} recorded."
+            )),
+            None => problem,
+        }
     })
     .collect()
 }
-
-/// What the report leaves out while no Part 1 endorsement is held: reg
-/// 61.870(3) and reg 61.880's checks apply to the holder of one (see
-/// `CasaRequirement::applies_to`).
-const PART_1_LEAVES_OUT: &str = "The report leaves out reg 61.870(3) and the instrument \
-     proficiency check until the endorsements are recorded.";
-
-/// The same for Part 2: regs 61.870(4) and (5) and 61.900(2) apply to the
-/// holder of an IAP 2D or IAP 3D instrument endorsement.
-const PART_2_LEAVES_OUT: &str = "The report leaves out regs 61.870(4) and (5) and 61.900(2) \
-     until the endorsement is recorded.";
 
 /// The refusal of an instrument rating held with no instrument endorsement
 /// from Part 1 of table 61.890, quoting reg 61.885(1)(b)(i).
@@ -575,7 +591,7 @@ mod tests {
                 "The report leaves out reg 61.870(3) and the instrument proficiency check \
                  until the endorsements are recorded."
             } else {
-                "The report leaves out regs 61.870(4) and (5) and 61.900(2) until the \
+                "The report leaves out regs 61.870(4) and 61.870(5) and 61.900(2) until the \
                  endorsement is recorded."
             })
         };
@@ -606,55 +622,52 @@ mod tests {
         );
     }
 
-    /// Each refusal's note names requirements the report really leaves out
-    /// of those that apply to the holder, and the others it does not.
+    /// Each refusal's note names exactly what the report leaves out: the
+    /// requirements that apply with an endorsement of the missing part and
+    /// not without. Reg 61.395(2) is among them for an aeroplane licence with
+    /// no night VFR rating, as the instrument rating authorises night flight
+    /// in an aeroplane only with an aeroplane endorsement.
     #[test]
     fn each_refusals_note_names_what_the_report_leaves_out() {
+        use icao_shared_kernel::{LicenceTitle, PrivateOrCommercialCategory as Pc};
+
         let casa = Casa::new();
-        let applying = |ids: &[&str]| -> Vec<String> {
-            casa.requirements_for(&held(ids).into_iter().collect())
-                .into_iter()
-                .map(|requirement| requirement.id.as_str().to_owned())
-                .collect()
-        };
-        let any_of = |ids: &[String], prefix: &str| ids.iter().any(|id| id.starts_with(prefix));
+        let titles = [LicenceTitleId::Annex1(LicenceTitle::Private(Pc::Aeroplane))];
         let notes = |ids: &[&str]| -> Vec<Option<String>> {
-            casa.licence_problems(&[], &held(ids))
+            casa.licence_problems(&titles, &held(ids))
                 .into_iter()
+                .filter(|problem| problem.kind == ProblemKind::Refusal)
                 .map(|problem| problem.report_leaves_out)
                 .collect()
         };
-        let part_1 = Some(PART_1_LEAVES_OUT.to_owned());
-        let part_2 = Some(PART_2_LEAVES_OUT.to_owned());
+        let note = |list: &str, recorded: &str| {
+            Some(format!(
+                "The report leaves out {list} until {recorded} recorded."
+            ))
+        };
+        let part_1 = |list| note(list, "the endorsements are");
+        let part_2 = |list| note(list, "the endorsement is");
+        let part_2_list = "regs 61.870(4) and 61.870(5) and 61.900(2)";
+        let ir = INSTRUMENT_RATING;
 
-        // Neither part: all of them are left out.
-        let bare = applying(&[INSTRUMENT_RATING]);
-        for prefix in ["61.870(3)", "61.880", "61.870(4)", "61.870(5)", "61.900(2)"] {
-            assert!(!any_of(&bare, prefix), "{prefix}");
-        }
+        // No night VFR rating: reg 61.395(2) is left out too, with Part 1.
+        let part_1_list = "regs 61.395(2) and 61.870(3) and the instrument proficiency check";
+        assert_eq!(notes(&[ir]), [part_1(part_1_list), part_2(part_2_list)]);
         assert_eq!(
-            notes(&[INSTRUMENT_RATING]),
-            [part_1.clone(), part_2.clone()]
+            notes(&[ir, "iap-2d-instrument-endorsement"]),
+            [part_1(part_1_list)]
+        );
+        assert_eq!(
+            notes(&[ir, "single-engine-aeroplane-instrument-endorsement"]),
+            [part_2(part_2_list)]
         );
 
-        // Part 2 held, Part 1 missing: the Part 1 note's requirements are left out.
-        let ids = ["iap-2d-instrument-endorsement"];
-        let with_part_2 = applying(&[INSTRUMENT_RATING, ids[0]]);
-        assert!(!any_of(&with_part_2, "61.870(3)"));
-        assert!(!any_of(&with_part_2, "61.880"));
-        assert!(any_of(&with_part_2, "61.870(4)"));
-        assert_eq!(notes(&[INSTRUMENT_RATING, ids[0]]), [part_1]);
-
-        // Part 1 held, Part 2 missing: the Part 2 note's are left out, and
-        // the Part 1 ones are not.
-        let ids = ["single-engine-aeroplane-instrument-endorsement"];
-        let with_part_1 = applying(&[INSTRUMENT_RATING, ids[0]]);
-        assert!(any_of(&with_part_1, "61.870(3)"));
-        assert!(any_of(&with_part_1, "61.880"));
-        for prefix in ["61.870(4)", "61.870(5)", "61.900(2)"] {
-            assert!(!any_of(&with_part_1, prefix), "{prefix}");
-        }
-        assert_eq!(notes(&[INSTRUMENT_RATING, ids[0]]), [part_2]);
+        // With the night VFR rating the passenger rule applies already.
+        let part_1_list = "reg 61.870(3) and the instrument proficiency check";
+        assert_eq!(
+            notes(&[ir, NIGHT_VFR_RATING]),
+            [part_1(part_1_list), part_2(part_2_list)]
+        );
     }
 
     /// One endorsement from each part is enough, whichever they are; and

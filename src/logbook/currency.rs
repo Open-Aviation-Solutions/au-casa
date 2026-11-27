@@ -576,6 +576,46 @@ pub(super) fn requirements_for(held: &BTreeSet<TermId>) -> Vec<Requirement> {
         .collect()
 }
 
+/// What the report leaves out of those that apply to `held` until
+/// `endorsement` is recorded too: the requirements that apply with it and not
+/// without, as "reg 61.870(3) and the instrument proficiency check", the
+/// distinct regulations in [`REQUIREMENTS`]' order and then the reg 61.880
+/// checks as one. `None` when there are none.
+pub(super) fn left_out_until(
+    held: &BTreeSet<TermId>,
+    endorsement: InstrumentEndorsement,
+) -> Option<String> {
+    let without = with_implied(held);
+    let mut with = held.clone();
+    with.insert(TermId::new(endorsement.id()));
+    let with = with_implied(&with);
+    let mut regulations: Vec<&str> = Vec::new();
+    let mut check = false;
+    for requirement in REQUIREMENTS {
+        if !requirement.applies_to(&with) || requirement.applies_to(&without) {
+            continue;
+        }
+        if matches!(requirement, CasaRequirement::InstrumentProficiencyCheck(_)) {
+            check = true;
+        } else if !regulations.contains(&requirement.regulation()) {
+            regulations.push(requirement.regulation());
+        }
+    }
+    let mut parts: Vec<String> = Vec::new();
+    if !regulations.is_empty() {
+        let noun = if regulations.len() == 1 {
+            "reg"
+        } else {
+            "regs"
+        };
+        parts.push(format!("{noun} {}", regulations.join(" and ")));
+    }
+    if check {
+        parts.push("the instrument proficiency check".to_owned());
+    }
+    (!parts.is_empty()).then(|| parts.join(" and "))
+}
+
 /// `held`, with what holding it implies: an instrument endorsement of table
 /// 61.890 the instrument rating, which its applicant must hold (reg
 /// 61.905(1)(a)), and the IAP 3D instrument endorsement the IAP 2D one,

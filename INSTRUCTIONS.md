@@ -93,7 +93,9 @@ answers one such question:
   (`licence_problems`: a refusal at the instrument rating for each part of
   table 61.890 none of whose instrument endorsements is held with it, reg
   61.885(1)(b)(i) and (ii), reported at the rating rather than at the
-  licence; the private instrument rating's endorsements, table 61.935,
+  licence, each naming in `report_leaves_out` what the report leaves out
+  until the endorsement is recorded: the requirements that apply with a
+  stand-in endorsement of the missing part and not without; the private instrument rating's endorsements, table 61.935,
   are not listed, so it is not checked, #113; and a warning at the first
   pilot licence title of each category with class ratings, reg 61.020(1),
   when none of that category's class ratings is held, reg 61.375(3), as a
